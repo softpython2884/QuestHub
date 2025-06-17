@@ -16,8 +16,8 @@
     --secondary-foreground: 207 9% 20%;
     --muted: 207 10% 90%;
     --muted-foreground: 207 5% 50%;
-    --accent: 32 100% 63%; /* Warm Orange #FFAB40 */
-    --accent-foreground: 0 0% 10%; /* Dark */
+    --accent: 210 60% 45%; /* Dark Blue */
+    --accent-foreground: 0 0% 98%; /* Light text for dark blue accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 207 10% 85%;
@@ -36,8 +36,8 @@
     --sidebar-foreground: 207 15% 30%; /* Darker text for sidebar */
     --sidebar-primary: 207 82% 60%; /* Slightly darker primary for active items */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 32 100% 60%; /* Slightly darker accent */
-    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-accent: 210 60% 50%; /* Dark blue for sidebar accent - slightly lighter than main accent */
+    --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 207 20% 90%;
     --sidebar-ring: 207 82% 68%;
   }
@@ -55,8 +55,8 @@
     --secondary-foreground: 0 0% 96%;
     --muted: 207 10% 25%;
     --muted-foreground: 207 5% 70%;
-    --accent: 32 100% 63%; /* Warm Orange, remains vibrant */
-    --accent-foreground: 32 20% 15%; /* Dark text on accent */
+    --accent: 210 60% 55%; /* Dark Blue for dark theme accent - can be a bit brighter */
+    --accent-foreground: 0 0% 98%; /* Light text for dark blue accent */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 207 10% 30%;
@@ -74,8 +74,8 @@
     --sidebar-foreground: 207 10% 85%; /* Lighter text for dark sidebar */
     --sidebar-primary: 207 82% 65%; /* Primary for active dark sidebar items */
     --sidebar-primary-foreground: 207 10% 10%;
-    --sidebar-accent: 32 100% 60%;
-    --sidebar-accent-foreground: 32 20% 15%;
+    --sidebar-accent: 210 60% 50%; /* Dark blue for dark sidebar accent */
+    --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 207 10% 25%;
     --sidebar-ring: 207 82% 68%;
   }
