@@ -15,7 +15,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password?: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
-  refreshUser: () => void; // Added for profile updates
+  refreshUser: () => void; 
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,13 +26,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // On initial load, there's no persistent client session to check other than what authService might hold.
-  // The primary role of this effect is to set isLoading to false.
   useEffect(() => {
-    const initialUser = authService.getCurrentUser(); // Check if authService has a user from a previous action in this session
-    if (initialUser) {
-      setUser(initialUser);
-    }
+    // In a real app with sessions, you might verify a session token here.
+    // For now, we start with no user and set loading to false.
     setIsLoading(false);
   }, []);
 
@@ -90,12 +86,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
   
-  const refreshUser = useCallback(() => {
-    const updatedUser = authService.getCurrentUser(); // Get potentially updated user from authService's memory
-    if (updatedUser) {
-      setUser(updatedUser);
+  const refreshUser = useCallback(async () => {
+    if (user?.uuid) {
+      setIsLoading(true);
+      try {
+        const updatedUser = await authService.refreshCurrentUserStateFromDb(user.uuid);
+        if (updatedUser) {
+          setUser(updatedUser);
+        } else {
+          // User might have been deleted or session invalidated, log them out
+          setUser(null); 
+          router.push('/login');
+        }
+      } catch (e) {
+        console.error("Failed to refresh user:", e);
+        // Optionally handle error, e.g. logout user
+        setUser(null);
+        router.push('/login');
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, []);
+  }, [user?.uuid, router]);
 
 
   return (

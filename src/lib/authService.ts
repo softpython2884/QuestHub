@@ -1,10 +1,8 @@
-import type { User, UserRole } from '@/types';
-import * from 'bcryptjs';
-import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail } from './db';
+'use server';
 
-// This variable will hold the current user state in memory for the client-side session.
-// It's a simplified approach. In a real app, this would be managed by secure HTTP-only cookies and server-side sessions.
-let clientSideUser: User | null = null;
+import type { User, UserRole } from '@/types';
+import * as bcrypt from 'bcryptjs';
+import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid } from './db';
 
 export const login = async (email: string, password?: string): Promise<User | null> => {
   if (!password) {
@@ -20,11 +18,9 @@ export const login = async (email: string, password?: string): Promise<User | nu
     if (isValidPassword) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { hashedPassword, ...userToReturn } = userFromDb;
-      clientSideUser = userToReturn; // Store user in client-side "session"
       return userToReturn;
     }
   }
-  clientSideUser = null;
   return null;
 };
 
@@ -41,10 +37,8 @@ export const signup = async (name: string, email: string, password?: string, rol
     }
 
     const newUser = await dbCreateUser(name, email, password, role);
-    clientSideUser = newUser; // Store user in client-side "session"
     return newUser;
   } catch (error: any) {
-    clientSideUser = null;
     if (error.message.includes('UNIQUE constraint failed: users.email')) {
         throw new Error('User with this email already exists.');
     }
@@ -54,11 +48,28 @@ export const signup = async (name: string, email: string, password?: string, rol
 
 export const logout = async (): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  clientSideUser = null; // Clear client-side "session"
+  // Server-side logout might involve clearing session cookies, not applicable with current simple model
 };
 
-// This function now primarily serves to retrieve the user stored after login/signup
-// for the current client-side session. It doesn't fetch from a persistent store on its own.
-export const getCurrentUser = (): User | null => {
-  return clientSideUser;
+export const updateUserProfile = async (uuid: string, name: string, email: string): Promise<User | null> => {
+  try {
+    const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email);
+    if (updatedUserFromDb) {
+      return updatedUserFromDb;
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Error updating profile in authService:", error);
+    throw error; // Re-throw to be caught by the calling action/component
+  }
+};
+
+export const refreshCurrentUserStateFromDb = async (uuid: string): Promise<User | null> => {
+  const userFromDb = await dbGetUserByUuid(uuid);
+  if (userFromDb) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { hashedPassword, ...userToReturn } = userFromDb as User & { hashedPassword?: string };
+    return userToReturn;
+  }
+  return null;
 };
