@@ -7,14 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, useTransition, startTransition as ReactStartTransition } from 'react'; // Updated import
+import { useEffect, useState, useCallback, startTransition as ReactStartTransition } from 'react';
 import { useActionState } from 'react'; 
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -78,7 +78,7 @@ const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
   status: z.enum(taskStatuses),
-  assigneeUuid: z.string().optional(), // Will hold UNASSIGNED_VALUE or user UUID
+  assigneeUuid: z.string().optional(), 
   tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -105,6 +105,8 @@ export default function ProjectDetailPage() {
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
+  const [projectReadmeContent, setProjectReadmeContent] = useState(''); // For README tab
 
 
   const [newDocContent, setNewDocContent] = useState('');
@@ -141,14 +143,16 @@ export default function ProjectDetailPage() {
             const members = await fetchProjectMembersAction(projectUuid);
             setProjectMembers(members);
             const member = members.find(m => m.userUuid === user.uuid);
-            const role = project?.ownerUuid === user.uuid ? 'owner' : member?.role || null;
+            // project.ownerUuid might not be set yet if project is still loading
+            // so we check it directly if project exists
+            const role = project && project.ownerUuid === user.uuid ? 'owner' : member?.role || null;
             setCurrentUserRole(role);
         } catch (error) {
             console.error("Failed to load project members", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
         }
     }
-  }, [projectUuid, user, toast, project?.ownerUuid]);
+  }, [projectUuid, user, toast, project]); // Added project to dependency array
 
   const loadTasks = useCallback(async () => {
     if (projectUuid) {
@@ -180,17 +184,19 @@ export default function ProjectDetailPage() {
       setIsLoadingData(true);
       try {
         const projectData = await fetchProjectAction(projectUuid);
-        setProject(projectData);
+        setProject(projectData); // Set project first
         if (projectData) {
           editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
           if (projectData.ownerUuid) {
               const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
               setProjectOwnerName(ownerName);
           }
+          // This setCurrentUserRole call might be redundant if loadProjectMembers does it,
+          // but it ensures role is set if user is owner even before members fully load.
           if (user.uuid === projectData.ownerUuid) {
             setCurrentUserRole('owner'); 
           }
-          await loadProjectMembers(); 
+          await loadProjectMembers(); // Now loadProjectMembers can use the 'project' state
           await loadTasks();
           await loadProjectTagsData();
         } else {
@@ -248,9 +254,7 @@ export default function ProjectDetailPage() {
         loadTasks();
       }
       if (createTaskState.error) {
-        toast({ variant: "destructive", title: "Task Creation Error", description: createTaskState.error,
-        // fieldErrors: createTaskState.fieldErrors ? JSON.stringify(createTaskState.fieldErrors) : undefined 
-      });
+        toast({ variant: "destructive", title: "Task Creation Error", description: `${createTaskState.error}${createTaskState.fieldErrors?.assigneeUuid ? ' Assignee: ' + createTaskState.fieldErrors.assigneeUuid.join(', ') : ''}` });
       }
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
@@ -265,7 +269,7 @@ export default function ProjectDetailPage() {
         loadTasks(); 
       }
       if (updateTaskState.error) {
-        toast({ variant: "destructive", title: "Task Update Error", description: updateTaskState.error });
+         toast({ variant: "destructive", title: "Task Update Error", description: `${updateTaskState.error}${updateTaskState.fieldErrors?.assigneeUuid ? ' Assignee: ' + updateTaskState.fieldErrors.assigneeUuid.join(', ') : ''}` });
       }
     }
   }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm]);
@@ -342,7 +346,7 @@ export default function ProjectDetailPage() {
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
+    formData.append('assigneeUuid', finalAssigneeUuid || ''); // Ensure it's always a string for FormData
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     ReactStartTransition(() => {
       createTaskFormAction(formData);
@@ -359,8 +363,7 @@ export default function ProjectDetailPage() {
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
-    else formData.append('assigneeUuid', ''); 
+    formData.append('assigneeUuid', finalAssigneeUuid || ''); // Ensure it's always a string
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -387,9 +390,8 @@ export default function ProjectDetailPage() {
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
     });
-    // Optimistic update for responsiveness
     setTasks(prevTasks => prevTasks.map(t => t.uuid === taskUuid ? {...t, description: newDescription} : t));
-};
+  };
 
 
   const openEditTaskDialog = (task: Task) => {
@@ -422,8 +424,6 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus);
     
-    // For simple status changes, can call action directly if not using useActionState for this specific one
-    // Or, wrap in startTransition if it uses useActionState and is not a direct form action
     ReactStartTransition(async () => {
         const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
         if (result.error) {
@@ -468,6 +468,26 @@ export default function ProjectDetailPage() {
       default: return 'border-muted';
     }
   };
+
+  const groupTasksByStatus = () => {
+    const grouped: Record<TaskStatus, Task[]> = {
+      'To Do': [],
+      'In Progress': [],
+      'Done': [],
+      'Archived': [],
+    };
+    tasks.forEach(task => {
+      if (grouped[task.status]) {
+        grouped[task.status].push(task);
+      } else {
+        // Should not happen if statuses are well-defined
+        grouped['Archived'].push(task); // Fallback
+      }
+    });
+    return grouped;
+  };
+
+  const tasksByStatus = groupTasksByStatus();
 
 
   if (authLoading || isLoadingData) {
@@ -531,6 +551,7 @@ export default function ProjectDetailPage() {
                 {projectTags.slice(0, 5).map(tag => ( 
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white">{tag.name}</Badge>
                 ))}
+                {projectTags.length > 5 && <Badge variant="outline">+{projectTags.length - 5} more</Badge>}
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0">
@@ -624,8 +645,9 @@ export default function ProjectDetailPage() {
       </Card>
 
       <Tabs defaultValue="tasks" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
           <TabsTrigger value="tasks"><CheckSquare className="mr-2 h-4 w-4"/>Tasks</TabsTrigger>
+          <TabsTrigger value="readme"><BookOpen className="mr-2 h-4 w-4"/>README</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="mr-2 h-4 w-4"/>Documents</TabsTrigger>
           <TabsTrigger value="announcements"><Megaphone className="mr-2 h-4 w-4"/>Announcements</TabsTrigger>
           <TabsTrigger value="repository"><FolderGit2 className="mr-2 h-4 w-4"/>Repository</TabsTrigger>
@@ -654,10 +676,9 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
-                            {createTaskState?.error && <p className="text-sm text-destructive">{createTaskState.error}</p>}
-                             {/* Display field-specific errors from action state if they exist */}
-                            {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">{createTaskState.fieldErrors.title.join(', ')}</p>}
-                            {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">{createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
+                            {createTaskState?.error && !createTaskState.fieldErrors && <p className="text-sm text-destructive">{createTaskState.error}</p>}
+                            {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {createTaskState.fieldErrors.title.join(', ')}</p>}
+                            {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isCreateTaskPending}> {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task </Button>
@@ -668,83 +689,93 @@ export default function ProjectDetailPage() {
                </Dialog>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {tasks.map(task => (
-                  <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex-grow min-w-0"> 
-                        <h4 className="font-semibold break-words">{task.title}</h4>
-                        {task.description && (
-                           <div className="text-xs text-muted-foreground mt-0.5">
-                             <MarkdownTaskListRenderer
-                               content={task.description}
-                               onContentChange={(newDescription) => handleSubTaskDescriptionChange(task.uuid, newDescription)}
-                               disabled={!canCreateUpdateDeleteTasks}
-                              />
-                           </div>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
-                        </p>
-                         <div className="mt-2 flex flex-wrap gap-1">
-                            {task.tags.map(tag => (
-                                <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={cn('text-xs',tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white')}>{tag.name}</Badge>
-                            ))}
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
-                        <Select
-                          defaultValue={task.status}
-                          disabled={!canEditTaskStatus}
-                          onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
-                        >
-                          <SelectTrigger className="w-full sm:w-[150px] text-xs h-8">
-                            <SelectValue placeholder="Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {taskStatuses.map(status => (
-                              <SelectItem key={status} value={status} className="text-xs">{status}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {canCreateUpdateDeleteTasks && (
-                            <div className="flex mt-1 sm:mt-0">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
-                                    <Edit3 className="h-4 w-4" />
-                                    <span className="sr-only">Edit Task</span>
-                                </Button>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setTaskToDelete(task)}>
-                                            <Trash2 className="h-4 w-4" />
-                                            <span className="sr-only">Delete Task</span>
+              {tasks.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">No tasks in this project yet.</p>
+              ) : (
+                Object.entries(tasksByStatus).map(([status, statusTasks]) => (
+                  statusTasks.length > 0 && (
+                    <div key={status} className="mb-6">
+                      <h3 className="text-lg font-semibold mb-2 capitalize border-b pb-1">{status} ({statusTasks.length})</h3>
+                      <div className="space-y-3">
+                        {statusTasks.map(task => (
+                          <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="flex-grow min-w-0"> 
+                                <h4 className="font-semibold break-words">{task.title}</h4>
+                                {task.description && (
+                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    <MarkdownTaskListRenderer
+                                      content={task.description}
+                                      onContentChange={(newDescription) => handleSubTaskDescriptionChange(task.uuid, newDescription)}
+                                      disabled={!canCreateUpdateDeleteTasks}
+                                      />
+                                  </div>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {task.tags.map(tag => (
+                                        <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={cn('text-xs',tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white')}>{tag.name}</Badge>
+                                    ))}
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
+                                <Select
+                                  defaultValue={task.status}
+                                  disabled={!canEditTaskStatus}
+                                  onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
+                                >
+                                  <SelectTrigger className="w-full sm:w-[150px] text-xs h-8">
+                                    <SelectValue placeholder="Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {taskStatuses.map(sVal => (
+                                      <SelectItem key={sVal} value={sVal} className="text-xs">{sVal}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {canCreateUpdateDeleteTasks && (
+                                    <div className="flex mt-1 sm:mt-0">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
+                                            <Edit3 className="h-4 w-4" />
+                                            <span className="sr-only">Edit Task</span>
                                         </Button>
-                                    </AlertDialogTrigger>
-                                    {taskToDelete?.uuid === task.uuid && (
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you sure you want to delete this task?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                Task: "{taskToDelete.title}". This action cannot be undone.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel onClick={() => setTaskToDelete(null)}>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction onClick={handleDeleteTaskConfirm} disabled={isDeleteTaskPending}>
-                                                {isDeleteTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                    )}
-                                </AlertDialog>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setTaskToDelete(task)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                    <span className="sr-only">Delete Task</span>
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            {taskToDelete?.uuid === task.uuid && (
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure you want to delete this task?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Task: "{taskToDelete.title}". This action cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel onClick={() => setTaskToDelete(null)}>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleDeleteTaskConfirm} disabled={isDeleteTaskPending}>
+                                                        {isDeleteTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                            )}
+                                        </AlertDialog>
+                                    </div>
+                                )}
+                              </div>
                             </div>
-                        )}
+                          </Card>
+                        ))}
                       </div>
                     </div>
-                  </Card>
-                ))}
-                 {tasks.length === 0 && <p className="text-muted-foreground text-center py-4">No tasks in this project yet.</p>}
-              </div>
+                  )
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -763,10 +794,9 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
-                            {updateTaskState?.error && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
-                             {/* Display field-specific errors from action state if they exist */}
-                            {updateTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">{updateTaskState.fieldErrors.title.join(', ')}</p>}
-                            {updateTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">{updateTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
+                            {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
+                            {updateTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {updateTaskState.fieldErrors.title.join(', ')}</p>}
+                            {updateTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {updateTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
@@ -776,6 +806,31 @@ export default function ProjectDetailPage() {
                 </DialogContent>
             </Dialog>
         )}
+
+        <TabsContent value="readme" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Project README</CardTitle>
+              <CardDescription>
+                Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Write your project README here using Markdown..."
+                value={projectReadmeContent}
+                onChange={(e) => setProjectReadmeContent(e.target.value)}
+                rows={15}
+                className="font-mono" 
+                disabled={!canCreateUpdateDeleteTasks} // Or a more specific permission
+              />
+              {canCreateUpdateDeleteTasks && (
+                <Button className="mt-4" disabled>Save README (Not Implemented)</Button>
+              )}
+              {/* Full Markdown rendering will go here in a future update */}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
 
         <TabsContent value="documents" className="mt-4">
@@ -1017,3 +1072,4 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
