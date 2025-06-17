@@ -47,6 +47,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { MarkdownTaskListRenderer } from '@/components/MarkdownTaskListRenderer';
 import { cn } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 
 const mockDocuments: ProjectDocumentType[] = [
@@ -160,14 +162,14 @@ export default function ProjectDetailPage() {
                 const role = currentProjectOwnerUuid === user.uuid ? 'owner' : member?.role || null;
                 setCurrentUserRole(role);
             } else {
-                // Fallback if ownerUuid isn't passed, try to determine from members only
-                // This might be less accurate if the project object isn't available yet
-                const member = members.find(m => m.userUuid === user.uuid);
-                setCurrentUserRole(member?.role || null); 
+                const fallbackMember = members.find(m => m.userUuid === user.uuid);
+                const projectData = await fetchProjectAction(projectUuid);
+                const role = projectData?.ownerUuid === user.uuid ? 'owner' : fallbackMember?.role || null;
+                setCurrentUserRole(role);
             }
         } catch (error) {
-            console.error("Failed to load project members", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
+            console.error("Failed to load project members or determine role", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not load project members or determine your role." });
         }
     }
   }, [projectUuid, user, toast]);
@@ -196,12 +198,14 @@ export default function ProjectDetailPage() {
                     if (projectData.ownerUuid) {
                         const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
                         setProjectOwnerName(ownerName);
+                         await loadProjectMembersAndRole(projectData.ownerUuid);
+                    } else {
+                        await loadProjectMembersAndRole(); // Fallback if ownerUuid not in projectData (should not happen)
                     }
-                    // Load members and determine role using projectData.ownerUuid
-                    await loadProjectMembersAndRole(projectData.ownerUuid);
                     await loadTasks();
                     await loadProjectTagsData();
                 } else {
+                    toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded."})
                     router.push('/projects');
                 }
             } catch (err) {
@@ -215,7 +219,9 @@ export default function ProjectDetailPage() {
             router.push('/login');
         }
     };
-    performLoadProjectData();
+    if (projectUuid && user && !authLoading) {
+      performLoadProjectData();
+    }
   }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadTasks, loadProjectTagsData, loadProjectMembersAndRole]);
 
 
@@ -224,8 +230,6 @@ export default function ProjectDetailPage() {
       if (updateProjectFormState.message && !updateProjectFormState.error) {
         toast({ title: "Success", description: updateProjectFormState.message });
         setIsEditDialogOpen(false);
-        // Re-trigger main data load by projectUuid dependency (if project name/desc change needs full reload)
-        // Or more specifically, re-fetch project if only project details changed
         fetchProjectAction(projectUuid).then(p => {
           setProject(p);
           if(p) editProjectForm.reset({ name: p.name, description: p.description || '' });
@@ -243,7 +247,7 @@ export default function ProjectDetailPage() {
             toast({ title: "Success", description: inviteFormState.message });
             setIsInviteUserDialogOpen(false);
             inviteForm.reset();
-            loadProjectMembersAndRole(project?.ownerUuid); // Pass ownerUuid if available
+            loadProjectMembersAndRole(project?.ownerUuid); 
         }
         if (inviteFormState.error) {
             toast({ variant: "destructive", title: "Invitation Error", description: inviteFormState.error });
@@ -260,7 +264,14 @@ export default function ProjectDetailPage() {
         loadTasks();
       }
       if (createTaskState.error) {
-        toast({ variant: "destructive", title: "Task Creation Error", description: `${createTaskState.error}${createTaskState.fieldErrors?.assigneeUuid ? ' Assignee: ' + createTaskState.fieldErrors.assigneeUuid.join(', ') : ''}` });
+        let errorMessage = createTaskState.error;
+        if (createTaskState.fieldErrors?.assigneeUuid) {
+            errorMessage += ` Assignee: ${createTaskState.fieldErrors.assigneeUuid.join(', ')}`;
+        }
+        if (createTaskState.fieldErrors?.title) {
+             errorMessage += ` Title: ${createTaskState.fieldErrors.title.join(', ')}`;
+        }
+        toast({ variant: "destructive", title: "Task Creation Error", description: errorMessage });
       }
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
@@ -275,7 +286,14 @@ export default function ProjectDetailPage() {
         loadTasks(); 
       }
       if (updateTaskState.error) {
-         toast({ variant: "destructive", title: "Task Update Error", description: `${updateTaskState.error}${updateTaskState.fieldErrors?.assigneeUuid ? ' Assignee: ' + updateTaskState.fieldErrors.assigneeUuid.join(', ') : ''}` });
+        let errorMessage = updateTaskState.error;
+        if (updateTaskState.fieldErrors?.assigneeUuid) {
+            errorMessage += ` Assignee: ${updateTaskState.fieldErrors.assigneeUuid.join(', ')}`;
+        }
+         if (updateTaskState.fieldErrors?.title) {
+             errorMessage += ` Title: ${updateTaskState.fieldErrors.title.join(', ')}`;
+        }
+         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
       }
     }
   }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm]);
@@ -486,6 +504,7 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
+        // if status is not one of the predefined, put in Archived as fallback
         grouped['Archived'].push(task); 
       }
     });
@@ -703,7 +722,7 @@ export default function ProjectDetailPage() {
                       <h3 className="text-lg font-semibold mb-2 capitalize border-b pb-1">{status} ({statusTasks.length})</h3>
                       <div className="space-y-3">
                         {statusTasks.map(task => (
-                          <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
+                          <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status as TaskStatus)}`}>
                             <div className="flex justify-between items-start gap-2">
                               <div className="flex-grow min-w-0"> 
                                 <h4 className="font-semibold break-words">{task.title}</h4>
@@ -821,6 +840,11 @@ export default function ProjectDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px]">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {projectReadmeContent || "No README content yet. Start editing below!"}
+                </ReactMarkdown>
+              </div>
               <Textarea
                 placeholder="Write your project README here using Markdown..."
                 value={projectReadmeContent}
@@ -1076,3 +1100,4 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
