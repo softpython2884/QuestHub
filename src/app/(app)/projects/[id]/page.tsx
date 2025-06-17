@@ -74,7 +74,7 @@ export default function ProjectDetailPage() {
     },
   });
   
-  const [updateFormState, updateProjectFormAction] = useActionState(updateProjectAction, { message: "", errors: {} });
+  const [updateFormState, updateProjectFormAction, isUpdatePending] = useActionState(updateProjectAction, { message: "", errors: {} });
 
 
   const loadProjectData = useCallback(async () => {
@@ -107,15 +107,15 @@ export default function ProjectDetailPage() {
   }, [loadProjectData]);
 
   useEffect(() => {
-    if (updateFormState.message && !updateFormState.error) {
+    if (updateFormState.message && !updateFormState.error && !isUpdatePending) {
       toast({ title: "Success", description: updateFormState.message });
       setIsEditDialogOpen(false);
       loadProjectData(); // Refresh project data
     }
-    if (updateFormState.error) {
+    if (updateFormState.error && !isUpdatePending) {
       toast({ variant: "destructive", title: "Error", description: updateFormState.error });
     }
-  }, [updateFormState, toast, loadProjectData]);
+  }, [updateFormState, toast, loadProjectData, isUpdatePending]);
 
   const handleContentChange = async (content: string) => {
     setNewDocContent(content);
@@ -193,7 +193,7 @@ export default function ProjectDetailPage() {
     formData.append('name', values.name);
     formData.append('description', values.description || '');
     formData.append('projectUuid', project.uuid);
-    await updateProjectFormAction(formData);
+    updateProjectFormAction(formData);
   };
 
   return (
@@ -261,8 +261,8 @@ export default function ProjectDetailPage() {
                         <DialogClose asChild>
                            <Button type="button" variant="ghost">Cancel</Button>
                         </DialogClose>
-                        <Button type="submit" disabled={editForm.formState.isSubmitting}>
-                          {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Button type="submit" disabled={isUpdatePending}>
+                          {isUpdatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                           Save Changes
                         </Button>
                       </DialogFooter>
@@ -297,7 +297,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({projectTasks.length})</CardTitle>
-              <Button size="sm" disabled><PlusCircle className="mr-2 h-4 w-4"/> Add Task</Button>
+              <Button size="sm" disabled={!isOwner}><PlusCircle className="mr-2 h-4 w-4"/> Add Task</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -336,7 +336,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" disabled><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm" disabled={!isOwner}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -370,7 +370,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {isOwner && <Button size="sm" onClick={() => {/* TODO: Implement new announcement functionality */}} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {isOwner && <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
@@ -473,3 +473,6 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
+
+    
