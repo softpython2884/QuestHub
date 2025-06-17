@@ -28,11 +28,14 @@ interface Session {
 
 export async function auth(): Promise<Session | null> {
   const mockUserUuid = typeof global !== 'undefined' ? (global as any).MOCK_CURRENT_USER_UUID : null;
+  console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global:', mockUserUuid);
 
   if (mockUserUuid) {
     try {
+      console.log(`[authEdge] Fetching user from DB for UUID: ${mockUserUuid}`);
       const user = await getUserByUuid(mockUserUuid);
       if (user) {
+        console.log(`[authEdge] User found in DB: ${user.name} (UUID: ${user.uuid})`);
         return {
           user: {
             uuid: user.uuid,
@@ -40,20 +43,18 @@ export async function auth(): Promise<Session | null> {
             email: user.email,
           },
         };
+      } else {
+        console.log(`[authEdge] No user found in DB for UUID: ${mockUserUuid}. MOCK_CURRENT_USER_UUID might be stale or incorrect.`);
       }
     } catch (e) {
-      console.error("Mock auth error in authEdge:", e);
+      console.error("[authEdge] Error during mock auth (getUserByUuid failed):", e);
       return null;
     }
+  } else {
+    console.log('[authEdge] No MOCK_CURRENT_USER_UUID found in global. User is not "logged in" for server actions.');
   }
   
-  // Fallback: If no MOCK_CURRENT_USER_UUID is set (e.g., after server restart and no login yet),
-  // or if the user wasn't found, return null (no session).
-  // You could optionally try to load a default admin user here for some specific scenarios,
-  // but it's generally better to rely on the MOCK_CURRENT_USER_UUID for consistency.
-  // Example: const admin = await getUserByUuid('00000000-0000-0000-0000-000000000001');
-  // if (admin) return { user: { uuid: admin.uuid, name: admin.name, email: admin.email } };
-  
+  console.log('[authEdge] Returning null session.');
   return null; 
 }
 
