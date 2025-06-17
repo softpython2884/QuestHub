@@ -1,3 +1,4 @@
+
 'use server';
 
 import sqlite3 from 'sqlite3';
@@ -6,7 +7,7 @@ import type { User, UserRole } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-import fs from 'fs'; // Import the fs module
+import fs from 'fs';
 
 let db: Database | null = null;
 
@@ -18,7 +19,6 @@ export async function getDbConnection() {
     return db;
   }
 
-  // Ensure the db directory exists
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
   }
@@ -77,7 +77,8 @@ export async function createUser(name: string, email: string, password: string, 
   const connection = await getDbConnection();
   const hashedPassword = await bcrypt.hash(password, 10);
   const userUuid = uuidv4();
-  const avatar = `https://placehold.co/100x100.png?text=${name.substring(0,2).toUpperCase()}`;
+  const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
+  const avatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
 
   const result = await connection.run(
     'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
@@ -133,8 +134,7 @@ export async function getUserByUuid(uuid: string): Promise<(User & { hashedPassw
   return { ...userRow, id: userRow.id.toString() };
 }
 
-
-export async function updateUserProfile(uuid: string, name: string, email: string): Promise<User | null> {
+export async function updateUserProfile(uuid: string, name: string, email: string, avatar?: string): Promise<User | null> {
   const connection = await getDbConnection();
   
   const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', email, uuid);
@@ -142,10 +142,22 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
     throw new Error('Email is already in use by another account.');
   }
 
+  let finalAvatar = avatar;
+  if (avatar === '') { // If empty string is passed, use default placeholder
+    const currentUser = await getUserByUuid(uuid);
+    const defaultAvatarText = currentUser?.name.substring(0,2).toUpperCase() || 'NA';
+    finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
+  } else if (!avatar) { // if undefined (meaning not changed), keep existing
+    const currentUser = await getUserByUuid(uuid);
+    finalAvatar = currentUser?.avatar;
+  }
+
+
   const result = await connection.run(
-    'UPDATE users SET name = ?, email = ? WHERE uuid = ?',
+    'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
     name,
     email,
+    finalAvatar,
     uuid
   );
 
@@ -153,7 +165,6 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
     throw new Error('User not found or no changes made.');
   }
   
-  // Fetch the updated user, excluding the hashedPassword
   const updatedUser = await connection.get<User>(
     'SELECT id, uuid, name, email, role, avatar FROM users WHERE uuid = ?',
     uuid

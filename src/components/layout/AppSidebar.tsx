@@ -64,15 +64,16 @@ export function AppSidebar() {
             const Icon = item.icon;
             return (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.href} asChild>
-                  <SidebarMenuButton
-                    isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
-                    tooltip={{ children: item.label, side: 'right', className: "font-body" }}
-                  >
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                  tooltip={{ children: item.label, side: 'right', className: "font-body" }}
+                >
+                  <Link href={item.href}>
                     <Icon />
                     <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </Link>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             );
           })}

@@ -1,3 +1,4 @@
+
 'use server';
 
 import type { User, UserRole } from '@/types';
@@ -9,14 +10,13 @@ export const login = async (email: string, password?: string): Promise<User | nu
     throw new Error('Password is required for login.');
   }
 
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 500)); 
   
   const userFromDb = await dbGetUserByEmail(email);
 
   if (userFromDb && userFromDb.hashedPassword) {
     const isValidPassword = await bcrypt.compare(password, userFromDb.hashedPassword);
     if (isValidPassword) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { hashedPassword, ...userToReturn } = userFromDb;
       return userToReturn;
     }
@@ -48,26 +48,24 @@ export const signup = async (name: string, email: string, password?: string, rol
 
 export const logout = async (): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  // Server-side logout might involve clearing session cookies, not applicable with current simple model
 };
 
-export const updateUserProfile = async (uuid: string, name: string, email: string): Promise<User | null> => {
+export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
   try {
-    const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email);
+    const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email, avatar);
     if (updatedUserFromDb) {
       return updatedUserFromDb;
     }
     return null;
   } catch (error: any) {
     console.error("Error updating profile in authService:", error);
-    throw error; // Re-throw to be caught by the calling action/component
+    throw error; 
   }
 };
 
 export const refreshCurrentUserStateFromDb = async (uuid: string): Promise<User | null> => {
   const userFromDb = await dbGetUserByUuid(uuid);
   if (userFromDb) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { hashedPassword, ...userToReturn } = userFromDb as User & { hashedPassword?: string };
     return userToReturn;
   }

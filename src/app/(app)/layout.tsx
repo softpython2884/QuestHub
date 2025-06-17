@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
@@ -19,7 +20,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [user, isLoading, router]);
 
   if (isLoading) {
-    // Full page skeleton loader to prevent layout shift
     return (
       <div className="flex min-h-screen animate-pulse">
         <div className="w-16 md:w-64 bg-muted/50"></div>
@@ -34,8 +34,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    // This case should ideally be handled by the redirect,
-    // but as a fallback, render nothing or a minimal message.
     return null; 
   }
 
@@ -43,9 +41,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen bg-background">
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset> {/* This is now a div */}
           <AppHeader />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"> {/* This is the main content area */}
             {children}
           </main>
           <Toaster />
