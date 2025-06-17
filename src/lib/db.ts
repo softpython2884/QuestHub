@@ -22,7 +22,7 @@ export async function getDbConnection() {
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
   }
-  
+
   db = await open({
     filename: DB_PATH,
     driver: sqlite3.Database,
@@ -56,7 +56,7 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_members (
       projectUuid TEXT NOT NULL,
       userUuid TEXT NOT NULL,
-      roleInProject TEXT NOT NULL, 
+      roleInProject TEXT NOT NULL,
       PRIMARY KEY (projectUuid, userUuid),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
       FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -68,7 +68,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      status TEXT NOT NULL, 
+      status TEXT NOT NULL,
       assigneeUuid TEXT,
       dueDate TEXT,
       createdAt TEXT NOT NULL,
@@ -88,11 +88,11 @@ export async function getDbConnection() {
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE
     );
-    
+
     CREATE TABLE IF NOT EXISTS project_announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
-      projectUuid TEXT, 
+      projectUuid TEXT,
       authorUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -108,7 +108,7 @@ export async function getDbConnection() {
       uuid TEXT UNIQUE NOT NULL,
       projectUuid TEXT NOT NULL,
       name TEXT NOT NULL,
-      color TEXT NOT NULL, 
+      color TEXT NOT NULL,
       UNIQUE (projectUuid, name),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE
     );
@@ -121,7 +121,7 @@ export async function getDbConnection() {
       FOREIGN KEY (tagUuid) REFERENCES project_tags (uuid) ON DELETE CASCADE
     );
   `);
-  
+
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@nationquest.com');
   if (!adminUser) {
     const defaultAdminUUID = uuidv4();
@@ -219,19 +219,19 @@ export async function getUserByUuid(uuid: string): Promise<(User & { hashedPassw
 
 export async function updateUserProfile(uuid: string, name: string, email: string, avatar?: string): Promise<User | null> {
   const connection = await getDbConnection();
-  
+
   const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', email, uuid);
   if (existingUserWithEmail) {
     throw new Error('Email is already in use by another account.');
   }
 
   let finalAvatar = avatar;
-  const currentUser = await getUserByUuid(uuid); 
+  const currentUser = await getUserByUuid(uuid);
 
-  if (avatar === '') { 
+  if (avatar === '') {
     const defaultAvatarText = currentUser?.name.substring(0,2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined) { 
+  } else if (avatar === undefined) {
     finalAvatar = currentUser?.avatar;
   }
 
@@ -242,9 +242,9 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
     finalAvatar,
     uuid
   );
-  
+
   const updatedUser = await getUserByUuid(uuid);
-  if (!updatedUser) return null; 
+  if (!updatedUser) return null;
   const { hashedPassword, ...userToReturn } = updatedUser;
   return userToReturn;
 }
@@ -265,7 +265,7 @@ export async function createProject(name: string, description: string | undefine
       ownerUuid,
       now,
       now,
-      true 
+      true
     );
 
     if (!result.lastID) {
@@ -288,7 +288,7 @@ export async function createProject(name: string, description: string | undefine
       ownerUuid,
       createdAt: now,
       updatedAt: now,
-      isPrivate: true, 
+      isPrivate: true,
     };
   } catch (err) {
     await connection.run('ROLLBACK');
@@ -296,7 +296,7 @@ export async function createProject(name: string, description: string | undefine
     if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error('A project with this name already exists.');
     }
-    throw err; 
+    throw err;
   }
 }
 
@@ -312,7 +312,7 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
 export async function updateProjectDetails(uuid: string, name: string, description: string | undefined): Promise<Project | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
-  
+
   const result = await connection.run(
     'UPDATE projects SET name = ?, description = ?, updatedAt = ? WHERE uuid = ?',
     name,
@@ -331,7 +331,7 @@ export async function updateProjectDetails(uuid: string, name: string, descripti
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
   const projects = await connection.all<Project[]>(
-    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.createdAt, p.updatedAt 
+    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.createdAt, p.updatedAt
      FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
      WHERE pm.userUuid = ?
@@ -345,4 +345,75 @@ export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
     const projects = await connection.all<Project[]>('SELECT uuid, name, description, ownerUuid, isPrivate, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC');
     return projects;
+}
+
+// Project Member Functions
+export async function addProjectMember(projectUuid: string, userUuid: string, roleInProject: ProjectMemberRole): Promise<ProjectMember | null> {
+  const connection = await getDbConnection();
+  const existingMember = await connection.get(
+    'SELECT * FROM project_members WHERE projectUuid = ? AND userUuid = ?',
+    projectUuid,
+    userUuid
+  );
+
+  if (existingMember) {
+    // User is already a member, update their role
+    await connection.run(
+      'UPDATE project_members SET roleInProject = ? WHERE projectUuid = ? AND userUuid = ?',
+      roleInProject, projectUuid, userUuid
+    );
+  } else {
+    // New member, insert them
+    await connection.run(
+      'INSERT INTO project_members (projectUuid, userUuid, roleInProject) VALUES (?, ?, ?)',
+      projectUuid,
+      userUuid,
+      roleInProject
+    );
+  }
+
+  const user = await getUserByUuid(userUuid);
+  if (!user) return null; // Should not happen if userUuid is valid
+
+  return {
+    projectUuid,
+    userUuid,
+    role: roleInProject,
+    user: { uuid: user.uuid, name: user.name, avatar: user.avatar, email: user.email }
+  };
+}
+
+export async function getProjectMembers(projectUuid: string): Promise<ProjectMember[]> {
+  const connection = await getDbConnection();
+  const membersData = await connection.all<Array<{ userUuid: string; roleInProject: ProjectMemberRole; name: string; email: string; avatar?: string }>>(
+    `SELECT pm.userUuid, pm.roleInProject, u.name, u.email, u.avatar
+     FROM project_members pm
+     JOIN users u ON pm.userUuid = u.uuid
+     WHERE pm.projectUuid = ?`,
+    projectUuid
+  );
+  return membersData.map(m => ({
+    projectUuid,
+    userUuid: m.userUuid,
+    role: m.roleInProject,
+    user: { uuid: m.userUuid, name: m.name, email: m.email, avatar: m.avatar }
+  }));
+}
+
+export async function removeProjectMember(projectUuid: string, userUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  // Ensure owner cannot be removed this way or if they are the last owner
+  const project = await getProjectByUuid(projectUuid);
+  if (project?.ownerUuid === userUuid) {
+      // Optionally check if there are other owners before allowing deletion
+      console.warn("Attempted to remove project owner. This action should be handled carefully, e.g., by transferring ownership first.");
+      return false;
+  }
+
+  const result = await connection.run(
+    'DELETE FROM project_members WHERE projectUuid = ? AND userUuid = ?',
+    projectUuid,
+    userUuid
+  );
+  return result.changes ? result.changes > 0 : false;
 }

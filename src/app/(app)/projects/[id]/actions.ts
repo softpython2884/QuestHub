@@ -1,8 +1,16 @@
 
 'use server';
 
-import type { Project } from '@/types';
-import { getProjectByUuid as dbGetProjectByUuid, getUserByUuid as dbGetUserByUuid, updateProjectDetails as dbUpdateProjectDetails } from '@/lib/db';
+import type { Project, ProjectMember, ProjectMemberRole } from '@/types';
+import {
+  getProjectByUuid as dbGetProjectByUuid,
+  getUserByUuid as dbGetUserByUuid,
+  updateProjectDetails as dbUpdateProjectDetails,
+  addProjectMember as dbAddProjectMember,
+  getProjectMembers as dbGetProjectMembers,
+  getUserByEmail as dbGetUserByEmail,
+  removeProjectMember as dbRemoveProjectMember
+} from '@/lib/db';
 import { z } from 'zod';
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -30,7 +38,7 @@ const UpdateProjectSchema = z.object({
 });
 
 export async function updateProjectAction(
-  prevState: { error?: string; errors?: z.ZodIssue[]; message?: string },
+  prevState: { error?: string; errors?: Record<string, string[] | undefined>; message?: string },
   formData: FormData
 ): Promise<{ error?: string; errors?: Record<string, string[] | undefined>; message?: string; project?: Project }> {
   const validatedFields = UpdateProjectSchema.safeParse({
@@ -59,4 +67,110 @@ export async function updateProjectAction(
     console.error('Failed to update project (server action):', error);
     return { error: error.message || 'An unexpected error occurred.' };
   }
+}
+
+
+// Invite User Action
+export interface InviteUserFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  invitedMember?: ProjectMember;
+}
+
+const InviteUserSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  email: z.string().email("Invalid email address."),
+  role: z.enum(['co-owner', 'editor', 'viewer'] as [ProjectMemberRole, ...ProjectMemberRole[]]), // Ensure all ProjectMemberRole values except 'owner' are here
+});
+
+
+export async function inviteUserToProjectAction(
+  prevState: InviteUserFormState,
+  formData: FormData
+): Promise<InviteUserFormState> {
+  const validatedFields = InviteUserSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    email: formData.get('emailToInvite'), // Make sure this matches the input name in the form
+    role: formData.get('roleToInvite'),   // Make sure this matches the select name in the form
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+  const { projectUuid, email, role } = validatedFields.data;
+
+  try {
+    // TODO: Implement robust permission check: only project owner/co-owner can invite
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project) return { error: "Project not found." };
+    // Example: const { user } = useAuth(); // This hook cannot be used in server actions. Get current user differently.
+    // if (project.ownerUuid !== currentUserId /* && !isCoOwner(currentUserId, projectUuid) */) {
+    //   return { error: "You do not have permission to invite users to this project." };
+    // }
+
+    const userToInvite = await dbGetUserByEmail(email);
+    if (!userToInvite) {
+      return { error: "User with this email not found." };
+    }
+
+    if (userToInvite.uuid === project.ownerUuid) {
+      return { error: "Cannot invite the project owner with a different role. Owner role is fixed."};
+    }
+    
+    // Check if user is already a member
+    const currentMembers = await dbGetProjectMembers(projectUuid);
+    const existingMembership = currentMembers.find(member => member.userUuid === userToInvite.uuid);
+
+    if (existingMembership && existingMembership.role === role) {
+      return { error: `${userToInvite.name} is already a ${role} in this project.` };
+    }
+
+
+    const newOrUpdatedMember = await dbAddProjectMember(projectUuid, userToInvite.uuid, role);
+    if (!newOrUpdatedMember) {
+        return { error: "Failed to add or update user in the project."};
+    }
+    return { message: `${userToInvite.name} has been successfully ${existingMembership ? 'updated to role' : 'invited as'} ${role}.`, invitedMember: newOrUpdatedMember };
+  } catch (error: any) {
+    console.error("Error inviting user:", error);
+    return { error: error.message || "An unexpected error occurred while inviting the user." };
+  }
+}
+
+export async function fetchProjectMembersAction(projectUuid: string | undefined): Promise<ProjectMember[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetProjectMembers(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch project members:", error);
+    return [];
+  }
+}
+
+export async function removeUserFromProjectAction(projectUuid: string, userUuidToRemove: string): Promise<{success?: boolean, error?: string, message?: string}> {
+    if (!projectUuid || !userUuidToRemove) {
+        return { error: "Project UUID and User UUID are required." };
+    }
+    // Add permission check: only owner/co-owner can remove. Owner cannot remove themselves.
+    try {
+        const project = await dbGetProjectByUuid(projectUuid);
+        if (!project) return { error: "Project not found." };
+
+        if (project.ownerUuid === userUuidToRemove) {
+            return { error: "Project owner cannot be removed. Transfer ownership first." };
+        }
+
+        const success = await dbRemoveProjectMember(projectUuid, userUuidToRemove);
+        if (success) {
+            return { success: true, message: "User removed from project successfully." };
+        }
+        return { error: "Failed to remove user from project." };
+    } catch (error: any) {
+        console.error("Error removing user from project:", error);
+        return { error: error.message || "An unexpected error occurred." };
+    }
 }

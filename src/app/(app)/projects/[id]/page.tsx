@@ -3,20 +3,21 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, Settings as SettingsIcon, FolderGit2, Loader2, UploadCloud } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, Settings as SettingsIcon, FolderGit2, Loader2, UploadCloud, Mail, UserX } from 'lucide-react';
 import Link from 'next/link';
-import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType } from '@/types';
+import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useActionState as useActionStateReact } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchProjectAction, fetchProjectOwnerNameAction, updateProjectAction } from './actions';
+import { fetchProjectAction, fetchProjectOwnerNameAction, updateProjectAction, inviteUserToProjectAction, fetchProjectMembersAction, removeUserFromProjectAction, type InviteUserFormState } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
@@ -24,7 +25,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useActionState } from 'react';
 
 
 const mockTasks: Task[] = [
@@ -40,6 +40,8 @@ const mockAnnouncements: Announcement[] = [
 const mockTags: TagType[] = [{id: 'tag-high-mock', uuid: 'tag-uuid-high-mock', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', name: 'High Priority', color: 'bg-red-500'}];
 
 const taskStatuses: Task['status'][] = ['To Do', 'In Progress', 'Done', 'Archived'];
+const memberRoles: Exclude<ProjectMemberRole, 'owner'>[] = ['co-owner', 'editor', 'viewer'];
+
 
 const editProjectFormSchema = z.object({
   name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
@@ -47,38 +49,62 @@ const editProjectFormSchema = z.object({
 });
 type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
 
+const inviteUserFormSchema = z.object({
+  emailToInvite: z.string().email({ message: "Please enter a valid email address." }),
+  roleToInvite: z.enum(memberRoles, { errorMap: () => ({ message: "Please select a role."}) }),
+});
+type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
+
 
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
   const projectUuid = params.id as string;
-  
+
   const { user, isLoading: authLoading } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [projectOwnerName, setProjectOwnerName] = useState<string | null>(null);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
+
 
   const [newDocContent, setNewDocContent] = useState('');
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
 
-  const [newScriptName, setNewScriptName] = useState('');
+  const [newScriptName, setNewScriptContent] = useState('');
   const [newScriptContent, setNewScriptContent] = useState('');
 
   const editForm = useForm<EditProjectFormValues>({
     resolver: zodResolver(editProjectFormSchema),
-    defaultValues: {
-      name: project?.name || '',
-      description: project?.description || '',
-    },
+    defaultValues: { name: '', description: '' },
   });
-  
-  const [updateFormState, updateProjectFormAction, isUpdatePending] = useActionState(updateProjectAction, { message: "", errors: {} });
+
+  const inviteForm = useForm<InviteUserFormValues>({
+    resolver: zodResolver(inviteUserFormSchema),
+    defaultValues: { emailToInvite: '', roleToInvite: 'viewer' },
+  });
+
+  const [updateFormState, updateProjectFormAction, isUpdatePending] = useActionStateReact(updateProjectAction, { message: "", errors: {} });
+  const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionStateReact(inviteUserToProjectAction, { message: "", error: "" });
+
+  const loadProjectMembers = useCallback(async () => {
+    if (projectUuid) {
+        try {
+            const members = await fetchProjectMembersAction(projectUuid);
+            setProjectMembers(members);
+        } catch (error) {
+            console.error("Failed to load project members", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
+        }
+    }
+  }, [projectUuid, toast]);
 
 
   const loadProjectData = useCallback(async () => {
-    if (projectUuid && user) { 
+    if (projectUuid && user) {
       setIsLoadingData(true);
       try {
         const projectData = await fetchProjectAction(projectUuid);
@@ -89,6 +115,7 @@ export default function ProjectDetailPage() {
               const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
               setProjectOwnerName(ownerName);
           }
+          await loadProjectMembers(); // Load members after project data
         }
       } catch (err) {
         console.error("Error fetching project on client:", err);
@@ -100,7 +127,7 @@ export default function ProjectDetailPage() {
     } else if (!authLoading && !user) {
         router.push('/login');
     }
-  }, [projectUuid, user, authLoading, router, toast, editForm]);
+  }, [projectUuid, user, authLoading, router, toast, editForm, loadProjectMembers]);
 
   useEffect(() => {
     loadProjectData();
@@ -110,16 +137,31 @@ export default function ProjectDetailPage() {
     if (updateFormState.message && !updateFormState.error && !isUpdatePending) {
       toast({ title: "Success", description: updateFormState.message });
       setIsEditDialogOpen(false);
-      loadProjectData(); // Refresh project data
+      loadProjectData();
     }
     if (updateFormState.error && !isUpdatePending) {
       toast({ variant: "destructive", title: "Error", description: updateFormState.error });
     }
   }, [updateFormState, toast, loadProjectData, isUpdatePending]);
 
+  useEffect(() => {
+    if (!isInvitePending) {
+        if (inviteFormState.message && !inviteFormState.error) {
+            toast({ title: "Success", description: inviteFormState.message });
+            setIsInviteUserDialogOpen(false);
+            inviteForm.reset();
+            loadProjectMembers(); // Refresh member list
+        }
+        if (inviteFormState.error) {
+            toast({ variant: "destructive", title: "Invitation Error", description: inviteFormState.error });
+        }
+    }
+  }, [inviteFormState, toast, loadProjectMembers, isInvitePending, inviteForm]);
+
+
   const handleContentChange = async (content: string) => {
     setNewDocContent(content);
-    if(content.trim().length > 10) { 
+    if(content.trim().length > 10) {
       try {
         const riskResult = await flagApiKeyRisks({ text: content });
         if (riskResult.flagged) {
@@ -140,6 +182,48 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const isOwner = user?.uuid === project?.ownerUuid;
+  // const isCoOwner = projectMembers.some(m => m.userUuid === user?.uuid && m.role === 'co-owner');
+  // const canManageMembers = isOwner || isCoOwner; // Future use
+
+  const handleEditSubmit = async (values: EditProjectFormValues) => {
+    const formData = new FormData();
+    formData.append('name', values.name);
+    formData.append('description', values.description || '');
+    formData.append('projectUuid', project!.uuid); // project should be non-null here
+    updateProjectFormAction(formData);
+  };
+
+  const handleInviteSubmit = async (values: InviteUserFormValues) => {
+    const formData = new FormData();
+    formData.append('projectUuid', project!.uuid);
+    formData.append('emailToInvite', values.emailToInvite);
+    formData.append('roleToInvite', values.roleToInvite);
+    inviteUserFormAction(formData);
+  };
+
+  const handleRemoveMember = async (memberUuidToRemove: string) => {
+    if (!project) return;
+    const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
+    if (result.success) {
+        toast({ title: "Success", description: result.message });
+        loadProjectMembers();
+    } else {
+        toast({ variant: "destructive", title: "Error", description: result.error });
+    }
+  };
+  
+  const getInitials = (name?: string) => {
+    if (!name) return '??';
+    const names = name.split(' ');
+    let initials = names[0].substring(0, 1).toUpperCase();
+    if (names.length > 1) {
+      initials += names[names.length - 1].substring(0, 1).toUpperCase();
+    }
+    return initials;
+  };
+
+
   if (authLoading || isLoadingData) {
     return (
       <div className="space-y-6">
@@ -147,14 +231,14 @@ export default function ProjectDetailPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <Skeleton className="h-8 w-1/2" />
-            <Skeleton className="h-5 w-3/4 mt-2" /> 
-             <div className="mt-3 flex flex-wrap gap-2"> 
-                <Skeleton className="h-6 w-20 rounded-full" /> 
-                <Skeleton className="h-6 w-24 rounded-full" /> 
+            <Skeleton className="h-5 w-3/4 mt-2" />
+             <div className="mt-3 flex flex-wrap gap-2">
+                <Skeleton className="h-6 w-20 rounded-full" />
+                <Skeleton className="h-6 w-24 rounded-full" />
               </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2"> 
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2">
                 <div><Skeleton className="h-4 w-16 mb-1" /><Skeleton className="h-5 w-24" /></div>
                 <div><Skeleton className="h-4 w-20 mb-1" /><Skeleton className="h-5 w-12" /></div>
                 <div><Skeleton className="h-4 w-16 mb-1" /><Skeleton className="h-5 w-28" /></div>
@@ -162,8 +246,8 @@ export default function ProjectDetailPage() {
             </div>
           </CardContent>
         </Card>
-        <Skeleton className="h-10 w-full" /> 
-        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card> 
+        <Skeleton className="h-10 w-full" />
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
       </div>
     );
   }
@@ -180,21 +264,12 @@ export default function ProjectDetailPage() {
         </div>
     );
   }
-  
-  const projectTasks = mockTasks; 
+
+  const projectTasks = mockTasks;
   const projectDocuments = mockDocuments;
   const projectAnnouncements = mockAnnouncements;
   const projectTags = mockTags;
 
-  const isOwner = user?.uuid === project.ownerUuid;
-
-  const handleEditSubmit = async (values: EditProjectFormValues) => {
-    const formData = new FormData();
-    formData.append('name', values.name);
-    formData.append('description', values.description || '');
-    formData.append('projectUuid', project.uuid);
-    updateProjectFormAction(formData);
-  };
 
   return (
     <div className="space-y-6">
@@ -209,7 +284,7 @@ export default function ProjectDetailPage() {
               <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
               <CardDescription className="mt-1">{project.description || "No description provided."}</CardDescription>
               <div className="mt-2 flex flex-wrap gap-2">
-                {projectTags.map(tag => ( 
+                {projectTags.map(tag => (
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white">{tag.name}</Badge>
                 ))}
               </div>
@@ -277,7 +352,7 @@ export default function ProjectDetailPage() {
         <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2">
                 <div><strong className="block text-muted-foreground">Owner:</strong> {projectOwnerName || project.ownerUuid}</div>
-                <div><strong className="block text-muted-foreground">Members:</strong> {/* Placeholder */} 1</div>
+                <div><strong className="block text-muted-foreground">Members:</strong> {projectMembers.length}</div>
                 <div><strong className="block text-muted-foreground">Created:</strong> {new Date(project.createdAt).toLocaleDateString()}</div>
                 <div><strong className="block text-muted-foreground">Last Update:</strong> {new Date(project.updatedAt).toLocaleDateString()}</div>
             </div>
@@ -297,7 +372,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({projectTasks.length})</CardTitle>
-              <Button size="sm" disabled={!isOwner}><PlusCircle className="mr-2 h-4 w-4"/> Add Task</Button>
+              <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> Add Task</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -336,7 +411,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" disabled={!isOwner}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -353,7 +428,7 @@ export default function ProjectDetailPage() {
               </div>
               <div className="mt-6">
                 <h4 className="font-semibold mb-2">Add New Document Content (AI Security Check Demo)</h4>
-                <Textarea 
+                <Textarea
                   placeholder="Paste or type document content here. Potential API keys will be flagged."
                   value={newDocContent}
                   onChange={(e) => handleContentChange(e.target.value)}
@@ -396,18 +471,18 @@ export default function ProjectDetailPage() {
                 <div className="space-y-3">
                   <div>
                     <Label htmlFor="script-name">Script Name</Label>
-                    <Input 
-                      id="script-name" 
-                      placeholder="e.g., deployment_script.sh, data_analysis.py" 
+                    <Input
+                      id="script-name"
+                      placeholder="e.g., deployment_script.sh, data_analysis.py"
                       value={newScriptName}
                       onChange={(e) => setNewScriptName(e.target.value)}
                     />
                   </div>
                   <div>
                     <Label htmlFor="script-content">Script Content</Label>
-                    <Textarea 
-                      id="script-content" 
-                      placeholder="Paste or write your script content here..." 
+                    <Textarea
+                      id="script-content"
+                      placeholder="Paste or write your script content here..."
                       value={newScriptContent}
                       onChange={(e) => setNewScriptContent(e.target.value)}
                       rows={8}
@@ -430,15 +505,106 @@ export default function ProjectDetailPage() {
 
          <TabsContent value="settings" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Team & Project Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-6"> 
+            <CardHeader className="flex flex-row justify-between items-center">
+                <CardTitle>Team & Project Settings</CardTitle>
+                {isOwner && (
+                    <Dialog open={isInviteUserDialogOpen} onOpenChange={setIsInviteUserDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button size="sm"><Users className="mr-2 h-4 w-4"/>Invite Members</Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                                <DialogTitle>Invite New Member</DialogTitle>
+                                <DialogDescription>Enter the email of the user you want to invite and assign them a role.</DialogDescription>
+                            </DialogHeader>
+                            <Form {...inviteForm}>
+                                <form onSubmit={inviteForm.handleSubmit(handleInviteSubmit)} className="space-y-4">
+                                    <FormField
+                                        control={inviteForm.control}
+                                        name="emailToInvite"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>User Email</FormLabel>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                    <FormControl>
+                                                        <Input placeholder="user@example.com" {...field} className="pl-10" />
+                                                    </FormControl>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={inviteForm.control}
+                                        name="roleToInvite"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Role</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select a role" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {memberRoles.map(role => (
+                                                            <SelectItem key={role} value={role} className="capitalize">{role.charAt(0).toUpperCase() + role.slice(1)}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    {inviteFormState.fieldErrors?.projectUuid && <p className="text-sm text-destructive">{inviteFormState.fieldErrors.projectUuid.join(', ')}</p>}
+                                    {inviteFormState.error && !inviteFormState.fieldErrors && <p className="text-sm text-destructive">{inviteFormState.error}</p>}
+                                    <DialogFooter>
+                                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                                        <Button type="submit" disabled={isInvitePending}>
+                                            {isInvitePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Send Invitation
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </Form>
+                        </DialogContent>
+                    </Dialog>
+                )}
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div>
-                <h4 className="font-semibold mb-2 text-lg">Manage Team Members</h4>
-                <div className="border p-4 rounded-md text-muted-foreground">
-                    <p>Currently, only the project owner ({projectOwnerName || 'Loading...'}) has access.</p>
-                    <p className="text-xs mt-2">Full team management (inviting users, assigning roles like 'co-owner', 'editor', 'viewer') is coming soon.</p>
-                    {isOwner && <Button className="mt-3" size="sm" disabled><Users className="mr-2 h-4 w-4"/>Invite Members</Button> }
-                </div>
+                <h4 className="font-semibold mb-2 text-lg">Current Members ({projectMembers.length})</h4>
+                 {projectMembers.length > 0 ? (
+                    <div className="space-y-3">
+                        {projectMembers.map(member => (
+                            <Card key={member.userUuid} className="p-3">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                    <div className="flex items-center gap-3">
+                                        <Avatar className="h-10 w-10">
+                                            <AvatarImage src={member.user?.avatar} alt={member.user?.name} data-ai-hint="user avatar" />
+                                            <AvatarFallback>{getInitials(member.user?.name)}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-medium">{member.user?.name || 'Unknown User'}</p>
+                                            <p className="text-xs text-muted-foreground">{member.user?.email || 'No email'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                                        <Badge variant={member.role === 'owner' ? 'default' : 'secondary'} className="capitalize">{member.role}</Badge>
+                                        {isOwner && member.role !== 'owner' && (
+                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Remove User" onClick={() => handleRemoveMember(member.userUuid)}>
+                                                <UserX className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-muted-foreground">No members in this project yet (besides the owner).</p>
+                )}
               </div>
               <div>
                 <h4 className="font-semibold mb-2 text-lg">Project Tags</h4>
@@ -447,15 +613,6 @@ export default function ProjectDetailPage() {
                     {isOwner && <Button className="mt-3" size="sm" disabled><PlusCircle className="mr-2 h-4 w-4"/>Manage Tags</Button>}
                  </div>
               </div>
-               {isOwner && (
-                <div>
-                    <h4 className="font-semibold mb-2 text-lg">Project Details & Privacy</h4>
-                    <div className="border p-4 rounded-md text-muted-foreground">
-                        <p>Editing project name, description, and privacy settings (e.g., making project public or private to specific roles/users) will be available here.</p>
-                        <Button className="mt-3" size="sm" disabled><Edit3 className="mr-2 h-4 w-4"/>Edit Details</Button>
-                    </div>
-                </div>
-               )}
                {isOwner && (
                 <div>
                     <h4 className="font-semibold mb-2 text-lg text-destructive">Danger Zone</h4>
@@ -473,6 +630,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
-
-    

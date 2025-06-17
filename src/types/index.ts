@@ -49,10 +49,10 @@ export interface Document { // Kept as Document for type usage, maps to project_
 export type ProjectMemberRole = 'owner' | 'co-owner' | 'editor' | 'viewer';
 
 export interface ProjectMember {
-  userUuid: string;
   projectUuid: string;
+  userUuid: string;
   role: ProjectMemberRole;
-  user?: Pick<User, 'name' | 'avatar' | 'email'>; // Optional: for displaying member info
+  user?: Pick<User, 'uuid' | 'name' | 'avatar' | 'email'>; // Optional: for displaying member info
 }
 
 export interface Project {
@@ -60,13 +60,13 @@ export interface Project {
   name: string;
   description?: string;
   ownerUuid: string; // User UUID of the project owner
-  tasks?: Task[]; 
-  documents?: Document[]; 
-  tags?: Tag[]; 
+  tasks?: Task[];
+  documents?: Document[];
+  tags?: Tag[];
   announcements?: Announcement[];
   createdAt: string;
   updatedAt: string;
-  isPrivate?: boolean; 
+  isPrivate?: boolean;
 }
 
 export interface Announcement {
@@ -80,3 +80,4 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
+
