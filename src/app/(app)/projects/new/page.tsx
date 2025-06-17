@@ -57,7 +57,7 @@ export default function NewProjectPage() {
       toast({ variant: 'destructive', title: 'Error Creating Project', description: result.error });
     } else {
       toast({ title: 'Success!', description: `Project "${result.name}" created.` });
-      router.push(`/projects/${result.uuid}`);
+      router.push(`/projects/${result.uuid}`); // Redirect to the new project page
     }
   }
 

@@ -32,7 +32,7 @@ const UpdateProjectSchema = z.object({
 export async function updateProjectAction(
   prevState: { error?: string; errors?: z.ZodIssue[]; message?: string },
   formData: FormData
-): Promise<{ error?: string; errors?: z.ZodIssue[]; message?: string; project?: Project }> {
+): Promise<{ error?: string; errors?: Record<string, string[] | undefined>; message?: string; project?: Project }> {
   const validatedFields = UpdateProjectSchema.safeParse({
     name: formData.get('name'),
     description: formData.get('description'),
@@ -42,7 +42,7 @@ export async function updateProjectAction(
   if (!validatedFields.success) {
     return {
       error: "Invalid input.",
-      errors: validatedFields.error.flatten().fieldErrors as unknown as z.ZodIssue[],
+      errors: validatedFields.error.flatten().fieldErrors,
     };
   }
 

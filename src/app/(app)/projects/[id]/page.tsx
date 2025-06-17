@@ -24,7 +24,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFormState } from 'react-dom';
+import { useActionState } from 'react';
 
 
 const mockTasks: Task[] = [
@@ -74,7 +74,7 @@ export default function ProjectDetailPage() {
     },
   });
   
-  const [updateFormState, updateProjectFormAction] = useFormState(updateProjectAction, { message: "", errors: {} });
+  const [updateFormState, updateProjectFormAction] = useActionState(updateProjectAction, { message: "", errors: {} });
 
 
   const loadProjectData = useCallback(async () => {
@@ -254,8 +254,8 @@ export default function ProjectDetailPage() {
                           </FormItem>
                         )}
                       />
-                       {updateFormState.errors?.name && <p className="text-sm text-destructive">{updateFormState.errors.name}</p>}
-                       {updateFormState.errors?.description && <p className="text-sm text-destructive">{updateFormState.errors.description}</p>}
+                       {updateFormState.errors?.name && <p className="text-sm text-destructive">{Array.isArray(updateFormState.errors.name) ? updateFormState.errors.name.join(', ') : updateFormState.errors.name}</p>}
+                       {updateFormState.errors?.description && <p className="text-sm text-destructive">{Array.isArray(updateFormState.errors.description) ? updateFormState.errors.description.join(', ') : updateFormState.errors.description}</p>}
                        {updateFormState.error && !updateFormState.errors && <p className="text-sm text-destructive">{updateFormState.error}</p>}
                       <DialogFooter>
                         <DialogClose asChild>
@@ -290,7 +290,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="documents"><FileText className="mr-2 h-4 w-4"/>Documents</TabsTrigger>
           <TabsTrigger value="announcements"><Megaphone className="mr-2 h-4 w-4"/>Announcements</TabsTrigger>
           <TabsTrigger value="repository"><FolderGit2 className="mr-2 h-4 w-4"/>Repository</TabsTrigger>
-          <TabsTrigger value="settings"><SettingsIcon className="mr-2 h-4 w-4"/>Team & Settings</TabsTrigger>
+          <TabsTrigger value="settings"><Users className="mr-2 h-4 w-4"/>Team & Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tasks" className="mt-4">
@@ -422,7 +422,7 @@ export default function ProjectDetailPage() {
               <div className="border p-4 rounded-md text-center text-muted-foreground">
                 <FolderGit2 className="mx-auto h-12 w-12 mb-3" />
                 <p>Currently, you can add script names and their content.</p>
-                <p className="text-xs mt-1">Full Git integration or advanced file management is a larger feature planned for future updates.</p>
+                <p className="text-xs mt-1">Full Git integration, tags, status, type, and notes for scripts are larger features planned for future updates.</p>
               </div>
             </CardContent>
           </Card>
