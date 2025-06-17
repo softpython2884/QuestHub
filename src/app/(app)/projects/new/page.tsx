@@ -51,13 +51,14 @@ export default function NewProjectPage() {
     }
     setIsSubmitting(true);
     const result = await createProjectAction(values.name, values.description, user.uuid);
-    setIsSubmitting(false);
-
+    
     if ('error' in result) {
       toast({ variant: 'destructive', title: 'Error Creating Project', description: result.error });
+      setIsSubmitting(false);
     } else {
       toast({ title: 'Success!', description: `Project "${result.name}" created.` });
-      router.push(`/projects/${result.uuid}`); // Redirect to the new project page
+      router.push(`/projects/${result.uuid}`); 
+      // No need to setIsSubmitting(false) here as we are navigating away
     }
   }
 

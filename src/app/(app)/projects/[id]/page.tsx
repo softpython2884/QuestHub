@@ -14,8 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback } from 'react';
-import { useActionState } from 'react'; // Updated import
+import { useEffect, useState, useCallback, useTransition, startTransition as ReactStartTransition } from 'react'; // Updated import
+import { useActionState } from 'react'; 
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -317,7 +317,9 @@ export default function ProjectDetailPage() {
     formData.append('name', values.name);
     formData.append('description', values.description || '');
     formData.append('projectUuid', project.uuid);
-    updateProjectFormAction(formData);
+    ReactStartTransition(() => {
+      updateProjectFormAction(formData);
+    });
   };
 
   const handleInviteSubmit = async (values: InviteUserFormValues) => {
@@ -326,7 +328,9 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('emailToInvite', values.emailToInvite);
     formData.append('roleToInvite', values.roleToInvite);
-    inviteUserFormAction(formData);
+    ReactStartTransition(() => {
+      inviteUserFormAction(formData);
+    });
   };
 
   const handleCreateTaskSubmit = async (values: TaskFormValues) => {
@@ -340,7 +344,9 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    createTaskFormAction(formData);
+    ReactStartTransition(() => {
+      createTaskFormAction(formData);
+    });
   };
   
   const handleEditTaskSubmit = async (values: TaskFormValues) => {
@@ -356,7 +362,9 @@ export default function ProjectDetailPage() {
     if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
     else formData.append('assigneeUuid', ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    updateTaskFormAction(formData);
+    ReactStartTransition(() => {
+      updateTaskFormAction(formData);
+    });
   };
 
   const handleSubTaskDescriptionChange = async (taskUuid: string, newDescription: string) => {
@@ -376,7 +384,10 @@ export default function ProjectDetailPage() {
 
     formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); 
 
-    updateTaskFormAction(formData);
+    ReactStartTransition(() => {
+      updateTaskFormAction(formData);
+    });
+    // Optimistic update for responsiveness
     setTasks(prevTasks => prevTasks.map(t => t.uuid === taskUuid ? {...t, description: newDescription} : t));
 };
 
@@ -398,7 +409,9 @@ export default function ProjectDetailPage() {
     const formData = new FormData();
     formData.append('taskUuid', taskToDelete.uuid);
     formData.append('projectUuid', project.uuid); 
-    deleteTaskFormAction(formData);
+    ReactStartTransition(() => {
+      deleteTaskFormAction(formData);
+    });
   };
 
 
@@ -409,26 +422,31 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus);
     
-    const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
-
-    if (result.error) {
-      toast({ variant: 'destructive', title: 'Error', description: result.error });
-    } else if (result.message) {
-      toast({ title: 'Success', description: result.message });
-      loadTasks(); 
-    }
+    // For simple status changes, can call action directly if not using useActionState for this specific one
+    // Or, wrap in startTransition if it uses useActionState and is not a direct form action
+    ReactStartTransition(async () => {
+        const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
+        if (result.error) {
+        toast({ variant: 'destructive', title: 'Error', description: result.error });
+        } else if (result.message) {
+        toast({ title: 'Success', description: result.message });
+        loadTasks(); 
+        }
+    });
   };
 
 
   const handleRemoveMember = async (memberUuidToRemove: string) => {
     if (!project) return;
-    const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
-    if (result.success) {
-        toast({ title: "Success", description: result.message });
-        loadProjectMembers();
-    } else {
-        toast({ variant: "destructive", title: "Error", description: result.error });
-    }
+    ReactStartTransition(async () => {
+      const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
+      if (result.success) {
+          toast({ title: "Success", description: result.message });
+          loadProjectMembers();
+      } else {
+          toast({ variant: "destructive", title: "Error", description: result.error });
+      }
+    });
   };
 
   const getInitials = (name?: string) => {
@@ -764,7 +782,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" onClick={() => { /* TODO */ }} disabled={!canCreateUpdateDeleteTasks}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm" disabled={!canCreateUpdateDeleteTasks}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -798,7 +816,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {canManageProjectSettings && <Button size="sm" onClick={() => { /* TODO */ }} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {canManageProjectSettings && <Button size="sm" ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
