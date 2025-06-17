@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Logo } from '@/components/Logo';
@@ -12,7 +13,7 @@ export function AppHeader() {
   // const { theme, setTheme } = useTheme(); // Placeholder for theme toggle
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 shadow-sm backdrop-blur-md sm:px-6">
+    <header className="w-full sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 shadow-sm backdrop-blur-md sm:px-6">
       <div className="flex items-center gap-2">
         {isMobile && <SidebarTrigger />}
         <Logo className="hidden sm:flex" />
