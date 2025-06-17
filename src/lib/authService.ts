@@ -18,6 +18,10 @@ export const login = async (email: string, password?: string): Promise<User | nu
     const isValidPassword = await bcrypt.compare(password, userFromDb.hashedPassword);
     if (isValidPassword) {
       const { hashedPassword, ...userToReturn } = userFromDb;
+      // HACK: For mock server-side session in authEdge.ts
+      if (typeof global !== 'undefined') {
+        (global as any).MOCK_CURRENT_USER_UUID = userToReturn.uuid;
+      }
       return userToReturn;
     }
   }
@@ -37,6 +41,10 @@ export const signup = async (name: string, email: string, password?: string, rol
     }
 
     const newUser = await dbCreateUser(name, email, password, role);
+     // HACK: For mock server-side session in authEdge.ts
+    if (typeof global !== 'undefined' && newUser) {
+      (global as any).MOCK_CURRENT_USER_UUID = newUser.uuid;
+    }
     return newUser;
   } catch (error: any) {
     if (error.message.includes('UNIQUE constraint failed: users.email')) {
@@ -48,6 +56,10 @@ export const signup = async (name: string, email: string, password?: string, rol
 
 export const logout = async (): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, 300));
+  // HACK: For mock server-side session in authEdge.ts
+  if (typeof global !== 'undefined') {
+    (global as any).MOCK_CURRENT_USER_UUID = null;
+  }
 };
 
 export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
@@ -67,7 +79,14 @@ export const refreshCurrentUserStateFromDb = async (uuid: string): Promise<User 
   const userFromDb = await dbGetUserByUuid(uuid);
   if (userFromDb) {
     const { hashedPassword, ...userToReturn } = userFromDb as User & { hashedPassword?: string };
+    // HACK: Ensure mock session is updated on refresh too
+    if (typeof global !== 'undefined') {
+        (global as any).MOCK_CURRENT_USER_UUID = userToReturn.uuid;
+    }
     return userToReturn;
+  }
+  if (typeof global !== 'undefined') {
+    (global as any).MOCK_CURRENT_USER_UUID = null;
   }
   return null;
 };

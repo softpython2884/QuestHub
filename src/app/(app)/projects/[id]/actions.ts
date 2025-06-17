@@ -251,7 +251,7 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
       title,
       description: description || undefined,
       status,
-      assigneeUuid: assigneeUuid || undefined,
+      assigneeUuid: assigneeUuid === '' ? null : assigneeUuid, // Convert empty string to null
       tagsString: tagsString || undefined,
     };
     const createdTask = await dbCreateTask(taskData);
@@ -301,8 +301,8 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    if (!userRole) {
-      return { error: "You are not a member of this project or do not have permission to update task status." };
+    if (!userRole) { // Any member can change status
+      return { error: "You are not a member of this project." };
     }
 
     const updatedTask = await dbUpdateTaskStatus(taskUuid, status);
@@ -363,7 +363,7 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
       title,
       description: description || undefined,
       status,
-      assigneeUuid: assigneeUuid || null,
+      assigneeUuid: assigneeUuid === '' ? null : assigneeUuid, // Convert empty string to null
       tagsString: tagsString || undefined,
     };
 
@@ -411,7 +411,7 @@ export async function deleteTaskAction(prevState: DeleteTaskFormState, formData:
 }
 
 
-// Tag Actions (Basic stubs, can be expanded)
+// Tag Actions
 export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]> {
   if (!projectUuid) return [];
   try {
@@ -421,22 +421,3 @@ export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]
     return [];
   }
 }
-
-// Example: Action to create a new project tag (could be called from a tag management UI later)
-// export async function createProjectTagAction(projectUuid: string, name: string, color: string): Promise<Tag | { error: string }> {
-//   const session = await auth();
-//   if (!session?.user?.uuid) return { error: "Authentication required." };
-
-//   const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-//   if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-//     return { error: "You do not have permission to create tags for this project." };
-//   }
-
-//   try {
-//     const newTag = await dbCreateProjectTag(projectUuid, name, color);
-//     return newTag;
-//   } catch (error: any) {
-//     console.error("Error creating project tag:", error);
-//     return { error: error.message || "An unexpected error occurred." };
-//   }
-// }
