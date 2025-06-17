@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, useActionState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useActionState } from 'react'; // Updated import
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,6 +46,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { MarkdownTaskListRenderer } from '@/components/MarkdownTaskListRenderer';
+import { cn } from '@/lib/utils';
 
 
 const mockDocuments: ProjectDocumentType[] = [
@@ -58,6 +60,7 @@ const mockAnnouncements: Announcement[] = [
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
 const memberRoles: Exclude<ProjectMemberRole, 'owner'>[] = ['co-owner', 'editor', 'viewer'];
 
+const UNASSIGNED_VALUE = "__UNASSIGNED__";
 
 const editProjectFormSchema = z.object({
   name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
@@ -75,7 +78,7 @@ const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
   status: z.enum(taskStatuses),
-  assigneeUuid: z.string().optional(),
+  assigneeUuid: z.string().optional(), // Will hold UNASSIGNED_VALUE or user UUID
   tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -122,7 +125,7 @@ export default function ProjectDetailPage() {
 
   const taskForm = useForm<TaskFormValues>({ 
     resolver: zodResolver(taskFormSchema),
-    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''},
+    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
   });
 
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
@@ -138,7 +141,6 @@ export default function ProjectDetailPage() {
             const members = await fetchProjectMembersAction(projectUuid);
             setProjectMembers(members);
             const member = members.find(m => m.userUuid === user.uuid);
-            // Prioritize ownerUuid from project for 'owner' role, then member role
             const role = project?.ownerUuid === user.uuid ? 'owner' : member?.role || null;
             setCurrentUserRole(role);
         } catch (error) {
@@ -186,9 +188,9 @@ export default function ProjectDetailPage() {
               setProjectOwnerName(ownerName);
           }
           if (user.uuid === projectData.ownerUuid) {
-            setCurrentUserRole('owner'); // Set role early if owner
+            setCurrentUserRole('owner'); 
           }
-          await loadProjectMembers(); // This will refine/confirm role if not owner
+          await loadProjectMembers(); 
           await loadTasks();
           await loadProjectTagsData();
         } else {
@@ -242,12 +244,13 @@ export default function ProjectDetailPage() {
       if (createTaskState.message && !createTaskState.error) {
         toast({ title: "Success", description: createTaskState.message });
         setIsCreateTaskDialogOpen(false);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''});
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
         loadTasks();
       }
       if (createTaskState.error) {
         toast({ variant: "destructive", title: "Task Creation Error", description: createTaskState.error,
-        fieldErrors: createTaskState.fieldErrors ? JSON.stringify(createTaskState.fieldErrors) : undefined });
+        // fieldErrors: createTaskState.fieldErrors ? JSON.stringify(createTaskState.fieldErrors) : undefined 
+      });
       }
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
@@ -258,8 +261,8 @@ export default function ProjectDetailPage() {
         toast({ title: "Success", description: updateTaskState.message });
         setIsEditTaskDialogOpen(false);
         setTaskToEdit(null);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''});
-        loadTasks(); // Reload tasks to see changes
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+        loadTasks(); 
       }
       if (updateTaskState.error) {
         toast({ variant: "destructive", title: "Task Update Error", description: updateTaskState.error });
@@ -329,11 +332,13 @@ export default function ProjectDetailPage() {
   const handleCreateTaskSubmit = async (values: TaskFormValues) => {
     if (!project) return;
     const formData = new FormData();
+    const finalAssigneeUuid = values.assigneeUuid === UNASSIGNED_VALUE ? '' : values.assigneeUuid;
+
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    if (values.assigneeUuid) formData.append('assigneeUuid', values.assigneeUuid);
+    if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     createTaskFormAction(formData);
   };
@@ -341,13 +346,15 @@ export default function ProjectDetailPage() {
   const handleEditTaskSubmit = async (values: TaskFormValues) => {
     if (!project || !taskToEdit) return;
     const formData = new FormData();
+    const finalAssigneeUuid = values.assigneeUuid === UNASSIGNED_VALUE ? '' : values.assigneeUuid;
+
     formData.append('taskUuid', taskToEdit.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    if (values.assigneeUuid) formData.append('assigneeUuid', values.assigneeUuid);
-    else formData.append('assigneeUuid', ''); // Send empty string if not provided to clear
+    if (finalAssigneeUuid) formData.append('assigneeUuid', finalAssigneeUuid);
+    else formData.append('assigneeUuid', ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     updateTaskFormAction(formData);
   };
@@ -357,22 +364,19 @@ export default function ProjectDetailPage() {
     const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
     if (!taskToUpdate) return;
 
-    // Create FormData to update only the description (and necessary identifiers)
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
-    formData.append('projectUuid', project.uuid); // For permission checks
-    formData.append('title', taskToUpdate.title); // Keep existing title
-    formData.append('description', newDescription); // The new description
-    formData.append('status', taskToUpdate.status); // Keep existing status
-    if (taskToUpdate.assigneeUuid) formData.append('assigneeUuid', taskToUpdate.assigneeUuid);
-    else formData.append('assigneeUuid', '');
-    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); // Keep existing tags
+    formData.append('projectUuid', project.uuid); 
+    formData.append('title', taskToUpdate.title); 
+    formData.append('description', newDescription); 
+    formData.append('status', taskToUpdate.status); 
+    
+    const currentAssigneeUuid = taskToUpdate.assigneeUuid || '';
+    formData.append('assigneeUuid', currentAssigneeUuid);
 
-    // Use the existing updateTaskFormAction
-    // Note: This will trigger the full updateTaskState useEffect, which includes closing modals.
-    // For silent background updates, a dedicated action/state might be better in the long run.
+    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); 
+
     updateTaskFormAction(formData);
-    // Optimistically update local state for faster UI response, will be confirmed by loadTasks()
     setTasks(prevTasks => prevTasks.map(t => t.uuid === taskUuid ? {...t, description: newDescription} : t));
 };
 
@@ -383,7 +387,7 @@ export default function ProjectDetailPage() {
       title: task.title,
       description: task.description || '',
       status: task.status,
-      assigneeUuid: task.assigneeUuid || '',
+      assigneeUuid: task.assigneeUuid || UNASSIGNED_VALUE,
       tagsString: task.tags.map(t => t.name).join(', ') || '',
     });
     setIsEditTaskDialogOpen(true);
@@ -404,16 +408,14 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus);
-
-    // We'll use a local function for the action call and state update for status changes
-    // to avoid triggering the main updateTaskFormState which closes dialogs etc.
+    
     const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
 
     if (result.error) {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     } else if (result.message) {
       toast({ title: 'Success', description: result.message });
-      loadTasks(); // Reload tasks to reflect the change
+      loadTasks(); 
     }
   };
 
@@ -478,7 +480,7 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (!project || !user) { // Also check for user, as currentUserRole depends on it
+  if (!project || !user) { 
     return (
         <div className="space-y-6 text-center">
              <Button variant="outline" onClick={() => router.back()} className="mb-4 mr-auto block">
@@ -618,7 +620,7 @@ export default function ProjectDetailPage() {
               <CardTitle>Tasks ({tasks.length})</CardTitle>
                <Dialog open={isCreateTaskDialogOpen} onOpenChange={setIsCreateTaskDialogOpen}>
                 <DialogTrigger asChild>
-                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: '' })}>
+                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                     </Button>
                 </DialogTrigger>
@@ -632,9 +634,12 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
                             {createTaskState?.error && <p className="text-sm text-destructive">{createTaskState.error}</p>}
+                             {/* Display field-specific errors from action state if they exist */}
+                            {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">{createTaskState.fieldErrors.title.join(', ')}</p>}
+                            {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">{createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isCreateTaskPending}> {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task </Button>
@@ -649,7 +654,7 @@ export default function ProjectDetailPage() {
                 {tasks.map(task => (
                   <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
                     <div className="flex justify-between items-start gap-2">
-                      <div className="flex-grow min-w-0"> {/* Added min-w-0 for flexbox to allow shrinking and wrapping */}
+                      <div className="flex-grow min-w-0"> 
                         <h4 className="font-semibold break-words">{task.title}</h4>
                         {task.description && (
                            <div className="text-xs text-muted-foreground mt-0.5">
@@ -738,9 +743,12 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
                             {updateTaskState?.error && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
+                             {/* Display field-specific errors from action state if they exist */}
+                            {updateTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">{updateTaskState.fieldErrors.title.join(', ')}</p>}
+                            {updateTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">{updateTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
@@ -756,7 +764,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" onClick={() => { /* TODO */ }} disabled={!canManageProjectSettings}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm" onClick={() => { /* TODO */ }} disabled={!canCreateUpdateDeleteTasks}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -790,7 +798,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {canManageProjectSettings && <Button size="sm" onClick={() => { /* TODO */ }}><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {canManageProjectSettings && <Button size="sm" onClick={() => { /* TODO */ }} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
