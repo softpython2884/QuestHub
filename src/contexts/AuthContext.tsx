@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -11,9 +12,10 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password?: string) => Promise<void>;
-  signup: (name: string, email: string, role?: UserRole) => Promise<void>;
+  signup: (name: string, email: string, password?: string, role?: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  refreshUser: () => void; // Added for profile updates
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,22 +26,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const loadUser = useCallback(() => {
-    setIsLoading(true);
-    try {
-      const currentUser = authService.getCurrentUser();
-      setUser(currentUser);
-    } catch (e) {
-      setError('Failed to load user session.');
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // On initial load, there's no persistent client session to check other than what authService might hold.
+  // The primary role of this effect is to set isLoading to false.
   useEffect(() => {
-    loadUser();
-  }, [loadUser]);
+    const initialUser = authService.getCurrentUser(); // Check if authService has a user from a previous action in this session
+    if (initialUser) {
+      setUser(initialUser);
+    }
+    setIsLoading(false);
+  }, []);
 
   const login = async (email: string, password?: string) => {
     setIsLoading(true);
@@ -59,11 +54,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signup = async (name: string, email: string, role: UserRole = 'member') => {
+  const signup = async (name: string, email: string, password?: string, role: UserRole = 'member') => {
     setIsLoading(true);
     setError(null);
     try {
-      const newUser = await authService.signup(name, email, role);
+      const newUser = await authService.signup(name, email, password, role);
       if (newUser) {
         setUser(newUser);
         router.push('/dashboard');
@@ -94,9 +89,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const clearError = () => {
     setError(null);
   };
+  
+  const refreshUser = useCallback(() => {
+    const updatedUser = authService.getCurrentUser(); // Get potentially updated user from authService's memory
+    if (updatedUser) {
+      setUser(updatedUser);
+    }
+  }, []);
+
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, error, login, signup, logout, clearError }}>
+    <AuthContext.Provider value={{ user, isLoading, error, login, signup, logout, clearError, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

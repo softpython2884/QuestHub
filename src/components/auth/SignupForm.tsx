@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -40,8 +41,8 @@ export function SignupForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     clearError();
-    // For MVP, role is defaulted to 'member' in authService.signup
-    await signup(values.name, values.email); 
+    // Role is defaulted to 'member' in authService.signup or can be passed if needed
+    await signup(values.name, values.email, values.password); 
   }
 
   return (

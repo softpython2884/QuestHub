@@ -1,11 +1,13 @@
-export type UserRole = 'admin' | 'manager' | 'member';
+export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
-  id: string;
+  id: string; // This is the auto-incremented ID from the DB
+  uuid: string; // This is the globally unique identifier
   email: string;
   name: string;
   role: UserRole;
   avatar?: string; 
+  // passwordHash should not be part of the User object sent to the client
 }
 
 export interface Tag {
@@ -21,7 +23,7 @@ export interface Task {
   title: string;
   description?: string;
   status: TaskStatus;
-  assigneeId?: string; // User ID
+  assigneeId?: string; // User ID (maps to User's uuid)
   projectId: string;
   dueDate?: string; // ISO date string
   tags: Tag[];
@@ -43,8 +45,8 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  ownerId: string; // User ID
-  memberIds: string[]; // User IDs
+  ownerId: string; // User ID (maps to User's uuid)
+  memberIds: string[]; // User IDs (maps to User's uuid)
   tasks: Task[];
   documents: Document[];
   tags: Tag[];
@@ -57,7 +59,7 @@ export interface Announcement {
   id: string;
   title: string;
   content: string;
-  authorId: string; // User ID
+  authorId: string; // User ID (maps to User's uuid)
   projectId?: string; // Optional: if project-specific
   isGlobal: boolean;
   createdAt: string;
