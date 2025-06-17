@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -63,7 +64,7 @@ export function AppSidebar() {
             const Icon = item.icon;
             return (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.href} passHref legacyBehavior>
+                <Link href={item.href} asChild>
                   <SidebarMenuButton
                     asChild
                     isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}

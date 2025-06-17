@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, AlertTriangle } from 'lucide-react';
+import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, AlertTriangle, FolderKanban, Megaphone } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
