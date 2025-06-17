@@ -23,9 +23,9 @@ import {
   fetchProjectOwnerNameAction,
   updateProjectAction,
   inviteUserToProjectAction,
+  type InviteUserFormState,
   fetchProjectMembersAction,
   removeUserFromProjectAction,
-  type InviteUserFormState,
   createTaskAction,
   type CreateTaskFormState,
   fetchTasksAction,
@@ -44,6 +44,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { MarkdownTaskListRenderer } from '@/components/MarkdownTaskListRenderer';
 
 
 const mockDocuments: ProjectDocumentType[] = [
@@ -91,7 +92,7 @@ export default function ProjectDetailPage() {
   const [projectOwnerName, setProjectOwnerName] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projectTags, setProjectTags] = useState<TagType[]>([]); // For actual project tags
+  const [projectTags, setProjectTags] = useState<TagType[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -119,7 +120,7 @@ export default function ProjectDetailPage() {
     defaultValues: { emailToInvite: '', roleToInvite: 'viewer' },
   });
 
-  const taskForm = useForm<TaskFormValues>({ // Used for both create and edit
+  const taskForm = useForm<TaskFormValues>({ 
     resolver: zodResolver(taskFormSchema),
     defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''},
   });
@@ -137,6 +138,7 @@ export default function ProjectDetailPage() {
             const members = await fetchProjectMembersAction(projectUuid);
             setProjectMembers(members);
             const member = members.find(m => m.userUuid === user.uuid);
+            // Prioritize ownerUuid from project for 'owner' role, then member role
             const role = project?.ownerUuid === user.uuid ? 'owner' : member?.role || null;
             setCurrentUserRole(role);
         } catch (error) {
@@ -166,10 +168,9 @@ export default function ProjectDetailPage() {
         setProjectTags(tags);
       } catch (error) {
         console.error("Failed to load project tags:", error);
-        // toast({ variant: "destructive", title: "Error", description: "Could not load project tags." });
       }
     }
-  }, [projectUuid, toast]);
+  }, [projectUuid]);
 
 
   const loadProjectData = useCallback(async () => {
@@ -184,15 +185,14 @@ export default function ProjectDetailPage() {
               const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
               setProjectOwnerName(ownerName);
           }
-          // Initial role set here based on ownership before members are loaded
           if (user.uuid === projectData.ownerUuid) {
-            setCurrentUserRole('owner');
+            setCurrentUserRole('owner'); // Set role early if owner
           }
-          await loadProjectMembers();
+          await loadProjectMembers(); // This will refine/confirm role if not owner
           await loadTasks();
-          await loadProjectTagsData(); // Load tags
+          await loadProjectTagsData();
         } else {
-          router.push('/projects'); // Project not found or no access
+          router.push('/projects'); 
         }
       } catch (err) {
         console.error("Error fetching project on client:", err);
@@ -210,7 +210,6 @@ export default function ProjectDetailPage() {
     loadProjectData();
   }, [loadProjectData]);
 
-  // Toasts for project update
   useEffect(() => {
     if (!isUpdateProjectPending && updateProjectFormState) {
       if (updateProjectFormState.message && !updateProjectFormState.error) {
@@ -224,7 +223,6 @@ export default function ProjectDetailPage() {
     }
   }, [updateProjectFormState, isUpdateProjectPending, toast, loadProjectData]);
 
-  // Toasts for invite user
   useEffect(() => {
     if (!isInvitePending && inviteFormState) {
         if (inviteFormState.message && !inviteFormState.error) {
@@ -239,7 +237,6 @@ export default function ProjectDetailPage() {
     }
   }, [inviteFormState, isInvitePending, toast, loadProjectMembers, inviteForm]);
 
-  // Toasts for create task
   useEffect(() => {
     if (!isCreateTaskPending && createTaskState) {
       if (createTaskState.message && !createTaskState.error) {
@@ -255,7 +252,6 @@ export default function ProjectDetailPage() {
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
 
-  // Toasts for update task
    useEffect(() => {
     if (!isUpdateTaskPending && updateTaskState) {
       if (updateTaskState.message && !updateTaskState.error) {
@@ -263,7 +259,7 @@ export default function ProjectDetailPage() {
         setIsEditTaskDialogOpen(false);
         setTaskToEdit(null);
         taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''});
-        loadTasks();
+        loadTasks(); // Reload tasks to see changes
       }
       if (updateTaskState.error) {
         toast({ variant: "destructive", title: "Task Update Error", description: updateTaskState.error });
@@ -271,12 +267,11 @@ export default function ProjectDetailPage() {
     }
   }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm]);
 
-  // Toasts for delete task
   useEffect(() => {
     if (!isDeleteTaskPending && deleteTaskState) {
         if (deleteTaskState.message && !deleteTaskState.error) {
             toast({ title: "Success", description: deleteTaskState.message });
-            setTaskToDelete(null); // Close confirmation dialog implicitly by resetting taskToDelete
+            setTaskToDelete(null); 
             loadTasks();
         }
         if (deleteTaskState.error) {
@@ -311,7 +306,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole; // Any member can edit status
+  const canEditTaskStatus = !!currentUserRole; 
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
@@ -352,9 +347,35 @@ export default function ProjectDetailPage() {
     formData.append('description', values.description || '');
     formData.append('status', values.status);
     if (values.assigneeUuid) formData.append('assigneeUuid', values.assigneeUuid);
+    else formData.append('assigneeUuid', ''); // Send empty string if not provided to clear
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     updateTaskFormAction(formData);
   };
+
+  const handleSubTaskDescriptionChange = async (taskUuid: string, newDescription: string) => {
+    if (!project) return;
+    const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
+    if (!taskToUpdate) return;
+
+    // Create FormData to update only the description (and necessary identifiers)
+    const formData = new FormData();
+    formData.append('taskUuid', taskUuid);
+    formData.append('projectUuid', project.uuid); // For permission checks
+    formData.append('title', taskToUpdate.title); // Keep existing title
+    formData.append('description', newDescription); // The new description
+    formData.append('status', taskToUpdate.status); // Keep existing status
+    if (taskToUpdate.assigneeUuid) formData.append('assigneeUuid', taskToUpdate.assigneeUuid);
+    else formData.append('assigneeUuid', '');
+    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); // Keep existing tags
+
+    // Use the existing updateTaskFormAction
+    // Note: This will trigger the full updateTaskState useEffect, which includes closing modals.
+    // For silent background updates, a dedicated action/state might be better in the long run.
+    updateTaskFormAction(formData);
+    // Optimistically update local state for faster UI response, will be confirmed by loadTasks()
+    setTasks(prevTasks => prevTasks.map(t => t.uuid === taskUuid ? {...t, description: newDescription} : t));
+};
+
 
   const openEditTaskDialog = (task: Task) => {
     setTaskToEdit(task);
@@ -372,7 +393,7 @@ export default function ProjectDetailPage() {
     if (!taskToDelete || !project) return;
     const formData = new FormData();
     formData.append('taskUuid', taskToDelete.uuid);
-    formData.append('projectUuid', project.uuid); // For permission check if needed
+    formData.append('projectUuid', project.uuid); 
     deleteTaskFormAction(formData);
   };
 
@@ -384,13 +405,15 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus);
 
+    // We'll use a local function for the action call and state update for status changes
+    // to avoid triggering the main updateTaskFormState which closes dialogs etc.
     const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
 
     if (result.error) {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     } else if (result.message) {
       toast({ title: 'Success', description: result.message });
-      loadTasks();
+      loadTasks(); // Reload tasks to reflect the change
     }
   };
 
@@ -455,7 +478,7 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (!project) {
+  if (!project || !user) { // Also check for user, as currentUserRole depends on it
     return (
         <div className="space-y-6 text-center">
              <Button variant="outline" onClick={() => router.back()} className="mb-4 mr-auto block">
@@ -468,9 +491,8 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const projectDocuments = mockDocuments; // Still mock
-  const projectAnnouncements = mockAnnouncements; // Still mock
-  // const projectTagsData = mockTags; // Using fetched projectTags state now
+  const projectDocuments = mockDocuments; 
+  const projectAnnouncements = mockAnnouncements; 
 
 
   return (
@@ -486,7 +508,7 @@ export default function ProjectDetailPage() {
               <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
               <CardDescription className="mt-1">{project.description || "No description provided."}</CardDescription>
               <div className="mt-2 flex flex-wrap gap-2">
-                {projectTags.slice(0, 5).map(tag => ( // Display some project-level tags if available
+                {projectTags.slice(0, 5).map(tag => ( 
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white">{tag.name}</Badge>
                 ))}
               </div>
@@ -547,7 +569,6 @@ export default function ProjectDetailPage() {
                   </Form>
                 </DialogContent>
               </Dialog>
-              {/* Delete Project Dialog (Placeholder - implement with caution) */}
               <AlertDialog>
                   <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm" disabled={currentUserRole !== 'owner'}>
@@ -563,7 +584,7 @@ export default function ProjectDetailPage() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => {/* TODO: Implement delete project action */} } disabled>
+                          <AlertDialogAction onClick={() => {/* TODO: Implement delete project action */ } } disabled>
                               Yes, delete project
                           </AlertDialogAction>
                       </AlertDialogFooter>
@@ -601,7 +622,7 @@ export default function ProjectDetailPage() {
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                     </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Create New Task</DialogTitle>
                         <DialogDescription>Fill in the details for the new task.</DialogDescription>
@@ -609,7 +630,7 @@ export default function ProjectDetailPage() {
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
@@ -628,15 +649,23 @@ export default function ProjectDetailPage() {
                 {tasks.map(task => (
                   <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
                     <div className="flex justify-between items-start gap-2">
-                      <div className="flex-grow">
-                        <h4 className="font-semibold">{task.title}</h4>
-                        {task.description && <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{task.description}</p>}
+                      <div className="flex-grow min-w-0"> {/* Added min-w-0 for flexbox to allow shrinking and wrapping */}
+                        <h4 className="font-semibold break-words">{task.title}</h4>
+                        {task.description && (
+                           <div className="text-xs text-muted-foreground mt-0.5">
+                             <MarkdownTaskListRenderer
+                               content={task.description}
+                               onContentChange={(newDescription) => handleSubTaskDescriptionChange(task.uuid, newDescription)}
+                               disabled={!canCreateUpdateDeleteTasks}
+                              />
+                           </div>
+                        )}
                         <p className="text-xs text-muted-foreground mt-1">
                           Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
                         </p>
                          <div className="mt-2 flex flex-wrap gap-1">
                             {task.tags.map(tag => (
-                                <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white'}>{tag.name}</Badge>
+                                <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={cn('text-xs',tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white')}>{tag.name}</Badge>
                             ))}
                         </div>
                       </div>
@@ -697,10 +726,9 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Edit Task Dialog */}
         {taskToEdit && (
             <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) setTaskToEdit(null); }}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Edit Task: {taskToEdit.title}</DialogTitle>
                         <DialogDescription>Update the details for this task.</DialogDescription>
@@ -708,7 +736,7 @@ export default function ProjectDetailPage() {
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
