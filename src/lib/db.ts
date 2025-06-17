@@ -243,9 +243,9 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
     uuid
   );
   
-  const updatedUser = await getUserByUuid(uuid); // Fetch the complete user data after update
+  const updatedUser = await getUserByUuid(uuid);
   if (!updatedUser) return null; 
-  const { hashedPassword, ...userToReturn } = updatedUser; // Exclude hashedPassword
+  const { hashedPassword, ...userToReturn } = updatedUser;
   return userToReturn;
 }
 
@@ -265,7 +265,7 @@ export async function createProject(name: string, description: string | undefine
       ownerUuid,
       now,
       now,
-      true // Default new projects to private
+      true 
     );
 
     if (!result.lastID) {
@@ -293,7 +293,6 @@ export async function createProject(name: string, description: string | undefine
   } catch (err) {
     await connection.run('ROLLBACK');
     console.error("Error creating project:", err);
-    // Check for UNIQUE constraint failure for project name if you add that constraint
     if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error('A project with this name already exists.');
     }
@@ -307,9 +306,27 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
     'SELECT uuid, name, description, ownerUuid, isPrivate, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
-  // TODO: In future, fetch associated tasks, documents, members, tags here and populate the Project object
   return project || null;
 }
+
+export async function updateProjectDetails(uuid: string, name: string, description: string | undefined): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  
+  const result = await connection.run(
+    'UPDATE projects SET name = ?, description = ?, updatedAt = ? WHERE uuid = ?',
+    name,
+    description,
+    now,
+    uuid
+  );
+
+  if (result.changes === 0) {
+    return null; // Project not found or no changes made
+  }
+  return getProjectByUuid(uuid); // Return the updated project
+}
+
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();

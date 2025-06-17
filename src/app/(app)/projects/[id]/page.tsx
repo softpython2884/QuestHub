@@ -16,11 +16,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchProjectAction, fetchProjectOwnerNameAction } from './actions';
+import { fetchProjectAction, fetchProjectOwnerNameAction, updateProjectAction } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useFormState } from 'react-dom';
 
-// Mock data for sub-entities (tasks, documents, announcements, tags)
+
 const mockTasks: Task[] = [
     { id: 'task-mock-1', uuid: 'task-uuid-mock-1', title: 'Define MVP features', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', status: 'Done', assigneeUuid: 'user-uuid-1', tags: [{id: 'tag-mock-1', uuid: 'tag-uuid-mock-1', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', name: 'Planning', color: 'bg-blue-500'}], createdAt: '2023-01-01', updatedAt: '2023-01-02'},
     { id: 'task-mock-2', uuid: 'task-uuid-mock-2', title: 'Design UI/UX mockups', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', status: 'In Progress', assigneeUuid: 'user-uuid-2', tags: [{id: 'tag-mock-2', uuid: 'tag-uuid-mock-2', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', name: 'Design', color: 'bg-purple-500'}], createdAt: '2023-01-05', updatedAt: '2023-01-10'},
@@ -35,6 +41,12 @@ const mockTags: TagType[] = [{id: 'tag-high-mock', uuid: 'tag-uuid-high-mock', p
 
 const taskStatuses: Task['status'][] = ['To Do', 'In Progress', 'Done', 'Archived'];
 
+const editProjectFormSchema = z.object({
+  name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
+  description: z.string().max(500, {message: "Description cannot exceed 500 characters."}).optional().or(z.literal('')),
+});
+type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
+
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -46,6 +58,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [projectOwnerName, setProjectOwnerName] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const [newDocContent, setNewDocContent] = useState('');
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
@@ -53,15 +66,29 @@ export default function ProjectDetailPage() {
   const [newScriptName, setNewScriptName] = useState('');
   const [newScriptContent, setNewScriptContent] = useState('');
 
+  const editForm = useForm<EditProjectFormValues>({
+    resolver: zodResolver(editProjectFormSchema),
+    defaultValues: {
+      name: project?.name || '',
+      description: project?.description || '',
+    },
+  });
+  
+  const [updateFormState, updateProjectFormAction] = useFormState(updateProjectAction, { message: "", errors: {} });
+
+
   const loadProjectData = useCallback(async () => {
     if (projectUuid && user) { 
       setIsLoadingData(true);
       try {
         const projectData = await fetchProjectAction(projectUuid);
         setProject(projectData);
-        if (projectData?.ownerUuid) {
-            const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
-            setProjectOwnerName(ownerName);
+        if (projectData) {
+          editForm.reset({ name: projectData.name, description: projectData.description || '' });
+          if (projectData.ownerUuid) {
+              const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
+              setProjectOwnerName(ownerName);
+          }
         }
       } catch (err) {
         console.error("Error fetching project on client:", err);
@@ -73,12 +100,22 @@ export default function ProjectDetailPage() {
     } else if (!authLoading && !user) {
         router.push('/login');
     }
-  }, [projectUuid, user, authLoading, router, toast]);
+  }, [projectUuid, user, authLoading, router, toast, editForm]);
 
   useEffect(() => {
     loadProjectData();
   }, [loadProjectData]);
 
+  useEffect(() => {
+    if (updateFormState.message && !updateFormState.error) {
+      toast({ title: "Success", description: updateFormState.message });
+      setIsEditDialogOpen(false);
+      loadProjectData(); // Refresh project data
+    }
+    if (updateFormState.error) {
+      toast({ variant: "destructive", title: "Error", description: updateFormState.error });
+    }
+  }, [updateFormState, toast, loadProjectData]);
 
   const handleContentChange = async (content: string) => {
     setNewDocContent(content);
@@ -131,7 +168,6 @@ export default function ProjectDetailPage() {
     );
   }
 
-
   if (!project) {
     return (
         <div className="space-y-6 text-center">
@@ -150,8 +186,15 @@ export default function ProjectDetailPage() {
   const projectAnnouncements = mockAnnouncements;
   const projectTags = mockTags;
 
-
   const isOwner = user?.uuid === project.ownerUuid;
+
+  const handleEditSubmit = async (values: EditProjectFormValues) => {
+    const formData = new FormData();
+    formData.append('name', values.name);
+    formData.append('description', values.description || '');
+    formData.append('projectUuid', project.uuid);
+    await updateProjectFormAction(formData);
+  };
 
   return (
     <div className="space-y-6">
@@ -171,9 +214,62 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             </div>
-            {/* Project Edit and Delete Buttons */}
             <div className="flex gap-2 flex-shrink-0">
-              <Button variant="outline" size="sm" disabled={!isOwner}><Edit3 className="mr-2 h-4 w-4" /> Edit</Button>
+              <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={!isOwner} onClick={() => editForm.reset({ name: project.name, description: project.description || '' })}>
+                    <Edit3 className="mr-2 h-4 w-4" /> Edit
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Edit Project</DialogTitle>
+                    <DialogDescription>Update the name and description of your project.</DialogDescription>
+                  </DialogHeader>
+                  <Form {...editForm}>
+                    <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+                      <FormField
+                        control={editForm.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Project Name</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={editForm.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Project Description (Optional)</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} rows={3} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                       {updateFormState.errors?.name && <p className="text-sm text-destructive">{updateFormState.errors.name}</p>}
+                       {updateFormState.errors?.description && <p className="text-sm text-destructive">{updateFormState.errors.description}</p>}
+                       {updateFormState.error && !updateFormState.errors && <p className="text-sm text-destructive">{updateFormState.error}</p>}
+                      <DialogFooter>
+                        <DialogClose asChild>
+                           <Button type="button" variant="ghost">Cancel</Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                          {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Save Changes
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
               <Button variant="destructive" size="sm" disabled={!isOwner}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
             </div>
           </div>
@@ -274,7 +370,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {isOwner && <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {isOwner && <Button size="sm" onClick={() => {/* TODO: Implement new announcement functionality */}} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
