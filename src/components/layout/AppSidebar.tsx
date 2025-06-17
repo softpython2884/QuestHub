@@ -66,14 +66,11 @@ export function AppSidebar() {
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href} asChild>
                   <SidebarMenuButton
-                    asChild
                     isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                     tooltip={{ children: item.label, side: 'right', className: "font-body" }}
                   >
-                    <a>
-                      <Icon />
-                      <span>{item.label}</span>
-                    </a>
+                    <Icon />
+                    <span>{item.label}</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>

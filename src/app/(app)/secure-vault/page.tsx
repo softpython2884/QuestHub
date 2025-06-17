@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { ShieldCheck, PlusCircle, KeyRound, Eye, EyeOff, Copy, Trash2, AlertTriangle } from "lucide-react";
@@ -53,7 +55,7 @@ export default function SecureVaultPage() {
         if (riskResult.flagged) {
           setApiKeyRisk(riskResult.reason || "This value looks like a sensitive key. Good job using the vault!");
            toast({
-            variant: "default", // Use default or a specific 'info' variant if available
+            variant: "default",
             title: "Heads Up!",
             description: riskResult.reason || "This value looks like a sensitive key. Good job using the vault!",
           });
@@ -73,7 +75,6 @@ export default function SecureVaultPage() {
         toast({ variant: "destructive", title: "Error", description: "Secret name and value cannot be empty." });
         return;
     }
-    // Add new secret logic here (e.g., API call)
     const newSecret: SecretItem = {
         id: `secret-${Date.now()}`,
         name: newSecretName,
@@ -86,6 +87,11 @@ export default function SecureVaultPage() {
     setNewSecretValue('');
     setApiKeyRisk(null);
     toast({ title: "Success", description: "New secret added to the vault." });
+  };
+
+  const handleDeleteSecret = (id: string) => {
+    setSecrets(prev => prev.filter(s => s.id !== id));
+    toast({ title: "Deleted", description: "Secret removed from the vault." });
   };
 
 
@@ -120,12 +126,16 @@ export default function SecureVaultPage() {
           </div>
           <div>
             <Label htmlFor="secret-type">Type</Label>
-            {/* A Select component would be better here */}
-            <select id="secret-type" value={newSecretType} onChange={e => setNewSecretType(e.target.value as SecretItem['type'])} className="w-full p-2 border rounded-md bg-background">
-                <option value="API Key">API Key</option>
-                <option value="Password">Password</option>
-                <option value="Note">Note</option>
-            </select>
+            <Select value={newSecretType} onValueChange={(value: SecretItem['type']) => setNewSecretType(value)}>
+              <SelectTrigger id="secret-type" className="w-full">
+                <SelectValue placeholder="Select secret type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="API Key">API Key</SelectItem>
+                <SelectItem value="Password">Password</SelectItem>
+                <SelectItem value="Note">Note</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button onClick={handleAddSecret} className="w-full sm:w-auto">Add to Vault</Button>
         </CardContent>
@@ -161,7 +171,7 @@ export default function SecureVaultPage() {
                        <Button variant="ghost" size="icon" onClick={() => copyToClipboard(secret.value)} title="Copy">
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete">
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete" onClick={() => handleDeleteSecret(secret.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
