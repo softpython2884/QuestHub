@@ -6,30 +6,36 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, useActionState as useActionStateReact } from 'react';
+import { useEffect, useState, useCallback, useActionState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
-import { 
-  fetchProjectAction, 
-  fetchProjectOwnerNameAction, 
-  updateProjectAction, 
-  inviteUserToProjectAction, 
-  fetchProjectMembersAction, 
-  removeUserFromProjectAction, 
+import {
+  fetchProjectAction,
+  fetchProjectOwnerNameAction,
+  updateProjectAction,
+  inviteUserToProjectAction,
+  fetchProjectMembersAction,
+  removeUserFromProjectAction,
   type InviteUserFormState,
   createTaskAction,
   type CreateTaskFormState,
   fetchTasksAction,
   updateTaskStatusAction,
   type UpdateTaskStatusFormState,
+  updateTaskAction,
+  type UpdateTaskFormState,
+  deleteTaskAction,
+  type DeleteTaskFormState,
+  fetchProjectTagsAction,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,7 +52,7 @@ const mockDocuments: ProjectDocumentType[] = [
 const mockAnnouncements: Announcement[] = [
     { id: 'ann-mock-1', uuid: 'ann-uuid-mock-1', title: 'Project Kick-off Meeting', content: 'Team, our kick-off meeting is scheduled for next Monday at 10 AM.', authorUuid: 'user-uuid-1', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', isGlobal: false, createdAt: '2023-01-02', updatedAt: '2023-01-02' },
 ];
-const mockTags: TagType[] = [{uuid: 'tag-uuid-high-mock', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', name: 'High Priority', color: 'bg-red-500'}];
+
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
 const memberRoles: Exclude<ProjectMemberRole, 'owner'>[] = ['co-owner', 'editor', 'viewer'];
@@ -64,13 +70,14 @@ const inviteUserFormSchema = z.object({
 });
 type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
 
-const createTaskFormSchema = z.object({
+const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
   status: z.enum(taskStatuses),
-  assigneeUuid: z.string().optional(), // Can be empty for "unassigned"
+  assigneeUuid: z.string().optional(),
+  tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
-type CreateTaskFormValues = z.infer<typeof createTaskFormSchema>;
+type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 
 export default function ProjectDetailPage() {
@@ -84,12 +91,17 @@ export default function ProjectDetailPage() {
   const [projectOwnerName, setProjectOwnerName] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projectTags, setProjectTags] = useState<TagType[]>([]); // For actual project tags
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
   const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
+  const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
 
   const [newDocContent, setNewDocContent] = useState('');
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
@@ -97,7 +109,7 @@ export default function ProjectDetailPage() {
   const [newScriptContentValue, setNewScriptContent] = useState('');
 
 
-  const editForm = useForm<EditProjectFormValues>({
+  const editProjectForm = useForm<EditProjectFormValues>({
     resolver: zodResolver(editProjectFormSchema),
     defaultValues: { name: '', description: '' },
   });
@@ -106,17 +118,17 @@ export default function ProjectDetailPage() {
     resolver: zodResolver(inviteUserFormSchema),
     defaultValues: { emailToInvite: '', roleToInvite: 'viewer' },
   });
-  
-  const createTaskForm = useForm<CreateTaskFormValues>({
-    resolver: zodResolver(createTaskFormSchema),
-    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: ''},
+
+  const taskForm = useForm<TaskFormValues>({ // Used for both create and edit
+    resolver: zodResolver(taskFormSchema),
+    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''},
   });
 
-  const [updateFormState, updateProjectFormAction, isUpdatePending] = useActionStateReact(updateProjectAction, { message: "", errors: {} });
-  const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionStateReact(inviteUserToProjectAction, { message: "", error: "" });
-  const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionStateReact(createTaskAction, { message: "", error: "" });
-  // updateTaskStatusAction doesn't need a form state like others because it's triggered by a select change directly, not a full form submission
-  // We'll handle its toast notifications directly in the handler.
+  const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
+  const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
+  const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
+  const [updateTaskState, updateTaskFormAction, isUpdateTaskPending] = useActionState(updateTaskAction, { message: "", error: "" });
+  const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
 
 
   const loadProjectMembers = useCallback(async () => {
@@ -125,22 +137,36 @@ export default function ProjectDetailPage() {
             const members = await fetchProjectMembersAction(projectUuid);
             setProjectMembers(members);
             const member = members.find(m => m.userUuid === user.uuid);
-            setCurrentUserRole(member?.role || null);
+            const role = project?.ownerUuid === user.uuid ? 'owner' : member?.role || null;
+            setCurrentUserRole(role);
         } catch (error) {
             console.error("Failed to load project members", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
         }
     }
-  }, [projectUuid, user, toast]);
+  }, [projectUuid, user, toast, project?.ownerUuid]);
 
   const loadTasks = useCallback(async () => {
     if (projectUuid) {
       try {
         const fetchedTasks = await fetchTasksAction(projectUuid);
-        setTasks(fetchedTasks);
+        setTasks(fetchedTasks || []);
       } catch (error) {
         console.error("Failed to load tasks:", error);
+        setTasks([]);
         toast({ variant: "destructive", title: "Error", description: "Could not load tasks." });
+      }
+    }
+  }, [projectUuid, toast]);
+
+  const loadProjectTagsData = useCallback(async () => {
+    if (projectUuid) {
+      try {
+        const tags = await fetchProjectTagsAction(projectUuid);
+        setProjectTags(tags);
+      } catch (error) {
+        console.error("Failed to load project tags:", error);
+        // toast({ variant: "destructive", title: "Error", description: "Could not load project tags." });
       }
     }
   }, [projectUuid, toast]);
@@ -153,13 +179,20 @@ export default function ProjectDetailPage() {
         const projectData = await fetchProjectAction(projectUuid);
         setProject(projectData);
         if (projectData) {
-          editForm.reset({ name: projectData.name, description: projectData.description || '' });
+          editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
           if (projectData.ownerUuid) {
               const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
               setProjectOwnerName(ownerName);
           }
-          await loadProjectMembers(); 
+          // Initial role set here based on ownership before members are loaded
+          if (user.uuid === projectData.ownerUuid) {
+            setCurrentUserRole('owner');
+          }
+          await loadProjectMembers();
           await loadTasks();
+          await loadProjectTagsData(); // Load tags
+        } else {
+          router.push('/projects'); // Project not found or no access
         }
       } catch (err) {
         console.error("Error fetching project on client:", err);
@@ -171,50 +204,86 @@ export default function ProjectDetailPage() {
     } else if (!authLoading && !user) {
         router.push('/login');
     }
-  }, [projectUuid, user, authLoading, router, toast, editForm, loadProjectMembers, loadTasks]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembers, loadTasks, loadProjectTagsData]);
 
   useEffect(() => {
     loadProjectData();
   }, [loadProjectData]);
 
+  // Toasts for project update
   useEffect(() => {
-    if (updateFormState.message && !updateFormState.error && !isUpdatePending) {
-      toast({ title: "Success", description: updateFormState.message });
-      setIsEditDialogOpen(false);
-      loadProjectData(); // Reload all project data
+    if (!isUpdateProjectPending && updateProjectFormState) {
+      if (updateProjectFormState.message && !updateProjectFormState.error) {
+        toast({ title: "Success", description: updateProjectFormState.message });
+        setIsEditDialogOpen(false);
+        loadProjectData();
+      }
+      if (updateProjectFormState.error) {
+        toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
+      }
     }
-    if (updateFormState.error && !isUpdatePending) {
-      toast({ variant: "destructive", title: "Error", description: updateFormState.error });
-    }
-  }, [updateFormState, toast, loadProjectData, isUpdatePending]);
+  }, [updateProjectFormState, isUpdateProjectPending, toast, loadProjectData]);
 
+  // Toasts for invite user
   useEffect(() => {
-    if (!isInvitePending) {
+    if (!isInvitePending && inviteFormState) {
         if (inviteFormState.message && !inviteFormState.error) {
             toast({ title: "Success", description: inviteFormState.message });
             setIsInviteUserDialogOpen(false);
             inviteForm.reset();
-            loadProjectMembers(); 
+            loadProjectMembers();
         }
         if (inviteFormState.error) {
             toast({ variant: "destructive", title: "Invitation Error", description: inviteFormState.error });
         }
     }
-  }, [inviteFormState, toast, loadProjectMembers, isInvitePending, inviteForm]);
+  }, [inviteFormState, isInvitePending, toast, loadProjectMembers, inviteForm]);
 
+  // Toasts for create task
   useEffect(() => {
-    if (!isCreateTaskPending) {
+    if (!isCreateTaskPending && createTaskState) {
       if (createTaskState.message && !createTaskState.error) {
         toast({ title: "Success", description: createTaskState.message });
         setIsCreateTaskDialogOpen(false);
-        createTaskForm.reset();
-        loadTasks(); // Reload tasks
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''});
+        loadTasks();
       }
       if (createTaskState.error) {
-        toast({ variant: "destructive", title: "Task Creation Error", description: createTaskState.error });
+        toast({ variant: "destructive", title: "Task Creation Error", description: createTaskState.error,
+        fieldErrors: createTaskState.fieldErrors ? JSON.stringify(createTaskState.fieldErrors) : undefined });
       }
     }
-  }, [createTaskState, toast, loadTasks, isCreateTaskPending, createTaskForm]);
+  }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
+
+  // Toasts for update task
+   useEffect(() => {
+    if (!isUpdateTaskPending && updateTaskState) {
+      if (updateTaskState.message && !updateTaskState.error) {
+        toast({ title: "Success", description: updateTaskState.message });
+        setIsEditTaskDialogOpen(false);
+        setTaskToEdit(null);
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: ''});
+        loadTasks();
+      }
+      if (updateTaskState.error) {
+        toast({ variant: "destructive", title: "Task Update Error", description: updateTaskState.error });
+      }
+    }
+  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm]);
+
+  // Toasts for delete task
+  useEffect(() => {
+    if (!isDeleteTaskPending && deleteTaskState) {
+        if (deleteTaskState.message && !deleteTaskState.error) {
+            toast({ title: "Success", description: deleteTaskState.message });
+            setTaskToDelete(null); // Close confirmation dialog implicitly by resetting taskToDelete
+            loadTasks();
+        }
+        if (deleteTaskState.error) {
+            toast({ variant: "destructive", title: "Task Deletion Error", description: deleteTaskState.error });
+        }
+    }
+  }, [deleteTaskState, isDeleteTaskPending, toast, loadTasks]);
 
 
   const handleContentChange = async (content: string) => {
@@ -240,17 +309,16 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const isOwner = user?.uuid === project?.ownerUuid;
-  const canManageProjectSettings = isOwner || currentUserRole === 'co-owner';
-  const canCreateTasks = isOwner || currentUserRole === 'co-owner' || currentUserRole === 'editor';
+  const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
+  const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
   const canEditTaskStatus = !!currentUserRole; // Any member can edit status
 
-  const handleEditSubmit = async (values: EditProjectFormValues) => {
+  const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
     const formData = new FormData();
     formData.append('name', values.name);
     formData.append('description', values.description || '');
-    formData.append('projectUuid', project.uuid); 
+    formData.append('projectUuid', project.uuid);
     updateProjectFormAction(formData);
   };
 
@@ -263,34 +331,66 @@ export default function ProjectDetailPage() {
     inviteUserFormAction(formData);
   };
 
-  const handleCreateTaskSubmit = async (values: CreateTaskFormValues) => {
+  const handleCreateTaskSubmit = async (values: TaskFormValues) => {
     if (!project) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    if (values.assigneeUuid) {
-      formData.append('assigneeUuid', values.assigneeUuid);
-    }
+    if (values.assigneeUuid) formData.append('assigneeUuid', values.assigneeUuid);
+    if (values.tagsString) formData.append('tagsString', values.tagsString);
     createTaskFormAction(formData);
   };
+  
+  const handleEditTaskSubmit = async (values: TaskFormValues) => {
+    if (!project || !taskToEdit) return;
+    const formData = new FormData();
+    formData.append('taskUuid', taskToEdit.uuid);
+    formData.append('projectUuid', project.uuid);
+    formData.append('title', values.title);
+    formData.append('description', values.description || '');
+    formData.append('status', values.status);
+    if (values.assigneeUuid) formData.append('assigneeUuid', values.assigneeUuid);
+    if (values.tagsString) formData.append('tagsString', values.tagsString);
+    updateTaskFormAction(formData);
+  };
+
+  const openEditTaskDialog = (task: Task) => {
+    setTaskToEdit(task);
+    taskForm.reset({
+      title: task.title,
+      description: task.description || '',
+      status: task.status,
+      assigneeUuid: task.assigneeUuid || '',
+      tagsString: task.tags.map(t => t.name).join(', ') || '',
+    });
+    setIsEditTaskDialogOpen(true);
+  };
+  
+  const handleDeleteTaskConfirm = () => {
+    if (!taskToDelete || !project) return;
+    const formData = new FormData();
+    formData.append('taskUuid', taskToDelete.uuid);
+    formData.append('projectUuid', project.uuid); // For permission check if needed
+    deleteTaskFormAction(formData);
+  };
+
 
   const handleTaskStatusChange = async (taskUuid: string, newStatus: TaskStatus) => {
     if (!project) return;
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
-    formData.append('projectUuid', project.uuid); // Pass projectUuid for permission check
+    formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus);
-    
-    // Directly call the server action, not using useActionState for this one
-    const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData); // Pass empty initial state
+
+    const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
 
     if (result.error) {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     } else if (result.message) {
       toast({ title: 'Success', description: result.message });
-      loadTasks(); // Refresh task list
+      loadTasks();
     }
   };
 
@@ -305,7 +405,7 @@ export default function ProjectDetailPage() {
         toast({ variant: "destructive", title: "Error", description: result.error });
     }
   };
-  
+
   const getInitials = (name?: string) => {
     if (!name) return '??';
     const names = name.split(' ');
@@ -368,9 +468,9 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const projectDocuments = mockDocuments;
-  const projectAnnouncements = mockAnnouncements;
-  const projectTags = mockTags;
+  const projectDocuments = mockDocuments; // Still mock
+  const projectAnnouncements = mockAnnouncements; // Still mock
+  // const projectTagsData = mockTags; // Using fetched projectTags state now
 
 
   return (
@@ -386,7 +486,7 @@ export default function ProjectDetailPage() {
               <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
               <CardDescription className="mt-1">{project.description || "No description provided."}</CardDescription>
               <div className="mt-2 flex flex-wrap gap-2">
-                {projectTags.map(tag => (
+                {projectTags.slice(0, 5).map(tag => ( // Display some project-level tags if available
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white">{tag.name}</Badge>
                 ))}
               </div>
@@ -394,7 +494,7 @@ export default function ProjectDetailPage() {
             <div className="flex gap-2 flex-shrink-0">
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!canManageProjectSettings} onClick={() => editForm.reset({ name: project.name, description: project.description || '' })}>
+                  <Button variant="outline" size="sm" disabled={!canManageProjectSettings} onClick={() => editProjectForm.reset({ name: project.name, description: project.description || '' })}>
                     <Edit3 className="mr-2 h-4 w-4" /> Edit
                   </Button>
                 </DialogTrigger>
@@ -403,10 +503,10 @@ export default function ProjectDetailPage() {
                     <DialogTitle>Edit Project</DialogTitle>
                     <DialogDescription>Update the name and description of your project.</DialogDescription>
                   </DialogHeader>
-                  <Form {...editForm}>
-                    <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+                  <Form {...editProjectForm}>
+                    <form onSubmit={editProjectForm.handleSubmit(handleEditProjectSubmit)} className="space-y-4">
                       <FormField
-                        control={editForm.control}
+                        control={editProjectForm.control}
                         name="name"
                         render={({ field }) => (
                           <FormItem>
@@ -419,7 +519,7 @@ export default function ProjectDetailPage() {
                         )}
                       />
                       <FormField
-                        control={editForm.control}
+                        control={editProjectForm.control}
                         name="description"
                         render={({ field }) => (
                           <FormItem>
@@ -431,15 +531,15 @@ export default function ProjectDetailPage() {
                           </FormItem>
                         )}
                       />
-                       {updateFormState.errors?.name && <p className="text-sm text-destructive">{Array.isArray(updateFormState.errors.name) ? updateFormState.errors.name.join(', ') : updateFormState.errors.name}</p>}
-                       {updateFormState.errors?.description && <p className="text-sm text-destructive">{Array.isArray(updateFormState.errors.description) ? updateFormState.errors.description.join(', ') : updateFormState.errors.description}</p>}
-                       {updateFormState.error && !updateFormState.errors && <p className="text-sm text-destructive">{updateFormState.error}</p>}
+                       {updateProjectFormState?.errors?.name && <p className="text-sm text-destructive">{Array.isArray(updateProjectFormState.errors.name) ? updateProjectFormState.errors.name.join(', ') : updateProjectFormState.errors.name}</p>}
+                       {updateProjectFormState?.errors?.description && <p className="text-sm text-destructive">{Array.isArray(updateProjectFormState.errors.description) ? updateProjectFormState.errors.description.join(', ') : updateProjectFormState.errors.description}</p>}
+                       {updateProjectFormState?.error && !updateProjectFormState.errors && <p className="text-sm text-destructive">{updateProjectFormState.error}</p>}
                       <DialogFooter>
                         <DialogClose asChild>
                            <Button type="button" variant="ghost">Cancel</Button>
                         </DialogClose>
-                        <Button type="submit" disabled={isUpdatePending}>
-                          {isUpdatePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Button type="submit" disabled={isUpdateProjectPending}>
+                          {isUpdateProjectPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                           Save Changes
                         </Button>
                       </DialogFooter>
@@ -447,7 +547,28 @@ export default function ProjectDetailPage() {
                   </Form>
                 </DialogContent>
               </Dialog>
-              <Button variant="destructive" size="sm" disabled={!isOwner}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
+              {/* Delete Project Dialog (Placeholder - implement with caution) */}
+              <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm" disabled={currentUserRole !== 'owner'}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete Project
+                      </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                      <AlertDialogHeader>
+                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the project and all its associated data.
+                          </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => {/* TODO: Implement delete project action */} } disabled>
+                              Yes, delete project
+                          </AlertDialogAction>
+                      </AlertDialogFooter>
+                  </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </CardHeader>
@@ -476,7 +597,7 @@ export default function ProjectDetailPage() {
               <CardTitle>Tasks ({tasks.length})</CardTitle>
                <Dialog open={isCreateTaskDialogOpen} onOpenChange={setIsCreateTaskDialogOpen}>
                 <DialogTrigger asChild>
-                    <Button size="sm" disabled={!canCreateTasks} onClick={() => createTaskForm.reset()}>
+                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: '', tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                     </Button>
                 </DialogTrigger>
@@ -485,71 +606,17 @@ export default function ProjectDetailPage() {
                         <DialogTitle>Create New Task</DialogTitle>
                         <DialogDescription>Fill in the details for the new task.</DialogDescription>
                     </DialogHeader>
-                    <Form {...createTaskForm}>
-                        <form onSubmit={createTaskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
-                            <FormField
-                                control={createTaskForm.control}
-                                name="title"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Title</FormLabel>
-                                        <FormControl><Input {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={createTaskForm.control}
-                                name="description"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Description (Optional)</FormLabel>
-                                        <FormControl><Textarea {...field} rows={3} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={createTaskForm.control}
-                                name="status"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Status</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={createTaskForm.control}
-                                name="assigneeUuid"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Assign To (Optional)</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="">Unassigned / Everyone</SelectItem>
-                                                {projectMembers.map(member => (
-                                                    <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            {createTaskState.error && <p className="text-sm text-destructive">{createTaskState.error}</p>}
+                    <Form {...taskForm}>
+                        <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
+                            <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            {createTaskState?.error && <p className="text-sm text-destructive">{createTaskState.error}</p>}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                                <Button type="submit" disabled={isCreateTaskPending}>
-                                    {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task
-                                </Button>
+                                <Button type="submit" disabled={isCreateTaskPending}> {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task </Button>
                             </DialogFooter>
                         </form>
                     </Form>
@@ -560,33 +627,67 @@ export default function ProjectDetailPage() {
               <div className="space-y-3">
                 {tasks.map(task => (
                   <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status)}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-grow">
                         <h4 className="font-semibold">{task.title}</h4>
                         {task.description && <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{task.description}</p>}
                         <p className="text-xs text-muted-foreground mt-1">
                           Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
                         </p>
-                         {/* <div className="mt-1 flex flex-wrap gap-1">
-                            {task.tags.map(tag => ( // TODO: Implement tag display
-                                <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color }} className="text-xs text-white">{tag.name}</Badge>
+                         <div className="mt-2 flex flex-wrap gap-1">
+                            {task.tags.map(tag => (
+                                <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white'}>{tag.name}</Badge>
                             ))}
-                        </div> */}
+                        </div>
                       </div>
-                      <Select 
-                        defaultValue={task.status} 
-                        disabled={!canEditTaskStatus}
-                        onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
-                      >
-                        <SelectTrigger className="w-[150px] text-xs h-8">
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {taskStatuses.map(status => (
-                            <SelectItem key={status} value={status} className="text-xs">{status}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
+                        <Select
+                          defaultValue={task.status}
+                          disabled={!canEditTaskStatus}
+                          onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
+                        >
+                          <SelectTrigger className="w-full sm:w-[150px] text-xs h-8">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taskStatuses.map(status => (
+                              <SelectItem key={status} value={status} className="text-xs">{status}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {canCreateUpdateDeleteTasks && (
+                            <div className="flex mt-1 sm:mt-0">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
+                                    <Edit3 className="h-4 w-4" />
+                                    <span className="sr-only">Edit Task</span>
+                                </Button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setTaskToDelete(task)}>
+                                            <Trash2 className="h-4 w-4" />
+                                            <span className="sr-only">Delete Task</span>
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    {taskToDelete?.uuid === task.uuid && (
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure you want to delete this task?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Task: "{taskToDelete.title}". This action cannot be undone.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel onClick={() => setTaskToDelete(null)}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={handleDeleteTaskConfirm} disabled={isDeleteTaskPending}>
+                                                {isDeleteTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                    )}
+                                </AlertDialog>
+                            </div>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 ))}
@@ -596,11 +697,38 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* Edit Task Dialog */}
+        {taskToEdit && (
+            <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) setTaskToEdit(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Task: {taskToEdit.title}</DialogTitle>
+                        <DialogDescription>Update the details for this task.</DialogDescription>
+                    </DialogHeader>
+                    <Form {...taskForm}>
+                        <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
+                            <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="">Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            {updateTaskState?.error && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
+                            <DialogFooter>
+                                <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                                <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+        )}
+
+
         <TabsContent value="documents" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" onClick={() => { /* TODO */ }}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm" onClick={() => { /* TODO */ }} disabled={!canManageProjectSettings}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -675,10 +803,10 @@ export default function ProjectDetailPage() {
                       value={newScriptContentValue}
                       onChange={(e) => setNewScriptContent(e.target.value)}
                       rows={8}
-                      className="font-code text-sm"
+                      className="font-mono text-sm"
                     />
                   </div>
-                  <Button disabled> 
+                  <Button disabled>
                     <UploadCloud className="mr-2 h-4 w-4"/> Add Script to Repository
                   </Button>
                 </div>
@@ -699,7 +827,7 @@ export default function ProjectDetailPage() {
                 {canManageProjectSettings && (
                     <Dialog open={isInviteUserDialogOpen} onOpenChange={setIsInviteUserDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button size="sm"><Users className="mr-2 h-4 w-4"/>Invite Members</Button>
+                            <Button size="sm" onClick={() => inviteForm.reset()}><Users className="mr-2 h-4 w-4"/>Invite Members</Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[425px]">
                             <DialogHeader>
@@ -746,8 +874,8 @@ export default function ProjectDetailPage() {
                                             </FormItem>
                                         )}
                                     />
-                                    {inviteFormState.fieldErrors?.projectUuid && <p className="text-sm text-destructive">{inviteFormState.fieldErrors.projectUuid.join(', ')}</p>}
-                                    {inviteFormState.error && !inviteFormState.fieldErrors && <p className="text-sm text-destructive">{inviteFormState.error}</p>}
+                                    {inviteFormState?.fieldErrors?.projectUuid && <p className="text-sm text-destructive">{inviteFormState.fieldErrors.projectUuid.join(', ')}</p>}
+                                    {inviteFormState?.error && !inviteFormState.fieldErrors && <p className="text-sm text-destructive">{inviteFormState.error}</p>}
                                     <DialogFooter>
                                         <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                         <Button type="submit" disabled={isInvitePending}>
@@ -782,25 +910,25 @@ export default function ProjectDetailPage() {
                                     <div className="flex items-center gap-2 mt-2 sm:mt-0">
                                         <Badge variant={member.role === 'owner' ? 'default' : 'secondary'} className="capitalize">{member.role}</Badge>
                                         {canManageProjectSettings && member.role !== 'owner' && (
-                                            <Dialog>
-                                                <DialogTrigger asChild>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
                                                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Remove User">
                                                         <UserX className="h-4 w-4" />
                                                     </Button>
-                                                </DialogTrigger>
-                                                <DialogContent>
-                                                    <DialogHeader>
-                                                        <DialogTitle>Remove Member</DialogTitle>
-                                                        <DialogDescription>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Remove Member</AlertDialogTitle>
+                                                        <AlertDialogDescription>
                                                             Are you sure you want to remove {member.user?.name || 'this user'} from the project?
-                                                        </DialogDescription>
-                                                    </DialogHeader>
-                                                    <DialogFooter>
-                                                        <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                         <Button variant="destructive" onClick={() => handleRemoveMember(member.userUuid)}>Remove</Button>
-                                                    </DialogFooter>
-                                                </DialogContent>
-                                            </Dialog>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         )}
                                     </div>
                                 </div>
@@ -815,10 +943,10 @@ export default function ProjectDetailPage() {
                 <h4 className="font-semibold mb-2 text-lg">Project Tags</h4>
                  <div className="border p-4 rounded-md text-muted-foreground">
                     <p>Project-specific tag management (creating, editing, deleting tags) is planned.</p>
-                    {canManageProjectSettings && <Button className="mt-3" size="sm" disabled><PlusCircle className="mr-2 h-4 w-4"/>Manage Tags</Button>}
+                    {canManageProjectSettings && <Button className="mt-3" size="sm" disabled><TagIcon className="mr-2 h-4 w-4"/>Manage Tags</Button>}
                  </div>
               </div>
-               {isOwner && (
+               {currentUserRole === 'owner' && (
                 <div>
                     <h4 className="font-semibold mb-2 text-lg text-destructive">Danger Zone</h4>
                     <div className="border border-destructive p-4 rounded-md ">

@@ -11,35 +11,35 @@ export interface User {
 }
 
 export interface Tag {
-  uuid: string; 
+  uuid: string;
   name: string;
-  color: string; 
+  color: string;
   projectUuid: string;
 }
 
 export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Archived';
 
 export interface Task {
-  uuid: string; 
+  uuid: string;
   title: string;
   description?: string;
   status: TaskStatus;
   assigneeUuid?: string | null; // User UUID - null if unassigned or for "everyone"
   assigneeName?: string | null; // For display purposes
-  projectUuid: string; 
-  // tags: Tag[]; // Array of Tag objects - Will be re-added when tag functionality is built
+  projectUuid: string;
+  tags: Tag[]; // Array of Tag objects
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Document { 
-  id: string; 
-  uuid: string; 
+export interface Document {
+  id: string;
+  uuid: string;
   title: string;
-  content: string; 
-  projectUuid: string; 
+  content: string;
+  projectUuid: string;
   isPinned?: boolean;
-  tags: Tag[]; 
+  tags: Tag[];
   createdAt: string;
   updatedAt: string;
 }
@@ -50,32 +50,27 @@ export interface ProjectMember {
   projectUuid: string;
   userUuid: string;
   role: ProjectMemberRole;
-  user?: Pick<User, 'uuid' | 'name' | 'avatar' | 'email'>; 
+  user?: Pick<User, 'uuid' | 'name' | 'avatar' | 'email'>;
 }
 
 export interface Project {
   uuid: string;
   name: string;
   description?: string;
-  ownerUuid: string; 
-  // tasks?: Task[]; // Will be fetched separately
-  // documents?: Document[]; // Will be fetched separately
-  // tags?: Tag[]; // Project-level tags, will be fetched separately
-  // announcements?: Announcement[]; // Will be fetched separately
+  ownerUuid: string;
   createdAt: string;
   updatedAt: string;
   isPrivate?: boolean;
 }
 
 export interface Announcement {
-  id: string; 
-  uuid: string; 
+  id: string;
+  uuid: string;
   title: string;
   content: string;
-  authorUuid: string; 
-  projectUuid?: string; 
+  authorUuid: string;
+  projectUuid?: string;
   isGlobal: boolean;
   createdAt: string;
   updatedAt: string;
 }
-

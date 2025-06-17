@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -14,9 +14,13 @@ import {
   createTask as dbCreateTask,
   getTasksForProject as dbGetTasksForProject,
   updateTaskStatus as dbUpdateTaskStatus,
+  updateTask as dbUpdateTask,
+  deleteTask as dbDeleteTask,
+  getProjectTags as dbGetProjectTags,
+  createProjectTag as dbCreateProjectTag,
 } from '@/lib/db';
 import { z } from 'zod';
-import { auth } from '@/lib/authEdge'; // Assuming you'll create this for getting current user
+import { auth } from '@/lib/authEdge';
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
   if (!uuid) return null;
@@ -67,7 +71,9 @@ export async function updateProjectAction(
   try {
     const project = await dbGetProjectByUuid(projectUuid);
     if (!project) return { error: "Project not found." };
-    if (project.ownerUuid !== session.user.uuid) {
+
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
         return { error: "You do not have permission to edit this project." };
     }
 
@@ -93,7 +99,7 @@ export interface InviteUserFormState {
 const InviteUserSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   email: z.string().email("Invalid email address."),
-  role: z.enum(['co-owner', 'editor', 'viewer'] as [ProjectMemberRole, ...ProjectMemberRole[]]), 
+  role: z.enum(['co-owner', 'editor', 'viewer'] as [ProjectMemberRole, ...ProjectMemberRole[]]),
 });
 
 
@@ -103,11 +109,11 @@ export async function inviteUserToProjectAction(
 ): Promise<InviteUserFormState> {
   const session = await auth();
   if (!session?.user?.uuid) return { error: "Authentication required." };
-  
+
   const validatedFields = InviteUserSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
-    email: formData.get('emailToInvite'), 
-    role: formData.get('roleToInvite'),   
+    email: formData.get('emailToInvite'),
+    role: formData.get('roleToInvite'),
   });
 
   if (!validatedFields.success) {
@@ -121,8 +127,9 @@ export async function inviteUserToProjectAction(
   try {
     const project = await dbGetProjectByUuid(projectUuid);
     if (!project) return { error: "Project not found." };
-    
-    if (project.ownerUuid !== session.user.uuid) { // Simplified: only owner can invite for now
+
+    const inviterRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+     if (!inviterRole || !['owner', 'co-owner'].includes(inviterRole)) {
       return { error: "You do not have permission to invite users to this project." };
     }
 
@@ -131,10 +138,13 @@ export async function inviteUserToProjectAction(
       return { error: "User with this email not found." };
     }
 
-    if (userToInvite.uuid === project.ownerUuid) {
-      return { error: "Cannot invite the project owner with a different role. Owner role is fixed."};
+    if (userToInvite.uuid === project.ownerUuid && role !== 'owner') {
+      return { error: "Cannot change the project owner's role through invitation. Ownership must be transferred explicitly."};
     }
-    
+    if (userToInvite.uuid === project.ownerUuid && role === 'owner') {
+      return { error: "This user is already the project owner."};
+    }
+
     const currentMembers = await dbGetProjectMembers(projectUuid);
     const existingMembership = currentMembers.find(member => member.userUuid === userToInvite.uuid);
 
@@ -174,8 +184,9 @@ export async function removeUserFromProjectAction(projectUuid: string, userUuidT
         const project = await dbGetProjectByUuid(projectUuid);
         if (!project) return { error: "Project not found." };
 
-        if (project.ownerUuid !== session.user.uuid) { // Simplified: only owner can remove
-            return { error: "You do not have permission to remove users." };
+        const removerRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        if (!removerRole || !['owner', 'co-owner'].includes(removerRole)) {
+            return { error: "You do not have permission to remove users from this project." };
         }
         if (project.ownerUuid === userUuidToRemove) {
             return { error: "Project owner cannot be removed. Transfer ownership first." };
@@ -199,7 +210,8 @@ const CreateTaskSchema = z.object({
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().uuid("Invalid assignee UUID.").optional().or(z.literal('')), // Empty string for "unassigned"
+  assigneeUuid: z.string().uuid("Invalid assignee UUID.").optional().or(z.literal('')),
+  tagsString: z.string().optional(),
 });
 
 export interface CreateTaskFormState {
@@ -219,13 +231,14 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
     description: formData.get('description'),
     status: formData.get('status'),
     assigneeUuid: formData.get('assigneeUuid'),
+    tagsString: formData.get('tagsString'),
   });
 
   if (!validatedFields.success) {
     return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { projectUuid, title, description, status, assigneeUuid } = validatedFields.data;
+  const { projectUuid, title, description, status, assigneeUuid, tagsString } = validatedFields.data;
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -238,7 +251,8 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
       title,
       description: description || undefined,
       status,
-      assigneeUuid: assigneeUuid || null, // Convert empty string to null for DB
+      assigneeUuid: assigneeUuid || undefined,
+      tagsString: tagsString || undefined,
     };
     const createdTask = await dbCreateTask(taskData);
     return { message: "Task created successfully!", createdTask };
@@ -260,7 +274,7 @@ export async function fetchTasksAction(projectUuid: string | undefined): Promise
 
 const UpdateTaskStatusSchema = z.object({
   taskUuid: z.string().uuid("Invalid task UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."), // Needed for permission check
+  projectUuid: z.string().uuid("Invalid project UUID."),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
 });
 
@@ -287,8 +301,7 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    // Anyone in the project can update status as per initial simplified requirement
-    if (!userRole) { 
+    if (!userRole) {
       return { error: "You are not a member of this project or do not have permission to update task status." };
     }
 
@@ -302,3 +315,128 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
     return { error: error.message || "An unexpected error occurred." };
   }
 }
+
+const UpdateTaskSchema = z.object({
+  taskUuid: z.string().uuid("Invalid task UUID."),
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  description: z.string().optional(),
+  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
+  assigneeUuid: z.string().uuid("Invalid assignee UUID.").optional().or(z.literal('')),
+  tagsString: z.string().optional(),
+});
+
+export interface UpdateTaskFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  updatedTask?: Task;
+}
+
+export async function updateTaskAction(prevState: UpdateTaskFormState, formData: FormData): Promise<UpdateTaskFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const validatedFields = UpdateTaskSchema.safeParse({
+    taskUuid: formData.get('taskUuid'),
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    description: formData.get('description'),
+    status: formData.get('status'),
+    assigneeUuid: formData.get('assigneeUuid'),
+    tagsString: formData.get('tagsString'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { taskUuid, projectUuid, title, description, status, assigneeUuid, tagsString } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: "You do not have permission to update tasks in this project." };
+    }
+    
+    const taskData = {
+      title,
+      description: description || undefined,
+      status,
+      assigneeUuid: assigneeUuid || null,
+      tagsString: tagsString || undefined,
+    };
+
+    const updatedTask = await dbUpdateTask(taskUuid, taskData);
+    if (!updatedTask) {
+      return { error: "Failed to update task."};
+    }
+    return { message: "Task updated successfully!", updatedTask };
+  } catch (error: any) {
+    console.error("Error updating task:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface DeleteTaskFormState {
+    message?: string;
+    error?: string;
+}
+
+export async function deleteTaskAction(prevState: DeleteTaskFormState, formData: FormData): Promise<DeleteTaskFormState> {
+    const session = await auth();
+    if (!session?.user?.uuid) return { error: "Authentication required." };
+
+    const taskUuid = formData.get('taskUuid') as string;
+    const projectUuid = formData.get('projectUuid') as string;
+
+    if (!taskUuid || !projectUuid) {
+        return { error: "Task UUID and Project UUID are required."};
+    }
+    
+    try {
+        const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+            return { error: "You do not have permission to delete tasks in this project." };
+        }
+        const success = await dbDeleteTask(taskUuid);
+        if (success) {
+            return { message: "Task deleted successfully." };
+        }
+        return { error: "Failed to delete task." };
+    } catch (error: any) {
+        console.error("Error deleting task:", error);
+        return { error: error.message || "An unexpected error occurred." };
+    }
+}
+
+
+// Tag Actions (Basic stubs, can be expanded)
+export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetProjectTags(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch project tags:", error);
+    return [];
+  }
+}
+
+// Example: Action to create a new project tag (could be called from a tag management UI later)
+// export async function createProjectTagAction(projectUuid: string, name: string, color: string): Promise<Tag | { error: string }> {
+//   const session = await auth();
+//   if (!session?.user?.uuid) return { error: "Authentication required." };
+
+//   const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+//   if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+//     return { error: "You do not have permission to create tags for this project." };
+//   }
+
+//   try {
+//     const newTag = await dbCreateProjectTag(projectUuid, name, color);
+//     return newTag;
+//   } catch (error: any) {
+//     console.error("Error creating project tag:", error);
+//     return { error: error.message || "An unexpected error occurred." };
+//   }
+// }
