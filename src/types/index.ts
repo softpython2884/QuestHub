@@ -1,3 +1,4 @@
+
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
@@ -6,61 +7,75 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
-  avatar?: string; 
-  // passwordHash should not be part of the User object sent to the client
+  avatar?: string;
 }
 
 export interface Tag {
-  id: string;
+  id: string; // Will likely be a UUID internally, but can be just 'id' for the type
+  uuid: string; // Explicit UUID from DB
   name: string;
   color: string; // e.g., Tailwind color class or hex code
+  projectUuid: string;
 }
 
 export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Archived';
 
 export interface Task {
-  id: string;
+  id: string; // Original ID, can be primary key from DB if not UUID yet for mock
+  uuid: string; // Explicit UUID from DB
   title: string;
   description?: string;
   status: TaskStatus;
-  assigneeId?: string; // User ID (maps to User's uuid)
-  projectId: string;
+  assigneeUuid?: string; // User UUID
+  projectUuid: string; // Project UUID
   dueDate?: string; // ISO date string
-  tags: Tag[];
+  tags: Tag[]; // Array of Tag objects
   createdAt: string;
   updatedAt: string;
 }
 
-export interface Document {
-  id:string;
+export interface Document { // Kept as Document for type usage, maps to project_documents table
+  id: string; // Original ID
+  uuid: string; // Explicit UUID from DB
   title: string;
   content: string; // Could be Markdown or other rich text format
-  projectId: string;
-  tags: Tag[];
+  projectUuid: string; // Project UUID
+  isPinned?: boolean;
+  tags: Tag[]; // Array of Tag objects
   createdAt: string;
   updatedAt: string;
+}
+
+export type ProjectMemberRole = 'owner' | 'co-owner' | 'editor' | 'viewer';
+
+export interface ProjectMember {
+  userUuid: string;
+  projectUuid: string;
+  role: ProjectMemberRole;
+  user?: Pick<User, 'name' | 'avatar' | 'email'>; // Optional: for displaying member info
 }
 
 export interface Project {
-  id: string;
+  uuid: string;
   name: string;
   description?: string;
-  ownerId: string; // User ID (maps to User's uuid)
-  memberIds: string[]; // User IDs (maps to User's uuid)
-  tasks: Task[];
-  documents: Document[];
-  tags: Tag[];
-  announcements: Announcement[];
+  ownerUuid: string; // User UUID of the project owner
+  tasks?: Task[]; 
+  documents?: Document[]; 
+  tags?: Tag[]; 
+  announcements?: Announcement[];
   createdAt: string;
   updatedAt: string;
+  isPrivate?: boolean; 
 }
 
 export interface Announcement {
-  id: string;
+  id: string; // Original ID
+  uuid: string; // Explicit UUID from DB
   title: string;
   content: string;
-  authorId: string; // User ID (maps to User's uuid)
-  projectId?: string; // Optional: if project-specific
+  authorUuid: string; // User UUID
+  projectUuid?: string; // Optional: if project-specific, Project UUID
   isGlobal: boolean;
   createdAt: string;
   updatedAt: string;

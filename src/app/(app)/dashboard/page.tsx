@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, AlertTriangle, FolderKanban, Megaphone } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 // Mock data - replace with actual data fetching
 const mockProjects = [
-  { id: '1', name: 'Project Alpha', taskCount: 5, status: 'In Progress', progress: 60 },
-  { id: '2', name: 'Project Beta', taskCount: 8, status: 'On Hold', progress: 20 },
-  { id: '3', name: 'Project Gamma', taskCount: 3, status: 'Completed', progress: 100 },
+  { uuid: 'project-uuid-alpha', name: 'Project Alpha', taskCount: 5, status: 'In Progress', progress: 60, updatedAt: new Date().toISOString() },
+  { uuid: 'project-uuid-beta', name: 'Project Beta', taskCount: 8, status: 'On Hold', progress: 20, updatedAt: new Date().toISOString() },
+  { uuid: 'project-uuid-gamma', name: 'Project Gamma', taskCount: 3, status: 'Completed', progress: 100, updatedAt: new Date().toISOString() },
 ];
 
 const mockTasks = [
@@ -22,11 +24,25 @@ const mockTasks = [
 ];
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
 
-  if (!user) {
-    return null; // Or a loading state, though AppLayout handles auth check
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  if (authLoading || !user) {
+    // You might want to show a more sophisticated loading skeleton here
+    // For now, returning null or a simple loader if auth is still loading.
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+            <PlusCircle className="h-12 w-12 animate-spin text-primary" /> {/* Using PlusCircle as a placeholder spinner */}
+        </div>
+    );
   }
+
 
   return (
     <div className="space-y-8">
@@ -95,13 +111,13 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {mockProjects.slice(0,3).map((project) => (
-              <div key={project.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+              <div key={project.uuid} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                 <div>
                   <h3 className="font-semibold">{project.name}</h3>
                   <p className="text-sm text-muted-foreground">{project.taskCount} tasks - {project.status}</p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/projects/${project.id}`}>View</Link>
+                  <Link href={`/projects/${project.uuid}`}>View</Link>
                 </Button>
               </div>
             ))}

@@ -1,20 +1,98 @@
 
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlusCircle, Search, Filter, FolderKanban } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { useEffect, useState, useCallback } from "react";
+import type { Project } from "@/types";
+import { getProjectsForUser as dbGetProjectsForUser } from "@/lib/db";
+import { useAuth } from "@/hooks/useAuth";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "next/navigation";
 
-// Mock data for projects
-const mockProjects = [
-  { id: "proj-1", name: "Project Alpha", description: "Innovative new platform for AI content generation.", status: "In Progress", teamSize: 5, lastUpdate: "2 days ago" },
-  { id: "proj-2", name: "Project Beta", description: "Mobile application for task management.", status: "Planning", teamSize: 3, lastUpdate: "5 days ago" },
-  { id: "proj-3", name: "Project Gamma", description: "Website redesign for e-commerce client.", status: "Completed", teamSize: 7, lastUpdate: "1 week ago" },
-  { id: "proj-4", name: "Project Delta", description: "Internal tooling for DevOps automation.", status: "On Hold", teamSize: 2, lastUpdate: "3 weeks ago" },
-];
+async function fetchProjectsAction(userUuid: string | undefined): Promise<Project[]> {
+  'use server';
+  if (!userUuid) return [];
+  try {
+    return await dbGetProjectsForUser(userUuid);
+  } catch (error) {
+    console.error("Failed to fetch projects:", error);
+    return [];
+  }
+}
 
 
 export default function ProjectsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const loadProjects = useCallback(async () => {
+    if (user && !authLoading) {
+      setIsLoadingProjects(true);
+      try {
+        const data = await fetchProjectsAction(user.uuid);
+        setProjects(data);
+      } catch (err) {
+        console.error("Error fetching projects on client:", err);
+        setProjects([]); 
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    } else if (!authLoading && !user) {
+      setIsLoadingProjects(false);
+      setProjects([]); 
+      router.push('/login'); // Redirect if not logged in
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  if (authLoading && isLoadingProjects) { // Show skeleton if either auth or projects are loading initially
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div>
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-5 w-64 mt-1" />
+          </div>
+          <Skeleton className="h-10 w-48" />
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
+              <Skeleton className="h-7 w-24" />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Skeleton className="h-9 w-full sm:w-[200px] lg:w-[300px]" />
+                <Skeleton className="h-9 w-24" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1,2,3].map(i => (
+              <Card key={i}>
+                <CardHeader> <Skeleton className="h-6 w-3/4" /> <Skeleton className="h-4 w-full mt-1" />  <Skeleton className="h-4 w-1/2 mt-1" /> </CardHeader>
+                <CardContent> <Skeleton className="h-8 w-full mt-2" /> </CardContent>
+              </Card>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const filteredProjects = projects.filter(project => 
+    project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (project.description && project.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -32,11 +110,16 @@ export default function ProjectsPage() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
-            <CardTitle>All Projects</CardTitle>
+            <CardTitle>My Projects ({filteredProjects.length})</CardTitle>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <div className="relative flex-grow sm:flex-grow-0">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search projects..." className="pl-8 w-full sm:w-[200px] lg:w-[300px]" />
+                <Input 
+                  placeholder="Search projects..." 
+                  className="pl-8 w-full sm:w-[200px] lg:w-[300px]" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
               <Button variant="outline">
                 <Filter className="mr-2 h-4 w-4" /> Filter
@@ -45,37 +128,54 @@ export default function ProjectsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {mockProjects.length === 0 ? (
+          {isLoadingProjects ? (
+             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {[1,2,3].map(i => (
+                <Card key={i}>
+                    <CardHeader> <Skeleton className="h-6 w-3/4" /> <Skeleton className="h-10 w-full mt-1" /> </CardHeader>
+                    <CardContent> 
+                        <Skeleton className="h-4 w-2/3 mb-1" />
+                        <Skeleton className="h-4 w-1/2 mb-1" />
+                        <Skeleton className="h-4 w-3/4 mb-3" />
+                        <Skeleton className="h-9 w-full" /> 
+                    </CardContent>
+                </Card>
+                ))}
+            </div>
+          ) : filteredProjects.length === 0 ? (
             <div className="text-center py-12">
               <FolderKanban className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-medium">No projects yet</h3>
+              <h3 className="mt-4 text-lg font-medium">{searchTerm ? 'No projects match your search.' : 'No projects yet.'}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Get started by creating a new project.
+                {searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating a new project.'}
               </p>
-              <Button className="mt-6" asChild>
-                <Link href="/projects/new">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Create Project
-                </Link>
-              </Button>
+              {!searchTerm && (
+                <Button className="mt-6" asChild>
+                  <Link href="/projects/new">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Create Project
+                  </Link>
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {mockProjects.map((project) => (
-                <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
+              {filteredProjects.map((project) => (
+                <Card key={project.uuid} className="hover:shadow-lg transition-shadow flex flex-col">
+                  <CardHeader className="flex-grow">
                     <CardTitle className="hover:text-primary">
-                      <Link href={`/projects/${project.id}`}>{project.name}</Link>
+                      <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
                     </CardTitle>
-                    <CardDescription className="truncate h-10">{project.description}</CardDescription>
+                    <CardDescription className="h-12 overflow-hidden text-ellipsis line-clamp-2"> 
+                      {project.description || "No description provided."}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      <p>Status: <span className="font-medium text-foreground">{project.status}</span></p>
-                      <p>Team Size: <span className="font-medium text-foreground">{project.teamSize}</span></p>
-                      <p>Last Update: <span className="font-medium text-foreground">{project.lastUpdate}</span></p>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                       <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : 'Other'}</span></p>
+                      <p>Updated: <span className="font-medium text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span></p>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full mt-4" asChild>
-                       <Link href={`/projects/${project.id}`}>View Details</Link>
+                    <Button variant="outline" size="sm" className="w-full mt-3" asChild>
+                       <Link href={`/projects/${project.uuid}`}>View Details</Link>
                     </Button>
                   </CardContent>
                 </Card>
