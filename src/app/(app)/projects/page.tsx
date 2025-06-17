@@ -8,21 +8,10 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useCallback } from "react";
 import type { Project } from "@/types";
-import { getProjectsForUser as dbGetProjectsForUser } from "@/lib/db";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
-
-async function fetchProjectsAction(userUuid: string | undefined): Promise<Project[]> {
-  'use server';
-  if (!userUuid) return [];
-  try {
-    return await dbGetProjectsForUser(userUuid);
-  } catch (error) {
-    console.error("Failed to fetch projects:", error);
-    return [];
-  }
-}
+import { fetchProjectsAction } from "./actions";
 
 
 export default function ProjectsPage() {
@@ -47,7 +36,7 @@ export default function ProjectsPage() {
     } else if (!authLoading && !user) {
       setIsLoadingProjects(false);
       setProjects([]); 
-      router.push('/login'); // Redirect if not logged in
+      router.push('/login'); 
     }
   }, [user, authLoading, router]);
 
@@ -55,7 +44,7 @@ export default function ProjectsPage() {
     loadProjects();
   }, [loadProjects]);
 
-  if (authLoading && isLoadingProjects) { // Show skeleton if either auth or projects are loading initially
+  if (authLoading && isLoadingProjects) { 
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">

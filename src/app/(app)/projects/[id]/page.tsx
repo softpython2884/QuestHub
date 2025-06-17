@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, Settings as SettingsIcon, FolderGit2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, Settings as SettingsIcon, FolderGit2, Loader2, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -14,9 +14,11 @@ import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
 import { useEffect, useState, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { getProjectByUuid as dbGetProjectByUuid, getUserByUuid as dbGetUserByUuid } from '@/lib/db';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchProjectAction, fetchProjectOwnerNameAction } from './actions';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 // Mock data for sub-entities (tasks, documents, announcements, tags)
 const mockTasks: Task[] = [
@@ -33,28 +35,6 @@ const mockTags: TagType[] = [{id: 'tag-high-mock', uuid: 'tag-uuid-high-mock', p
 
 const taskStatuses: Task['status'][] = ['To Do', 'In Progress', 'Done', 'Archived'];
 
-async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
-  'use server';
-  if (!uuid) return null;
-  try {
-    const project = await dbGetProjectByUuid(uuid);
-    if (!project) return null;
-    // Potentially fetch owner's name here if needed directly on project object
-    // For now, ownerUuid is sufficient for client-side check
-    return project;
-  } catch (error) {
-    console.error("Failed to fetch project:", error);
-    return null;
-  }
-}
-
-async function fetchProjectOwnerNameAction(ownerUuid: string | undefined) : Promise<string | null> {
-    'use server';
-    if(!ownerUuid) return null;
-    const owner = await dbGetUserByUuid(ownerUuid);
-    return owner?.name || null;
-}
-
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -70,8 +50,11 @@ export default function ProjectDetailPage() {
   const [newDocContent, setNewDocContent] = useState('');
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
 
+  const [newScriptName, setNewScriptName] = useState('');
+  const [newScriptContent, setNewScriptContent] = useState('');
+
   const loadProjectData = useCallback(async () => {
-    if (projectUuid && user) { // Ensure user is loaded too for owner check
+    if (projectUuid && user) { 
       setIsLoadingData(true);
       try {
         const projectData = await fetchProjectAction(projectUuid);
@@ -127,14 +110,14 @@ export default function ProjectDetailPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <Skeleton className="h-8 w-1/2" />
-            <Skeleton className="h-5 w-3/4 mt-2" /> {/* Increased top margin */}
-             <div className="mt-3 flex flex-wrap gap-2"> {/* Increased top margin */}
-                <Skeleton className="h-6 w-20 rounded-full" /> {/* Increased height */}
-                <Skeleton className="h-6 w-24 rounded-full" /> {/* Increased height */}
+            <Skeleton className="h-5 w-3/4 mt-2" /> 
+             <div className="mt-3 flex flex-wrap gap-2"> 
+                <Skeleton className="h-6 w-20 rounded-full" /> 
+                <Skeleton className="h-6 w-24 rounded-full" /> 
               </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2"> {/* Added padding top */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2"> 
                 <div><Skeleton className="h-4 w-16 mb-1" /><Skeleton className="h-5 w-24" /></div>
                 <div><Skeleton className="h-4 w-20 mb-1" /><Skeleton className="h-5 w-12" /></div>
                 <div><Skeleton className="h-4 w-16 mb-1" /><Skeleton className="h-5 w-28" /></div>
@@ -162,7 +145,6 @@ export default function ProjectDetailPage() {
     );
   }
   
-  // TODO: Replace with actual data fetched based on project.uuid
   const projectTasks = mockTasks; 
   const projectDocuments = mockDocuments;
   const projectAnnouncements = mockAnnouncements;
@@ -309,12 +291,43 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="repository" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Project Repository</CardTitle></CardHeader>
-            <CardContent>
-              <div className="border p-6 rounded-md text-center text-muted-foreground">
+            <CardHeader>
+              <CardTitle>Project Repository & Scripts</CardTitle>
+              <CardDescription>Manage simple scripts and code snippets for this project.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="border p-4 rounded-md">
+                <h4 className="font-semibold mb-2 text-lg">Add New Script</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="script-name">Script Name</Label>
+                    <Input 
+                      id="script-name" 
+                      placeholder="e.g., deployment_script.sh, data_analysis.py" 
+                      value={newScriptName}
+                      onChange={(e) => setNewScriptName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="script-content">Script Content</Label>
+                    <Textarea 
+                      id="script-content" 
+                      placeholder="Paste or write your script content here..." 
+                      value={newScriptContent}
+                      onChange={(e) => setNewScriptContent(e.target.value)}
+                      rows={8}
+                      className="font-code text-sm"
+                    />
+                  </div>
+                  <Button disabled> {/* Functionality to be added */}
+                    <UploadCloud className="mr-2 h-4 w-4"/> Add Script to Repository
+                  </Button>
+                </div>
+              </div>
+              <div className="border p-4 rounded-md text-center text-muted-foreground">
                 <FolderGit2 className="mx-auto h-12 w-12 mb-3" />
-                <p>Repository feature (GitHub-like integration or file management) is planned for a future update.</p>
-                <p className="text-xs mt-1">This section will allow you to manage project code, files, and versions.</p>
+                <p>Currently, you can add script names and their content.</p>
+                <p className="text-xs mt-1">Full Git integration or advanced file management is a larger feature planned for future updates.</p>
               </div>
             </CardContent>
           </Card>
@@ -323,7 +336,7 @@ export default function ProjectDetailPage() {
          <TabsContent value="settings" className="mt-4">
           <Card>
             <CardHeader><CardTitle>Team & Project Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-6"> {/* Increased spacing */}
+            <CardContent className="space-y-6"> 
               <div>
                 <h4 className="font-semibold mb-2 text-lg">Manage Team Members</h4>
                 <div className="border p-4 rounded-md text-muted-foreground">

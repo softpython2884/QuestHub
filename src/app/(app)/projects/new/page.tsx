@@ -12,29 +12,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { createProject as createProjectDb } from '@/lib/db'; 
 import type { Project } from '@/types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import React from 'react'; // Ensure React is imported for useState
-
-// Server Action to create a project
-async function createProjectAction(
-  name: string,
-  description: string | undefined,
-  ownerUuid: string
-): Promise<Project | { error: string }> {
-  'use server';
-  if (!name.trim() || !ownerUuid) {
-    return { error: 'Project name and owner are required.' };
-  }
-  try {
-    const newProject = await createProjectDb(name.trim(), description?.trim(), ownerUuid);
-    return newProject;
-  } catch (error: any) {
-    console.error('Failed to create project (server action):', error);
-    return { error: error.message || 'Failed to create project. Please try again.' };
-  }
-}
+import React from 'react'; 
+import { createProjectAction } from './actions';
 
 const projectFormSchema = z.object({
   name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
@@ -90,7 +71,7 @@ export default function NewProjectPage() {
 
   return (
     <div className="space-y-6">
-       <Button variant="outline" onClick={() => router.back()} className="mb-0"> {/* Adjusted margin */}
+       <Button variant="outline" onClick={() => router.back()} className="mb-0"> 
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
       </Button>
       <Card className="max-w-2xl mx-auto">
