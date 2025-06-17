@@ -17,7 +17,10 @@ import {
   updateTask as dbUpdateTask,
   deleteTask as dbDeleteTask,
   getProjectTags as dbGetProjectTags,
-  createProjectTag as dbCreateProjectTag, // Keep if needed for other functionalities or explicit tag management
+  updateProjectReadme as dbUpdateProjectReadme,
+  updateProjectUrgency as dbUpdateProjectUrgency,
+  updateProjectVisibility as dbUpdateProjectVisibility,
+  toggleTaskPinStatus as dbToggleTaskPinStatus,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -210,7 +213,7 @@ const CreateTaskSchema = z.object({
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().optional(), // Will be validated for UUID format or emptiness later
+  assigneeUuid: z.string().optional(),
   tagsString: z.string().optional(),
 });
 
@@ -247,10 +250,9 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
       return { error: "Invalid Assignee UUID format.", fieldErrors: { assigneeUuid: ["Invalid UUID format for assignee."] } };
     }
     finalAssigneeUuid = rawAssigneeUuid;
-  } else if (rawAssigneeUuid === '') {
+  } else {
     finalAssigneeUuid = null; 
   }
-
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -334,7 +336,7 @@ const UpdateTaskSchema = z.object({
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().optional(), // Will be validated for UUID format or emptiness later
+  assigneeUuid: z.string().optional(),
   tagsString: z.string().optional(),
 });
 
@@ -372,7 +374,7 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
       return { error: "Invalid Assignee UUID format.", fieldErrors: { assigneeUuid: ["Invalid UUID format for assignee."] } };
     }
     finalAssigneeUuid = rawAssigneeUuid;
-  } else if (rawAssigneeUuid === '') {
+  } else {
     finalAssigneeUuid = null; 
   }
 
@@ -444,3 +446,135 @@ export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]
     return [];
   }
 }
+
+// Project Settings Actions
+export interface SaveProjectReadmeFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormState, formData: FormData): Promise<SaveProjectReadmeFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const readmeContent = formData.get('readmeContent') as string;
+
+  if (!projectUuid || readmeContent === null || readmeContent === undefined) {
+    return { error: "Project UUID and README content are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: "You do not have permission to edit the README for this project." };
+    }
+    const updatedProject = await dbUpdateProjectReadme(projectUuid, readmeContent);
+    if (!updatedProject) {
+      return { error: "Failed to save README." };
+    }
+    return { message: "README saved successfully.", project: updatedProject };
+  } catch (error: any) {
+    console.error("Error saving README:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface ToggleProjectUrgencyFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgencyFormState, formData: FormData): Promise<ToggleProjectUrgencyFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const isUrgent = formData.get('isUrgent') === 'true';
+
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+     if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to change urgency for this project." };
+    }
+    const updatedProject = await dbUpdateProjectUrgency(projectUuid, isUrgent);
+    if (!updatedProject) {
+      return { error: "Failed to update project urgency." };
+    }
+    return { message: `Project urgency ${isUrgent ? 'set' : 'unset'}.`, project: updatedProject };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface ToggleProjectVisibilityFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisibilityFormState, formData: FormData): Promise<ToggleProjectVisibilityFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const isPrivate = formData.get('isPrivate') === 'true';
+
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (userRole !== 'owner' && userRole !== 'admin') { // Assuming admin can also change this
+      return { error: "Only project owners or admins can change project visibility." };
+    }
+    const updatedProject = await dbUpdateProjectVisibility(projectUuid, isPrivate);
+    if (!updatedProject) {
+      return { error: "Failed to update project visibility." };
+    }
+    return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'}.`, project: updatedProject };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+// Task Pinning Action
+export interface ToggleTaskPinState {
+  message?: string;
+  error?: string;
+  updatedTask?: Task;
+}
+
+export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formData: FormData): Promise<ToggleTaskPinState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const taskUuid = formData.get('taskUuid') as string;
+  const projectUuid = formData.get('projectUuid') as string; // Needed for permission check
+  const isPinned = formData.get('isPinned') === 'true';
+
+  if (!taskUuid || !projectUuid) {
+    return { error: "Task UUID and Project UUID are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: "You do not have permission to pin/unpin tasks in this project." };
+    }
+
+    const updatedTask = await dbToggleTaskPinStatus(taskUuid, isPinned);
+    if (!updatedTask) {
+      return { error: "Failed to update task pin status." };
+    }
+    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+

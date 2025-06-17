@@ -30,6 +30,7 @@ export interface Task {
   tags: Tag[]; // Array of Tag objects
   createdAt: string;
   updatedAt: string;
+  isPinned?: boolean;
 }
 
 export interface Document {
@@ -61,6 +62,8 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   isPrivate?: boolean;
+  readmeContent?: string;
+  isUrgent?: boolean;
 }
 
 export interface Announcement {
@@ -74,3 +77,4 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
+

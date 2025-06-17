@@ -14,6 +14,18 @@ let db: Database | null = null;
 const DB_DIR = path.join(process.cwd(), 'db');
 const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
+// Default tags to be created for new projects
+const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
+  { name: 'Bug', color: '#EF4444' }, // Red
+  { name: 'Feature', color: '#3B82F6' }, // Blue
+  { name: 'UI', color: '#A855F7' }, // Purple
+  { name: 'Backend', color: '#F97316' }, // Orange
+  { name: 'Docs', color: '#10B981' }, // Green
+  { name: 'Urgent', color: '#DC2626' }, // Darker Red
+  { name: 'Enhancement', color: '#22C55E' }, // Bright Green
+];
+
+
 export async function getDbConnection() {
   if (db) {
     return db;
@@ -48,6 +60,8 @@ export async function getDbConnection() {
       description TEXT,
       ownerUuid TEXT NOT NULL,
       isPrivate BOOLEAN DEFAULT TRUE,
+      readmeContent TEXT,
+      isUrgent BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -71,6 +85,7 @@ export async function getDbConnection() {
       status TEXT NOT NULL, 
       assigneeUuid TEXT,      
       dueDate TEXT,
+      isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
@@ -257,14 +272,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      projectUuid,
-      name,
-      description,
-      ownerUuid,
-      now,
-      now,
-      true
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, '# Welcome to your new project!\n\nStart by editing this README.', false
     );
 
     if (!result.lastID) {
@@ -273,10 +282,13 @@ export async function createProject(name: string, description: string | undefine
 
     await connection.run(
       'INSERT INTO project_members (projectUuid, userUuid, roleInProject) VALUES (?, ?, ?)',
-      projectUuid,
-      ownerUuid,
-      'owner'
+      projectUuid, ownerUuid, 'owner'
     );
+
+    // Create default tags for the new project
+    for (const defaultTag of DEFAULT_PROJECT_TAGS) {
+      await createProjectTag(projectUuid, defaultTag.name, defaultTag.color);
+    }
 
     await connection.run('COMMIT');
 
@@ -288,12 +300,14 @@ export async function createProject(name: string, description: string | undefine
       createdAt: now,
       updatedAt: now,
       isPrivate: true,
+      readmeContent: '# Welcome to your new project!\n\nStart by editing this README.',
+      isUrgent: false,
     };
   } catch (err) {
     await connection.run('ROLLBACK');
     console.error("Error creating project:", err);
-    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        throw new Error('A project with this name already exists.');
+    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && (err.message.includes('projects.name') || err.message.includes('projects.uuid'))) { // More specific check
+        throw new Error('A project with this name or UUID already exists.');
     }
     throw err;
   }
@@ -302,7 +316,7 @@ export async function createProject(name: string, description: string | undefine
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
   const project = await connection.get<Project>(
-    'SELECT uuid, name, description, ownerUuid, isPrivate, createdAt, updatedAt FROM projects WHERE uuid = ?',
+    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
   return project || null;
@@ -326,11 +340,44 @@ export async function updateProjectDetails(uuid: string, name: string, descripti
   return getProjectByUuid(uuid);
 }
 
+export async function updateProjectReadme(projectUuid: string, readmeContent: string): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE projects SET readmeContent = ?, updatedAt = ? WHERE uuid = ?',
+    readmeContent, now, projectUuid
+  );
+  if (result.changes === 0) return null;
+  return getProjectByUuid(projectUuid);
+}
+
+export async function updateProjectUrgency(projectUuid: string, isUrgent: boolean): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE projects SET isUrgent = ?, updatedAt = ? WHERE uuid = ?',
+    isUrgent, now, projectUuid
+  );
+  if (result.changes === 0) return null;
+  return getProjectByUuid(projectUuid);
+}
+
+export async function updateProjectVisibility(projectUuid: string, isPrivate: boolean): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE projects SET isPrivate = ?, updatedAt = ? WHERE uuid = ?',
+    isPrivate, now, projectUuid
+  );
+  if (result.changes === 0) return null;
+  return getProjectByUuid(projectUuid);
+}
+
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
   const projects = await connection.all<Project[]>(
-    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.createdAt, p.updatedAt
+    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.createdAt, p.updatedAt
      FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
      WHERE pm.userUuid = ?
@@ -342,7 +389,7 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
 
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
-    const projects = await connection.all<Project[]>('SELECT uuid, name, description, ownerUuid, isPrivate, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC');
+    const projects = await connection.all<Project[]>('SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC');
     return projects;
 }
 
@@ -452,7 +499,7 @@ export async function getProjectTagByName(projectUuid: string, name: string): Pr
 
 export async function getProjectTags(projectUuid: string): Promise<Tag[]> {
   const connection = await getDbConnection();
-  return connection.all<Tag[]>('SELECT * FROM project_tags WHERE projectUuid = ?', projectUuid);
+  return connection.all<Tag[]>('SELECT * FROM project_tags WHERE projectUuid = ? ORDER BY name ASC', projectUuid);
 }
 
 export async function linkTagToTask(taskUuid: string, tagUuid: string): Promise<void> {
@@ -493,8 +540,8 @@ export async function createTask(data: {
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO tasks (uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      taskUuid, data.projectUuid, data.title, data.description, data.status, data.assigneeUuid, now, now
+      'INSERT INTO tasks (uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      taskUuid, data.projectUuid, data.title, data.description, data.status, data.assigneeUuid, now, now, false
     );
     if (!result.lastID) throw new Error('Task creation failed.');
 
@@ -503,7 +550,10 @@ export async function createTask(data: {
       for (const tagName of tagNames) {
         let tag = await getProjectTagByName(data.projectUuid, tagName);
         if (!tag) {
-          tag = await createProjectTag(data.projectUuid, tagName, '#6B7280'); // Default gray color for new tags
+          // Find if this tag name matches one of the default tags, if so use its color
+          const defaultTagInfo = DEFAULT_PROJECT_TAGS.find(dt => dt.name.toLowerCase() === tagName.toLowerCase());
+          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280'; // Default gray if not a known default tag
+          tag = await createProjectTag(data.projectUuid, tagName, color);
         }
         await linkTagToTask(taskUuid, tag.uuid);
       }
@@ -522,7 +572,7 @@ export async function createTask(data: {
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
   const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName'>>(
-    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt 
+    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned 
      FROM tasks 
      WHERE uuid = ?`,
     taskUuid
@@ -542,10 +592,10 @@ export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
 export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
   const connection = await getDbConnection();
   const taskRows = await connection.all<Omit<Task, 'tags' | 'assigneeName'>[]>(
-    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt
+    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned
      FROM tasks
      WHERE projectUuid = ?
-     ORDER BY createdAt DESC`,
+     ORDER BY isPinned DESC, updatedAt DESC`, // Pinned tasks first, then by update date
     projectUuid
   );
 
@@ -570,6 +620,7 @@ export async function updateTask(
     status?: TaskStatus;
     assigneeUuid?: string | null;
     tagsString?: string; // Comma-separated tag names
+    isPinned?: boolean; // Added for pinning
   }
 ): Promise<Task | null> {
   const connection = await getDbConnection();
@@ -579,12 +630,13 @@ export async function updateTask(
   if (!currentTask) return null;
 
   const updates: string[] = [];
-  const values: (string | null | undefined)[] = [];
+  const values: (string | null | undefined | boolean)[] = [];
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
   if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
   if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
+  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned); }
   
   if (updates.length === 0 && data.tagsString === undefined) return currentTask; // No actual data change for task table other than tags
 
@@ -604,7 +656,9 @@ export async function updateTask(
       for (const tagName of tagNames) {
         let tag = await getProjectTagByName(currentTask.projectUuid, tagName);
         if (!tag) {
-          tag = await createProjectTag(currentTask.projectUuid, tagName, '#6B7280'); // Default gray
+          const defaultTagInfo = DEFAULT_PROJECT_TAGS.find(dt => dt.name.toLowerCase() === tagName.toLowerCase());
+          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280';
+          tag = await createProjectTag(currentTask.projectUuid, tagName, color);
         }
         await linkTagToTask(taskUuid, tag.uuid);
       }
@@ -632,6 +686,17 @@ export async function updateTaskStatus(taskUuid: string, status: TaskStatus): Pr
   return getTaskByUuid(taskUuid);
 }
 
+export async function toggleTaskPinStatus(taskUuid: string, isPinned: boolean): Promise<Task | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE tasks SET isPinned = ?, updatedAt = ? WHERE uuid = ?',
+    isPinned, now, taskUuid
+  );
+  if (result.changes === 0) return null;
+  return getTaskByUuid(taskUuid);
+}
+
 export async function deleteTask(taskUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   await connection.run('BEGIN TRANSACTION');
@@ -645,3 +710,4 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
     throw error;
   }
 }
+

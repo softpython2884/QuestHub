@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon, BookOpen } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { useActionState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { Switch } from '@/components/ui/switch';
 import {
   fetchProjectAction,
   fetchProjectOwnerNameAction,
@@ -37,6 +38,14 @@ import {
   deleteTaskAction,
   type DeleteTaskFormState,
   fetchProjectTagsAction,
+  saveProjectReadmeAction,
+  type SaveProjectReadmeFormState,
+  toggleProjectUrgencyAction,
+  type ToggleProjectUrgencyFormState,
+  toggleProjectVisibilityAction,
+  type ToggleProjectVisibilityFormState,
+  toggleTaskPinAction,
+  type ToggleTaskPinState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -137,7 +146,10 @@ export default function ProjectDetailPage() {
   const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
   const [updateTaskState, updateTaskFormAction, isUpdateTaskPending] = useActionState(updateTaskAction, { message: "", error: "" });
   const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
-
+  const [saveReadmeState, saveReadmeFormAction, isSaveReadmePending] = useActionState(saveProjectReadmeAction, { message: "", error: "" });
+  const [toggleUrgencyState, toggleUrgencyFormAction, isToggleUrgencyPending] = useActionState(toggleProjectUrgencyAction, { message: "", error: "" });
+  const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
+  const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
 
   const loadTasks = useCallback(async () => {
     if (projectUuid) {
@@ -195,12 +207,13 @@ export default function ProjectDetailPage() {
                 setProject(projectData);
                 if (projectData) {
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
+                    setProjectReadmeContent(projectData.readmeContent || '');
                     if (projectData.ownerUuid) {
                         const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
                         setProjectOwnerName(ownerName);
                          await loadProjectMembersAndRole(projectData.ownerUuid);
                     } else {
-                        await loadProjectMembersAndRole(); // Fallback if ownerUuid not in projectData (should not happen)
+                        await loadProjectMembersAndRole(); 
                     }
                     await loadTasks();
                     await loadProjectTagsData();
@@ -230,16 +243,16 @@ export default function ProjectDetailPage() {
       if (updateProjectFormState.message && !updateProjectFormState.error) {
         toast({ title: "Success", description: updateProjectFormState.message });
         setIsEditDialogOpen(false);
-        fetchProjectAction(projectUuid).then(p => {
-          setProject(p);
-          if(p) editProjectForm.reset({ name: p.name, description: p.description || '' });
-        });
+        if(updateProjectFormState.project) {
+          setProject(updateProjectFormState.project);
+          editProjectForm.reset({ name: updateProjectFormState.project.name, description: updateProjectFormState.project.description || '' });
+        }
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
       }
     }
-  }, [updateProjectFormState, isUpdateProjectPending, toast, projectUuid, editProjectForm]);
+  }, [updateProjectFormState, isUpdateProjectPending, toast, editProjectForm]);
 
   useEffect(() => {
     if (!isInvitePending && inviteFormState) {
@@ -311,6 +324,52 @@ export default function ProjectDetailPage() {
     }
   }, [deleteTaskState, isDeleteTaskPending, toast, loadTasks]);
 
+  useEffect(() => {
+    if (!isSaveReadmePending && saveReadmeState?.message) {
+      toast({ title: "Success", description: saveReadmeState.message });
+      if(saveReadmeState.project) setProject(saveReadmeState.project);
+    }
+    if (!isSaveReadmePending && saveReadmeState?.error) {
+      toast({ variant: "destructive", title: "README Error", description: saveReadmeState.error });
+    }
+  }, [saveReadmeState, isSaveReadmePending, toast]);
+
+  useEffect(() => {
+    if (!isToggleUrgencyPending && toggleUrgencyState) {
+        if (toggleUrgencyState.message && !toggleUrgencyState.error) {
+            toast({ title: "Success", description: toggleUrgencyState.message });
+            if(toggleUrgencyState.project) setProject(toggleUrgencyState.project);
+        }
+        if (toggleUrgencyState.error) {
+            toast({ variant: "destructive", title: "Urgency Error", description: toggleUrgencyState.error });
+        }
+    }
+  }, [toggleUrgencyState, isToggleUrgencyPending, toast]);
+
+  useEffect(() => {
+    if (!isToggleVisibilityPending && toggleVisibilityState) {
+        if (toggleVisibilityState.message && !toggleVisibilityState.error) {
+            toast({ title: "Success", description: toggleVisibilityState.message });
+            if(toggleVisibilityState.project) setProject(toggleVisibilityState.project);
+        }
+        if (toggleVisibilityState.error) {
+            toast({ variant: "destructive", title: "Visibility Error", description: toggleVisibilityState.error });
+        }
+    }
+  }, [toggleVisibilityState, isToggleVisibilityPending, toast]);
+
+  useEffect(() => {
+    if (!isToggleTaskPinPending && toggleTaskPinState) {
+        if (toggleTaskPinState.message && !toggleTaskPinState.error) {
+            toast({ title: "Success", description: toggleTaskPinState.message });
+            loadTasks(); // Reload tasks to reflect pin status change
+        }
+        if (toggleTaskPinState.error) {
+            toast({ variant: "destructive", title: "Pin Error", description: toggleTaskPinState.error });
+        }
+    }
+  }, [toggleTaskPinState, isToggleTaskPinPending, toast, loadTasks]);
+
 
   const handleContentChange = async (content: string) => {
     setNewDocContent(content);
@@ -338,6 +397,7 @@ export default function ProjectDetailPage() {
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
   const canEditTaskStatus = !!currentUserRole; 
+  const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin'; // For project visibility
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
@@ -473,6 +533,47 @@ export default function ProjectDetailPage() {
     });
   };
 
+  const handleSaveReadme = () => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('readmeContent', projectReadmeContent);
+    ReactStartTransition(() => {
+      saveReadmeFormAction(formData);
+    });
+  };
+
+  const handleToggleUrgency = (checked: boolean) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('isUrgent', String(checked));
+    ReactStartTransition(() => {
+      toggleUrgencyFormAction(formData);
+    });
+  };
+
+  const handleToggleVisibility = (checked: boolean) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('isPrivate', String(checked));
+    ReactStartTransition(() => {
+      toggleVisibilityFormAction(formData);
+    });
+  };
+
+  const handleToggleTaskPin = (taskUuid: string, currentPinStatus: boolean) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('taskUuid', taskUuid);
+    formData.append('projectUuid', project.uuid);
+    formData.append('isPinned', String(!currentPinStatus));
+    ReactStartTransition(() => {
+        toggleTaskPinFormAction(formData);
+    });
+  };
+
   const getInitials = (name?: string) => {
     if (!name) return '??';
     const names = name.split(' ');
@@ -504,10 +605,17 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // if status is not one of the predefined, put in Archived as fallback
         grouped['Archived'].push(task); 
       }
     });
+    // Sort tasks within each group: pinned first, then by updatedAt
+    for (const status in grouped) {
+        grouped[status as TaskStatus].sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        });
+    }
     return grouped;
   };
 
@@ -565,15 +673,21 @@ export default function ProjectDetailPage() {
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
       </Button>
 
-      <Card className="shadow-lg">
+      <Card className={cn("shadow-lg", project.isUrgent && "border-2 border-destructive ring-2 ring-destructive/50")}>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
             <div>
-              <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
+                {project.isUrgent && <Flame className="h-7 w-7 text-destructive" />}
+                <Badge variant={project.isPrivate ? "secondary" : "outline"} className={cn(!project.isPrivate && "border-green-500 text-green-600")}>
+                    {project.isPrivate ? "Private" : "Public"}
+                </Badge>
+              </div>
               <CardDescription className="mt-1">{project.description || "No description provided."}</CardDescription>
               <div className="mt-2 flex flex-wrap gap-2">
                 {projectTags.slice(0, 5).map(tag => ( 
-                  <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white">{tag.name}</Badge>
+                  <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white text-xs">{tag.name}</Badge>
                 ))}
                 {projectTags.length > 5 && <Badge variant="outline">+{projectTags.length - 5} more</Badge>}
               </div>
@@ -722,10 +836,13 @@ export default function ProjectDetailPage() {
                       <h3 className="text-lg font-semibold mb-2 capitalize border-b pb-1">{status} ({statusTasks.length})</h3>
                       <div className="space-y-3">
                         {statusTasks.map(task => (
-                          <Card key={task.uuid} className={`p-3 border-l-4 ${getTaskBorderColor(task.status as TaskStatus)}`}>
+                          <Card key={task.uuid} className={cn("p-3 border-l-4", getTaskBorderColor(task.status as TaskStatus), task.isPinned && "bg-primary/5")}>
                             <div className="flex justify-between items-start gap-2">
                               <div className="flex-grow min-w-0"> 
-                                <h4 className="font-semibold break-words">{task.title}</h4>
+                                <div className="flex items-center gap-2">
+                                   {task.isPinned && <Pin className="h-4 w-4 text-primary flex-shrink-0" />}
+                                   <h4 className="font-semibold break-words">{task.title}</h4>
+                                </div>
                                 {task.description && (
                                   <div className="text-xs text-muted-foreground mt-0.5">
                                     <MarkdownTaskListRenderer
@@ -761,6 +878,9 @@ export default function ProjectDetailPage() {
                                 </Select>
                                 {canCreateUpdateDeleteTasks && (
                                     <div className="flex mt-1 sm:mt-0">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" title={task.isPinned ? "Unpin Task" : "Pin Task"} onClick={() => handleToggleTaskPin(task.uuid, task.isPinned || false)}>
+                                            {task.isPinned ? <PinOff className="h-4 w-4 text-primary" /> : <Pin className="h-4 w-4" />}
+                                        </Button>
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
                                             <Edit3 className="h-4 w-4" />
                                             <span className="sr-only">Edit Task</span>
@@ -833,14 +953,19 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="readme" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Project README</CardTitle>
-              <CardDescription>
-                Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
-              </CardDescription>
+            <CardHeader className="flex flex-row justify-between items-center">
+              <div>
+                <CardTitle>Project README</CardTitle>
+                <CardDescription>
+                  Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
+                </CardDescription>
+              </div>
+               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canCreateUpdateDeleteTasks}>
+                {isSaveReadmePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save README
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px]">
+              <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px] bg-background/30">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {projectReadmeContent || "No README content yet. Start editing below!"}
                 </ReactMarkdown>
@@ -853,9 +978,7 @@ export default function ProjectDetailPage() {
                 className="font-mono" 
                 disabled={!canCreateUpdateDeleteTasks} 
               />
-              {canCreateUpdateDeleteTasks && (
-                <Button className="mt-4" disabled>Save README (Not Implemented)</Button>
-              )}
+              {saveReadmeState?.error && <p className="text-sm text-destructive mt-2">{saveReadmeState.error}</p>}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1076,6 +1199,38 @@ export default function ProjectDetailPage() {
                     <p className="text-muted-foreground">No members in this project yet (besides the owner).</p>
                 )}
               </div>
+              
+              <div className="space-y-3">
+                <h4 className="font-semibold text-lg">Project Attributes</h4>
+                <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+                    <Label htmlFor="project-urgency" className="flex flex-col">
+                        <span>Mark as Urgent</span>
+                        <span className="text-xs font-normal text-muted-foreground">Highlights the project across the platform.</span>
+                    </Label>
+                    <Switch
+                        id="project-urgency"
+                        checked={project?.isUrgent || false}
+                        onCheckedChange={handleToggleUrgency}
+                        disabled={!canManageProjectSettings || isToggleUrgencyPending}
+                    />
+                </div>
+                {toggleUrgencyState?.error && <p className="text-sm text-destructive">{toggleUrgencyState.error}</p>}
+
+                <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+                     <Label htmlFor="project-visibility" className="flex flex-col">
+                        <span>Private Project</span>
+                        <span className="text-xs font-normal text-muted-foreground">If unchecked, project becomes public.</span>
+                    </Label>
+                    <Switch
+                        id="project-visibility"
+                        checked={project?.isPrivate === undefined ? true : project.isPrivate}
+                        onCheckedChange={handleToggleVisibility}
+                        disabled={!isAdminOrOwner || isToggleVisibilityPending}
+                    />
+                </div>
+                 {toggleVisibilityState?.error && <p className="text-sm text-destructive">{toggleVisibilityState.error}</p>}
+              </div>
+              
               <div>
                 <h4 className="font-semibold mb-2 text-lg">Project Tags</h4>
                  <div className="border p-4 rounded-md text-muted-foreground">

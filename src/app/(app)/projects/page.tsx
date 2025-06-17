@@ -3,7 +3,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, Search, Filter, FolderKanban } from "lucide-react";
+import { PlusCircle, Search, Filter, FolderKanban, Flame } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useCallback } from "react";
@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { fetchProjectsAction } from "./actions";
+import { cn } from "@/lib/utils";
 
 
 export default function ProjectsPage() {
@@ -149,11 +150,20 @@ export default function ProjectsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredProjects.map((project) => (
-                <Card key={project.uuid} className="hover:shadow-lg transition-shadow flex flex-col">
+                <Card 
+                  key={project.uuid} 
+                  className={cn(
+                    "hover:shadow-lg transition-shadow flex flex-col",
+                    project.isUrgent && "border-destructive ring-1 ring-destructive"
+                  )}
+                >
                   <CardHeader className="flex-grow">
-                    <CardTitle className="hover:text-primary">
-                      <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
-                    </CardTitle>
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="hover:text-primary">
+                        <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
+                      </CardTitle>
+                      {project.isUrgent && <Flame className="h-5 w-5 text-destructive flex-shrink-0" />}
+                    </div>
                     <CardDescription className="h-12 overflow-hidden text-ellipsis line-clamp-2"> 
                       {project.description || "No description provided."}
                     </CardDescription>
@@ -162,6 +172,7 @@ export default function ProjectsPage() {
                     <div className="text-xs text-muted-foreground space-y-0.5">
                        <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : 'Other'}</span></p>
                       <p>Updated: <span className="font-medium text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span></p>
+                      <p>Status: <span className={cn("font-medium", project.isPrivate ? "text-foreground" : "text-green-600")}>{project.isPrivate ? 'Private' : 'Public'}</span></p>
                     </div>
                     <Button variant="outline" size="sm" className="w-full mt-3" asChild>
                        <Link href={`/projects/${project.uuid}`}>View Details</Link>
@@ -176,3 +187,4 @@ export default function ProjectsPage() {
     </div>
   );
 }
+
