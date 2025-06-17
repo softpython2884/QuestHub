@@ -171,12 +171,11 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             </div>
-            {isOwner && (
-              <div className="flex gap-2 flex-shrink-0">
-                <Button variant="outline" size="sm" disabled><Edit3 className="mr-2 h-4 w-4" /> Edit</Button>
-                <Button variant="destructive" size="sm" disabled><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
-              </div>
-            )}
+            {/* Project Edit and Delete Buttons */}
+            <div className="flex gap-2 flex-shrink-0">
+              <Button variant="outline" size="sm" disabled={!isOwner}><Edit3 className="mr-2 h-4 w-4" /> Edit</Button>
+              <Button variant="destructive" size="sm" disabled={!isOwner}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -275,7 +274,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {isOwner && <Button size="sm" disabled><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {isOwner && <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
