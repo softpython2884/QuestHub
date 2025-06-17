@@ -106,7 +106,7 @@ export default function ProjectDetailPage() {
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
-  const [projectReadmeContent, setProjectReadmeContent] = useState(''); // For README tab
+  const [projectReadmeContent, setProjectReadmeContent] = useState(''); 
 
 
   const [newDocContent, setNewDocContent] = useState('');
@@ -137,23 +137,6 @@ export default function ProjectDetailPage() {
   const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
 
 
-  const loadProjectMembers = useCallback(async () => {
-    if (projectUuid && user) {
-        try {
-            const members = await fetchProjectMembersAction(projectUuid);
-            setProjectMembers(members);
-            const member = members.find(m => m.userUuid === user.uuid);
-            // project.ownerUuid might not be set yet if project is still loading
-            // so we check it directly if project exists
-            const role = project && project.ownerUuid === user.uuid ? 'owner' : member?.role || null;
-            setCurrentUserRole(role);
-        } catch (error) {
-            console.error("Failed to load project members", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
-        }
-    }
-  }, [projectUuid, user, toast, project]); // Added project to dependency array
-
   const loadTasks = useCallback(async () => {
     if (projectUuid) {
       try {
@@ -167,6 +150,29 @@ export default function ProjectDetailPage() {
     }
   }, [projectUuid, toast]);
 
+  const loadProjectMembersAndRole = useCallback(async (currentProjectOwnerUuid?: string) => {
+    if (projectUuid && user) {
+        try {
+            const members = await fetchProjectMembersAction(projectUuid);
+            setProjectMembers(members);
+            if (currentProjectOwnerUuid) {
+                const member = members.find(m => m.userUuid === user.uuid);
+                const role = currentProjectOwnerUuid === user.uuid ? 'owner' : member?.role || null;
+                setCurrentUserRole(role);
+            } else {
+                // Fallback if ownerUuid isn't passed, try to determine from members only
+                // This might be less accurate if the project object isn't available yet
+                const member = members.find(m => m.userUuid === user.uuid);
+                setCurrentUserRole(member?.role || null); 
+            }
+        } catch (error) {
+            console.error("Failed to load project members", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not load project members." });
+        }
+    }
+  }, [projectUuid, user, toast]);
+
+
   const loadProjectTagsData = useCallback(async () => {
     if (projectUuid) {
       try {
@@ -178,58 +184,58 @@ export default function ProjectDetailPage() {
     }
   }, [projectUuid]);
 
-
-  const loadProjectData = useCallback(async () => {
-    if (projectUuid && user) {
-      setIsLoadingData(true);
-      try {
-        const projectData = await fetchProjectAction(projectUuid);
-        setProject(projectData); // Set project first
-        if (projectData) {
-          editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
-          if (projectData.ownerUuid) {
-              const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
-              setProjectOwnerName(ownerName);
-          }
-          // This setCurrentUserRole call might be redundant if loadProjectMembers does it,
-          // but it ensures role is set if user is owner even before members fully load.
-          if (user.uuid === projectData.ownerUuid) {
-            setCurrentUserRole('owner'); 
-          }
-          await loadProjectMembers(); // Now loadProjectMembers can use the 'project' state
-          await loadTasks();
-          await loadProjectTagsData();
-        } else {
-          router.push('/projects'); 
-        }
-      } catch (err) {
-        console.error("Error fetching project on client:", err);
-        setProject(null);
-        toast({variant: "destructive", title: "Error", description: "Could not load project details."})
-      } finally {
-        setIsLoadingData(false);
-      }
-    } else if (!authLoading && !user) {
-        router.push('/login');
-    }
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembers, loadTasks, loadProjectTagsData]);
-
   useEffect(() => {
-    loadProjectData();
-  }, [loadProjectData]);
+    const performLoadProjectData = async () => {
+        if (projectUuid && user) {
+            setIsLoadingData(true);
+            try {
+                const projectData = await fetchProjectAction(projectUuid);
+                setProject(projectData);
+                if (projectData) {
+                    editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
+                    if (projectData.ownerUuid) {
+                        const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
+                        setProjectOwnerName(ownerName);
+                    }
+                    // Load members and determine role using projectData.ownerUuid
+                    await loadProjectMembersAndRole(projectData.ownerUuid);
+                    await loadTasks();
+                    await loadProjectTagsData();
+                } else {
+                    router.push('/projects');
+                }
+            } catch (err) {
+                console.error("Error fetching project on client:", err);
+                setProject(null);
+                toast({variant: "destructive", title: "Error", description: "Could not load project details."})
+            } finally {
+                setIsLoadingData(false);
+            }
+        } else if (!authLoading && !user) {
+            router.push('/login');
+        }
+    };
+    performLoadProjectData();
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadTasks, loadProjectTagsData, loadProjectMembersAndRole]);
+
 
   useEffect(() => {
     if (!isUpdateProjectPending && updateProjectFormState) {
       if (updateProjectFormState.message && !updateProjectFormState.error) {
         toast({ title: "Success", description: updateProjectFormState.message });
         setIsEditDialogOpen(false);
-        loadProjectData();
+        // Re-trigger main data load by projectUuid dependency (if project name/desc change needs full reload)
+        // Or more specifically, re-fetch project if only project details changed
+        fetchProjectAction(projectUuid).then(p => {
+          setProject(p);
+          if(p) editProjectForm.reset({ name: p.name, description: p.description || '' });
+        });
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
       }
     }
-  }, [updateProjectFormState, isUpdateProjectPending, toast, loadProjectData]);
+  }, [updateProjectFormState, isUpdateProjectPending, toast, projectUuid, editProjectForm]);
 
   useEffect(() => {
     if (!isInvitePending && inviteFormState) {
@@ -237,13 +243,13 @@ export default function ProjectDetailPage() {
             toast({ title: "Success", description: inviteFormState.message });
             setIsInviteUserDialogOpen(false);
             inviteForm.reset();
-            loadProjectMembers();
+            loadProjectMembersAndRole(project?.ownerUuid); // Pass ownerUuid if available
         }
         if (inviteFormState.error) {
             toast({ variant: "destructive", title: "Invitation Error", description: inviteFormState.error });
         }
     }
-  }, [inviteFormState, isInvitePending, toast, loadProjectMembers, inviteForm]);
+  }, [inviteFormState, isInvitePending, toast, loadProjectMembersAndRole, inviteForm, project?.ownerUuid]);
 
   useEffect(() => {
     if (!isCreateTaskPending && createTaskState) {
@@ -346,7 +352,7 @@ export default function ProjectDetailPage() {
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    formData.append('assigneeUuid', finalAssigneeUuid || ''); // Ensure it's always a string for FormData
+    formData.append('assigneeUuid', finalAssigneeUuid || ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     ReactStartTransition(() => {
       createTaskFormAction(formData);
@@ -363,7 +369,7 @@ export default function ProjectDetailPage() {
     formData.append('title', values.title);
     formData.append('description', values.description || '');
     formData.append('status', values.status);
-    formData.append('assigneeUuid', finalAssigneeUuid || ''); // Ensure it's always a string
+    formData.append('assigneeUuid', finalAssigneeUuid || ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -442,7 +448,7 @@ export default function ProjectDetailPage() {
       const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
       if (result.success) {
           toast({ title: "Success", description: result.message });
-          loadProjectMembers();
+          loadProjectMembersAndRole(project.ownerUuid);
       } else {
           toast({ variant: "destructive", title: "Error", description: result.error });
       }
@@ -480,8 +486,7 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // Should not happen if statuses are well-defined
-        grouped['Archived'].push(task); // Fallback
+        grouped['Archived'].push(task); 
       }
     });
     return grouped;
@@ -822,12 +827,11 @@ export default function ProjectDetailPage() {
                 onChange={(e) => setProjectReadmeContent(e.target.value)}
                 rows={15}
                 className="font-mono" 
-                disabled={!canCreateUpdateDeleteTasks} // Or a more specific permission
+                disabled={!canCreateUpdateDeleteTasks} 
               />
               {canCreateUpdateDeleteTasks && (
                 <Button className="mt-4" disabled>Save README (Not Implemented)</Button>
               )}
-              {/* Full Markdown rendering will go here in a future update */}
             </CardContent>
           </Card>
         </TabsContent>
@@ -837,7 +841,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" disabled={!canCreateUpdateDeleteTasks}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
+              <Button size="sm" onClick={() => {}} disabled={!canCreateUpdateDeleteTasks}><PlusCircle className="mr-2 h-4 w-4"/> Add Document</Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -871,7 +875,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {canManageProjectSettings && <Button size="sm" ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {canManageProjectSettings && <Button size="sm" onClick={() => {}} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
             </CardHeader>
             <CardContent>
               {projectAnnouncements.length > 0 ? projectAnnouncements.map(ann => (
@@ -1072,4 +1076,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
