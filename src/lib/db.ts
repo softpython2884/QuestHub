@@ -1,22 +1,27 @@
+'use server';
+
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
 import type { User, UserRole } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import fs from 'fs'; // Import the fs module
 
 let db: Database | null = null;
 
-const DB_PATH = path.join(process.cwd(), 'db', 'nationquest_hub.db');
+const DB_DIR = path.join(process.cwd(), 'db');
+const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
 export async function getDbConnection() {
   if (db) {
     return db;
   }
-  
-  // Ensure the db directory exists, Next.js might run this in different contexts
-  // For server components/actions, process.cwd() should be project root.
-  // For client-side, this won't run directly, but API routes/server actions would.
+
+  // Ensure the db directory exists
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+  }
   
   db = await open({
     filename: DB_PATH,
@@ -35,11 +40,10 @@ export async function getDbConnection() {
     );
   `);
   
-  // Add a default admin user if one doesn't exist
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@nationquest.com');
   if (!adminUser) {
     const defaultAdminUUID = uuidv4();
-    const defaultAdminPassword = await bcrypt.hash('adminpassword', 10); // Use a secure password in a real app
+    const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultAdminUUID,
@@ -50,7 +54,8 @@ export async function getDbConnection() {
       `https://placehold.co/100x100.png?text=AU`
     );
   }
-   const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@nationquest.com');
+
+  const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@nationquest.com');
   if (!memberUser) {
     const defaultMemberUUID = uuidv4();
     const defaultMemberPassword = await bcrypt.hash('memberpassword', 10);
@@ -64,7 +69,6 @@ export async function getDbConnection() {
       `https://placehold.co/100x100.png?text=MU`
     );
   }
-
 
   return db;
 }
@@ -111,7 +115,6 @@ export async function getUserByEmail(email: string): Promise<(User & { hashedPas
 
 export async function getUserById(id: string): Promise<User | null> {
   const connection = await getDbConnection();
-  // Assuming id is the auto-incremented integer ID
   const userRow = await connection.get<User>(
     'SELECT id, uuid, name, email, role, avatar FROM users WHERE id = ?',
     id
@@ -120,10 +123,10 @@ export async function getUserById(id: string): Promise<User | null> {
   return { ...userRow, id: userRow.id.toString() };
 }
 
-export async function getUserByUuid(uuid: string): Promise<User | null> {
+export async function getUserByUuid(uuid: string): Promise<(User & { hashedPassword?: string }) | null> {
   const connection = await getDbConnection();
-  const userRow = await connection.get<User>(
-    'SELECT id, uuid, name, email, role, avatar FROM users WHERE uuid = ?',
+  const userRow = await connection.get<(User & { hashedPassword?: string })>(
+    'SELECT id, uuid, name, email, hashedPassword, role, avatar FROM users WHERE uuid = ?',
     uuid
   );
   if (!userRow) return null;
@@ -134,7 +137,6 @@ export async function getUserByUuid(uuid: string): Promise<User | null> {
 export async function updateUserProfile(uuid: string, name: string, email: string): Promise<User | null> {
   const connection = await getDbConnection();
   
-  // Check if email is already taken by another user
   const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', email, uuid);
   if (existingUserWithEmail) {
     throw new Error('Email is already in use by another account.');
@@ -151,5 +153,11 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
     throw new Error('User not found or no changes made.');
   }
   
-  return getUserByUuid(uuid);
+  // Fetch the updated user, excluding the hashedPassword
+  const updatedUser = await connection.get<User>(
+    'SELECT id, uuid, name, email, role, avatar FROM users WHERE uuid = ?',
+    uuid
+  );
+  if (!updatedUser) return null;
+  return { ...updatedUser, id: updatedUser.id.toString() };
 }
