@@ -1,13 +1,13 @@
 
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -47,8 +47,8 @@ import {
   type ToggleTaskPinState,
   createProjectTagAction,
   type CreateProjectTagFormState,
-  fetchDocumentsAction, // Keep fetchDocumentsAction
-  deleteDocumentAction, // Keep deleteDocumentAction
+  fetchDocumentsAction,
+  deleteDocumentAction,
   type DeleteDocumentFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
@@ -107,12 +107,12 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[2] !== undefined) {
-      return `** ${matchChecked[2].trim()}`;
+    if (matchChecked && matchChecked[1] !== undefined) {
+      return `** ${matchChecked[1].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[2] !== undefined) {
-      return `* ${matchUnchecked[2].trim()}`;
+    if (matchUnchecked && matchUnchecked[1] !== undefined) {
+      return `* ${matchUnchecked[1].trim()}`;
     }
     return trimmedLine; 
   }).join('\n');
@@ -137,6 +137,7 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const projectUuid = params.id as string;
 
@@ -167,9 +168,6 @@ export default function ProjectDetailPage() {
 
   const [projectReadmeContent, setProjectReadmeContent] = useState('');
 
-  const [newScriptName, setNewScriptName] = useState('');
-  const [newScriptContentValue, setNewScriptContent] = useState('');
-
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const lastSubmitSourceRef = useRef<'subtasks' | 'main' | null>(null);
 
@@ -186,7 +184,19 @@ export default function ProjectDetailPage() {
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
   const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
+  const [activeTab, setActiveTab] = useState('tasks');
 
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && ['tasks', 'readme', 'documents', 'announcements', 'codespace', 'settings'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    router.push(`/projects/${projectUuid}?tab=${newTab}`, { scroll: false });
+  };
 
   const editProjectForm = useForm<EditProjectFormValues>({
     resolver: zodResolver(editProjectFormSchema),
@@ -1096,13 +1106,13 @@ export default function ProjectDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="tasks" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
           <TabsTrigger value="tasks"><CheckSquare className="mr-2 h-4 w-4"/>Tasks</TabsTrigger>
           <TabsTrigger value="readme"><BookOpen className="mr-2 h-4 w-4"/>README</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="mr-2 h-4 w-4"/>Documents</TabsTrigger>
           <TabsTrigger value="announcements"><Megaphone className="mr-2 h-4 w-4"/>Announcements</TabsTrigger>
-          <TabsTrigger value="repository"><FolderGit2 className="mr-2 h-4 w-4"/>Repository</TabsTrigger>
+          <TabsTrigger value="codespace"><FolderGit2 className="mr-2 h-4 w-4"/>CodeSpace</TabsTrigger>
           <TabsTrigger value="settings"><Users className="mr-2 h-4 w-4"/>Team & Settings</TabsTrigger>
         </TabsList>
 
@@ -1516,7 +1526,7 @@ export default function ProjectDetailPage() {
                           </p>
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0 self-end sm:self-center">
-                           {canManageDocuments && (doc.fileType === 'markdown' || doc.fileType === 'txt' || doc.fileType === 'html') && (
+                           {canManageDocuments && (doc.fileType === 'markdown') && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Document" asChild>
                               <Link href={`/projects/${projectUuid}/documents/${doc.uuid}/edit`}>
                                 <Edit3 className="h-4 w-4" />
@@ -1616,45 +1626,20 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="repository" className="mt-4">
+        <TabsContent value="codespace" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Project Repository & Scripts</CardTitle>
-              <CardDescription>Manage simple scripts and code snippets for this project.</CardDescription>
+              <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace</CardTitle>
+              <CardDescription>Manage your project's code snippets, scripts, and version control links.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="border p-4 rounded-md">
-                <h4 className="font-semibold mb-2 text-lg">Add New Script</h4>
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="script-name">Script Name</Label>
-                    <Input
-                      id="script-name"
-                      placeholder="e.g., deployment_script.sh, data_analysis.py"
-                      value={newScriptName}
-                      onChange={(e) => setNewScriptName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="script-content">Script Content</Label>
-                    <Textarea
-                      id="script-content"
-                      placeholder="Paste or write your script content here..."
-                      value={newScriptContentValue}
-                      onChange={(e) => setNewScriptContent(e.target.value)}
-                      rows={8}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-                  <Button disabled>
-                    <UploadCloud className="mr-2 h-4 w-4"/> Add Script to Repository
-                  </Button>
-                </div>
-              </div>
-              <div className="border p-4 rounded-md text-center text-muted-foreground">
-                <FolderGit2 className="mx-auto h-12 w-12 mb-3" />
-                <p>Currently, you can add script names and their content.</p>
-                <p className="text-xs mt-1">Full Git integration, tags, status, type, and notes for scripts are larger features planned for future updates.</p>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <Code2 className="mx-auto h-12 w-12 mb-4" />
+                <h3 className="text-lg font-medium">CodeSpace is Coming Soon!</h3>
+                <p className="mt-1 text-sm">
+                  This area will allow you to link to repositories, manage small scripts,
+                  and keep track of code-related assets for your project.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1901,4 +1886,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
