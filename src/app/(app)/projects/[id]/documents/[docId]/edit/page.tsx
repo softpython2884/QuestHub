@@ -5,10 +5,10 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { fetchDocumentAction, updateDocumentAction, fetchProjectMemberRoleAction, fetchProjectAction } from '../../../actions'; // Adjusted path
+import { fetchDocumentAction, updateDocumentAction, fetchProjectMemberRoleAction, fetchProjectAction } from '../../../actions'; 
 import { useEffect, useState } from 'react';
 import type { ProjectDocumentType, Project } from '@/types';
-import { Loader2, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function EditDocumentPage() {
@@ -80,34 +80,6 @@ export default function EditDocumentPage() {
   }, [user, authLoading, projectUuid, documentUuid, router, toast]);
 
 
-  const handleSave = async (title: string, content: string) => {
-    if (!user || !projectUuid || !documentUuid || !document) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Context not properly loaded.' });
-      return { error: 'Context not properly loaded.' };
-    }
-
-    const formData = new FormData();
-    formData.append('documentUuid', documentUuid);
-    formData.append('projectUuid', projectUuid); // for permission check in action
-    formData.append('title', title);
-    formData.append('content', content);
-    // fileType is not needed for update as we only edit markdown here
-
-    // @ts-ignore TODO: Fix type for prevState if useActionState is used here later
-    const result = await updateDocumentAction(null, formData);
-
-    if (result.error) {
-      toast({ variant: 'destructive', title: 'Error Updating Document', description: result.error });
-      return { error: result.error };
-    }
-    if (result.updatedDocument) {
-      toast({ title: 'Success!', description: `Document "${result.updatedDocument.title}" updated.` });
-      router.push(`/projects/${projectUuid}?tab=documents`);
-       return {}; // Success
-    }
-    return { error: 'Unknown error updating document.'}; // Should not happen
-  };
-
   const handleCancel = () => {
     router.push(`/projects/${projectUuid}?tab=documents`);
   };
@@ -159,7 +131,7 @@ export default function EditDocumentPage() {
         </Button>
       <DocumentEditor
         projectUuid={projectUuid}
-        document={document} // Pass existing document for editing
+        document={document} 
         onSaveSuccess={(docUuid) => router.push(`/projects/${projectUuid}?tab=documents`)}
         onCancel={handleCancel}
       />

@@ -26,7 +26,7 @@ import {
   getDocumentsForProject as dbGetDocumentsForProject,
   updateDocumentContent as dbUpdateDocumentContent,
   deleteDocument as dbDeleteDocument,
-  getDocumentByUuid as dbGetDocumentByUuid, // Import for fetching document
+  getDocumentByUuid as dbGetDocumentByUuid,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -698,22 +698,26 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
 
 // Document Actions
 
-// Fetches a single document - useful for the edit page
+export async function fetchProjectMemberRoleAction(
+  projectUuid: string,
+  userUuid: string
+): Promise<{ role: ProjectMemberRole | null; error?: string }> {
+  if (!projectUuid || !userUuid) {
+    return { role: null, error: "Project UUID and User UUID are required." };
+  }
+  try {
+    const role = await dbGetProjectMemberRole(projectUuid, userUuid);
+    return { role };
+  } catch (error: any) {
+    console.error("Failed to fetch project member role:", error);
+    return { role: null, error: "Failed to fetch project member role." };
+  }
+}
+
 export async function fetchDocumentAction(documentUuid: string | undefined): Promise<ProjectDocumentType | null> {
     if (!documentUuid) return null;
     try {
         const doc = await dbGetDocumentByUuid(documentUuid);
-        // Add permission check: user must be member of project this document belongs to
-        // This might involve fetching the project, then members, then checking.
-        // For now, assuming if they have the docUuid, they might have access.
-        // Proper permission check would be:
-        // const session = await auth();
-        // if (!session?.user?.uuid) return null;
-        // const project = await dbGetProjectByUuid(doc.projectUuid);
-        // if (project.isPrivate) {
-        //   const role = await dbGetProjectMemberRole(doc.projectUuid, session.user.uuid);
-        //   if (!role) return null; // Not a member of private project
-        // }
         return doc;
     } catch (error) {
         console.error("Failed to fetch document:", error);
@@ -733,9 +737,6 @@ const CreateDocumentSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   content: z.string().optional(),
-  // fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other'] as [ProjectDocumentType['fileType'], ...ProjectDocumentType['fileType'][]]), // Default to markdown for now
-  // filePath: z.string().optional(), 
-  // fileName: z.string().optional(), 
 });
 
 export async function createDocumentAction(prevState: CreateDocumentFormState, formData: FormData): Promise<CreateDocumentFormState> {
@@ -746,9 +747,6 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
     content: formData.get('content') || '',
-    // fileType: formData.get('fileType'), // Removed for now, default to markdown
-    // filePath: formData.get('filePath'),
-    // fileName: formData.get('fileName'),
   });
 
   if (!validatedFields.success) {
@@ -765,9 +763,8 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
     const createdDocument = await dbCreateDocument({
       projectUuid,
       title,
-      content: content, // For Markdown, content is directly from form
-      fileType: 'markdown', // Hardcoded to markdown for this dedicated editor
-      // filePath: undefined, // Not handling file uploads in this simplified editor yet
+      content: content, 
+      fileType: 'markdown', 
       createdByUuid: session.user.uuid,
     });
     return { message: "Document created successfully!", createdDocument };
@@ -797,10 +794,9 @@ export interface UpdateDocumentFormState {
 
 const UpdateDocumentSchema = z.object({
   documentUuid: z.string().uuid("Invalid document UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."), // For permission check
+  projectUuid: z.string().uuid("Invalid project UUID."), 
   title: z.string().min(1, "Title is required.").max(255),
   content: z.string().optional(),
-  // fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other']), // Removed for now, only markdown editable here
 });
 
 
@@ -813,7 +809,6 @@ export async function updateDocumentAction(prevState: UpdateDocumentFormState, f
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
     content: formData.get('content') || '',
-    // fileType: formData.get('fileType'), // Assume markdown
   });
 
   if (!validatedFields.success) {
@@ -832,13 +827,10 @@ export async function updateDocumentAction(prevState: UpdateDocumentFormState, f
         return { error: "Document not found." };
     }
     if (docToUpdate.fileType !== 'markdown') {
-        // For now, only allow editing content of markdown files via this action
-        // Title can be updated for any, but content editing is specific to markdown here
-        const updatedDoc = await dbUpdateDocumentContent(documentUuid, title, undefined /* no content change for non-markdown */);
+        const updatedDoc = await dbUpdateDocumentContent(documentUuid, title, undefined);
         if (!updatedDoc) return { error: "Failed to update document title." };
         return { message: "Document title updated successfully!", updatedDocument: updatedDoc };
     }
-
 
     const updatedDocument = await dbUpdateDocumentContent(documentUuid, title, content);
     if (!updatedDocument) {
@@ -884,4 +876,3 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
         return { error: error.message || "An unexpected error occurred." };
     }
 }
-

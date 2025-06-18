@@ -5,9 +5,8 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { createDocumentAction } from '../../actions'; // Adjusted path
+import { createDocumentAction, fetchProjectAction, fetchProjectMemberRoleAction } from '../../actions'; 
 import { useEffect, useState } from 'react';
-import { fetchProjectAction, fetchProjectMemberRoleAction } from '../../actions'; // Helper to get project member role
 import type { Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,6 @@ export default function NewDocumentPage() {
           return;
         }
         
-        // Check user role in project
         const roleResult = await fetchProjectMemberRoleAction(projectUuid, user.uuid);
 
         if (roleResult.role && ['owner', 'co-owner', 'editor'].includes(roleResult.role)) {
@@ -64,33 +62,6 @@ export default function NewDocumentPage() {
     }
   }, [user, authLoading, projectUuid, router, toast]);
 
-
-  const handleSave = async (title: string, content: string) => {
-    if (!user || !projectUuid) {
-      toast({ variant: 'destructive', title: 'Error', description: 'User or project not identified.' });
-      return { error: 'User or project not identified.' };
-    }
-
-    const formData = new FormData();
-    formData.append('projectUuid', projectUuid);
-    formData.append('title', title);
-    formData.append('content', content);
-    // fileType defaults to markdown in createDocumentAction now
-
-    // @ts-ignore TODO: Fix type for prevState if useActionState is used here later
-    const result = await createDocumentAction(null, formData); 
-
-    if (result.error) {
-      toast({ variant: 'destructive', title: 'Error Creating Document', description: result.error });
-      return { error: result.error };
-    }
-    if (result.createdDocument) {
-      toast({ title: 'Success!', description: `Document "${result.createdDocument.title}" created.` });
-      router.push(`/projects/${projectUuid}?tab=documents`); // Redirect to documents tab
-      return {}; // Success
-    }
-    return { error: 'Unknown error creating document.'}; // Should not happen
-  };
 
   const handleCancel = () => {
     router.push(`/projects/${projectUuid}?tab=documents`);
@@ -129,14 +100,6 @@ export default function NewDocumentPage() {
         projectUuid={projectUuid}
         onSaveSuccess={(docUuid) => router.push(`/projects/${projectUuid}?tab=documents`)}
         onCancel={handleCancel}
-        // Pass the new handleSave function for create
-        // The DocumentEditor component will manage its own state for title and content
-        // and call this function which then calls the server action.
-        // This simplifies DocumentEditor to not need useActionState directly for create/update.
-        // It will expect onSave prop to be something like: (title: string, content: string) => Promise<void | {error?: string}>
-        // For simplicity, I'm removing onSave from DocumentEditor and using a direct function call.
-        // The DocumentEditor will call `createDocumentAction` (or `updateDocumentAction`) via a prop.
-        // Let's refine DocumentEditor to take an `initialTitle` and `initialContent` and an `onSave` prop.
       />
     </div>
   );
