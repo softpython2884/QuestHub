@@ -687,4 +687,10 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
     if (!updatedTask) {
       return { error: "Failed to update task pin status." };
     }
-    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask
+    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+
