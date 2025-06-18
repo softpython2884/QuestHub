@@ -16,14 +16,17 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
   onContentChange,
   disabled = false,
 }) => {
+  // Internal state to manage lines for optimistic UI updates
   const [lines, setLines] = useState<string[]>(initialContent.split('\n'));
 
-  // Sync with external changes to content
+  // Sync with external changes to content (e.g., after saving via dialog)
   useEffect(() => {
     setLines(initialContent.split('\n'));
   }, [initialContent]);
 
   const handleToggle = useCallback((lineIndex: number) => {
+    if (disabled) return;
+
     const newLines = [...lines];
     const currentLine = newLines[lineIndex];
     let updatedLine = currentLine;
@@ -38,8 +41,8 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
     
     newLines[lineIndex] = updatedLine;
     setLines(newLines); // Optimistic UI update
-    onContentChange(newLines.join('\n')); // Propagate change for server save
-  }, [lines, onContentChange]);
+    onContentChange(newLines.join('\n')); // Propagate change for server save (will be debounced by parent)
+  }, [lines, onContentChange, disabled]);
 
 
   let taskItemCounter = 0;
@@ -60,7 +63,7 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
               <Checkbox
                 id={itemId}
                 checked={true}
-                onCheckedChange={() => !disabled && handleToggle(index)}
+                onCheckedChange={() => handleToggle(index)}
                 className="mr-2 mt-1 shrink-0"
                 disabled={disabled}
                 aria-label={`Sub-task: ${text}, checked`}
@@ -70,9 +73,9 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
                 className={cn(
                   "flex-grow text-sm text-muted-foreground",
                   !disabled && "cursor-pointer",
-                  "line-through" // Strikethrough for checked items
+                  "line-through" 
                 )}
-                onClick={() => !disabled && handleToggle(index)} // Allow clicking label
+                onClick={() => handleToggle(index)} 
               >
                 {text}
               </label>
@@ -88,7 +91,7 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
               <Checkbox
                 id={itemId}
                 checked={false}
-                onCheckedChange={() => !disabled && handleToggle(index)}
+                onCheckedChange={() => handleToggle(index)}
                 className="mr-2 mt-1 shrink-0"
                 disabled={disabled}
                 aria-label={`Sub-task: ${text}, not checked`}
@@ -99,23 +102,21 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
                   "flex-grow text-sm text-muted-foreground",
                   !disabled && "cursor-pointer"
                 )}
-                onClick={() => !disabled && handleToggle(index)} // Allow clicking label
+                onClick={() => handleToggle(index)} 
               >
                 {text}
               </label>
             </div>
           );
         }
-        // Render non-task lines as plain text (though ideally, todoListMarkdown should only contain task items)
-        // Ensure to only render if line is not empty, to avoid extra spacing for empty lines from split
+        
         if (line.trim() !== '') {
             return (
               <span key={`${index}-text`} className="block text-sm text-muted-foreground">{line}</span>
             );
         }
-        return null; // Return null for empty lines to avoid rendering anything
+        return null; 
       })}
     </div>
   );
 };
-
