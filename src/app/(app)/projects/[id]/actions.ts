@@ -81,9 +81,9 @@ export async function updateProjectAction(
     if (!project) return { error: "Project not found." };
 
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-     console.log(`[updateProjectAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[updateProjectAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
-        return { error: `You do not have permission to edit this project. Your role: ${userRole || 'not a member'}.` };
+        return { error: `You do not have permission to edit this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
     const updatedProject = await dbUpdateProjectDetails(projectUuid, name, description || undefined);
@@ -121,7 +121,7 @@ export async function inviteUserToProjectAction(
     console.error("[inviteUserToProjectAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-  console.log("[inviteUserToProjectAction] Authenticated user:", session.user.uuid);
+  console.log("[inviteUserToProjectAction] Authenticated user for permission check:", session.user.uuid);
 
   const validatedFields = InviteUserSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
@@ -142,9 +142,9 @@ export async function inviteUserToProjectAction(
     if (!project) return { error: "Project not found." };
 
     const inviterRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[inviteUserToProjectAction] Inviter role for project ${projectUuid} (user ${session.user.uuid}): ${inviterRole}`);
+    console.log(`[inviteUserToProjectAction] Inviter role check for project ${projectUuid} (user ${session.user.uuid}): ${inviterRole}`);
      if (!inviterRole || !['owner', 'co-owner'].includes(inviterRole)) {
-      return { error: `You do not have permission to invite users to this project. Your role: ${inviterRole || 'not a member'}.` };
+      return { error: `You do not have permission to invite users to this project. Your role: ${inviterRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
     const userToInvite = await dbGetUserByEmail(email);
@@ -193,7 +193,7 @@ export async function removeUserFromProjectAction(projectUuid: string, userUuidT
       console.error("[removeUserFromProjectAction] Authentication required. No session user UUID.");
       return { error: "Authentication required." };
     }
-     console.log("[removeUserFromProjectAction] Authenticated user:", session.user.uuid);
+     console.log("[removeUserFromProjectAction] Authenticated user for permission check:", session.user.uuid);
 
 
     if (!projectUuid || !userUuidToRemove) {
@@ -204,9 +204,9 @@ export async function removeUserFromProjectAction(projectUuid: string, userUuidT
         if (!project) return { error: "Project not found." };
 
         const removerRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-        console.log(`[removeUserFromProjectAction] Remover role for project ${projectUuid} (user ${session.user.uuid}): ${removerRole}`);
+        console.log(`[removeUserFromProjectAction] Remover role check for project ${projectUuid} (user ${session.user.uuid}): ${removerRole}`);
         if (!removerRole || !['owner', 'co-owner'].includes(removerRole)) {
-            return { error: `You do not have permission to remove users from this project. Your role: ${removerRole || 'not a member'}.` };
+            return { error: `You do not have permission to remove users from this project. Your role: ${removerRole || 'not a member'}. UUID: ${session.user.uuid}` };
         }
         if (project.ownerUuid === userUuidToRemove) {
             return { error: "Project owner cannot be removed. Transfer ownership first." };
@@ -230,9 +230,9 @@ const CreateTaskSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional(),
+  todoListMarkdown: z.string().optional().default(''), // Default to empty string
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().optional(), // Will handle empty string for "Everyone"
+  assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
   tagsString: z.string().optional(),
 });
 
@@ -249,15 +249,15 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
     console.error("[createTaskAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-   console.log("[createTaskAction] Authenticated user:", session.user.uuid);
+   console.log("[createTaskAction] Authenticated user for permission check:", session.user.uuid);
 
   const validatedFields = CreateTaskSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description'),
-    todoListMarkdown: formData.get('todoListMarkdown'),
+    description: formData.get('description') || '', // Ensure string if null
+    todoListMarkdown: formData.get('todoListMarkdown') || '', // Ensure string if null
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid'), // Can be empty string
+    assigneeUuid: formData.get('assigneeUuid') || '', // Handle empty string for "Everyone"
     tagsString: formData.get('tagsString'),
   });
 
@@ -269,28 +269,22 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
   const { projectUuid, title, description, todoListMarkdown, status, assigneeUuid: rawAssigneeUuid, tagsString } = validatedFields.data;
 
   let finalAssigneeUuid: string | null = null;
-  if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') { // Check UNASSIGNED_VALUE too
-    const uuidValidation = z.string().uuid().safeParse(rawAssigneeUuid);
-    if (!uuidValidation.success) {
-      return { error: "Invalid Assignee UUID format.", fieldErrors: { assigneeUuid: ["Invalid UUID format for assignee."] } };
-    }
-    finalAssigneeUuid = rawAssigneeUuid;
-  } else {
-    finalAssigneeUuid = null; 
+  if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
+    finalAssigneeUuid = rawAssigneeUuid; // Already validated as UUID or empty by Zod
   }
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[createTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[createTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to create tasks in this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You do not have permission to create tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
     const taskData = {
       projectUuid,
       title,
       description: description || undefined,
-      todoListMarkdown: todoListMarkdown || undefined,
+      todoListMarkdown: todoListMarkdown || undefined, // Send undefined if empty string
       status,
       assigneeUuid: finalAssigneeUuid,
       tagsString: tagsString || undefined,
@@ -331,7 +325,7 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
      console.error("[updateTaskStatusAction] Authentication required. No session user UUID.");
      return { error: "Authentication required." };
     }
-  console.log("[updateTaskStatusAction] Authenticated user:", session.user.uuid);
+  console.log("[updateTaskStatusAction] Authenticated user for permission check:", session.user.uuid);
 
   const validatedFields = UpdateTaskStatusSchema.safeParse({
     taskUuid: formData.get('taskUuid'),
@@ -346,9 +340,9 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[updateTaskStatusAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[updateTaskStatusAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole) { 
-      return { error: `You are not a member of this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You are not a member of this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
     const updatedTask = await dbUpdateTaskStatus(taskUuid, status);
@@ -367,9 +361,9 @@ const UpdateTaskSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional(),
+  todoListMarkdown: z.string().optional().default(''), // Default to empty string
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().optional(),
+  assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
   tagsString: z.string().optional(),
 });
 
@@ -386,17 +380,17 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     console.error("[updateTaskAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-   console.log("[updateTaskAction] Authenticated user:", session.user.uuid);
+   console.log("[updateTaskAction] Authenticated user for permission check:", session.user.uuid);
 
 
   const validatedFields = UpdateTaskSchema.safeParse({
     taskUuid: formData.get('taskUuid'),
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description'),
-    todoListMarkdown: formData.get('todoListMarkdown'),
+    description: formData.get('description') || '', // Ensure string if null
+    todoListMarkdown: formData.get('todoListMarkdown') || '', // Ensure string if null
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid'),
+    assigneeUuid: formData.get('assigneeUuid') || '', // Handle empty string
     tagsString: formData.get('tagsString'),
   });
 
@@ -409,23 +403,17 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
   
   let finalAssigneeUuid: string | null = null;
     if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
-    const uuidValidation = z.string().uuid().safeParse(rawAssigneeUuid);
-    if (!uuidValidation.success) {
-      return { error: "Invalid Assignee UUID format.", fieldErrors: { assigneeUuid: ["Invalid UUID format for assignee."] } };
-    }
-    finalAssigneeUuid = rawAssigneeUuid;
-  } else {
-    finalAssigneeUuid = null; 
+        finalAssigneeUuid = rawAssigneeUuid; // Already validated by Zod
   }
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[updateTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[updateTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
     
-    const taskData: Partial<Task> & { tagsString?: string } = {};
+    const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
     if (formData.has('title')) taskData.title = title;
     if (formData.has('description')) taskData.description = description || undefined;
     if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined;
@@ -456,7 +444,7 @@ export async function deleteTaskAction(prevState: DeleteTaskFormState, formData:
       console.error("[deleteTaskAction] Authentication required. No session user UUID.");
       return { error: "Authentication required." };
     }
-    console.log("[deleteTaskAction] Authenticated user:", session.user.uuid);
+    console.log("[deleteTaskAction] Authenticated user for permission check:", session.user.uuid);
 
     const taskUuid = formData.get('taskUuid') as string;
     const projectUuid = formData.get('projectUuid') as string;
@@ -467,9 +455,9 @@ export async function deleteTaskAction(prevState: DeleteTaskFormState, formData:
     
     try {
         const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-        console.log(`[deleteTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+        console.log(`[deleteTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
         if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-            return { error: `You do not have permission to delete tasks in this project. Your role: ${userRole || 'not a member'}.` };
+            return { error: `You do not have permission to delete tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
         }
         const success = await dbDeleteTask(taskUuid);
         if (success) {
@@ -507,7 +495,7 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
     console.error("[saveProjectReadmeAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-  console.log("[saveProjectReadmeAction] Authenticated user:", session.user.uuid);
+  console.log("[saveProjectReadmeAction] Authenticated user for permission check:", session.user.uuid);
 
 
   const projectUuid = formData.get('projectUuid') as string;
@@ -519,9 +507,9 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[saveProjectReadmeAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[saveProjectReadmeAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to edit the README for this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You do not have permission to edit the README for this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
     const updatedProject = await dbUpdateProjectReadme(projectUuid, readmeContent);
     if (!updatedProject) {
@@ -546,7 +534,7 @@ export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgency
     console.error("[toggleProjectUrgencyAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-   console.log("[toggleProjectUrgencyAction] Authenticated user:", session.user.uuid);
+   console.log("[toggleProjectUrgencyAction] Authenticated user for permission check:", session.user.uuid);
 
   const projectUuid = formData.get('projectUuid') as string;
   const isUrgent = formData.get('isUrgent') === 'true';
@@ -556,9 +544,9 @@ export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgency
   }
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[toggleProjectUrgencyAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[toggleProjectUrgencyAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
      if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
-      return { error: `You do not have permission to change urgency for this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You do not have permission to change urgency for this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
     const updatedProject = await dbUpdateProjectUrgency(projectUuid, isUrgent);
     if (!updatedProject) {
@@ -582,7 +570,7 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
     console.error("[toggleProjectVisibilityAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-  console.log("[toggleProjectVisibilityAction] Authenticated user:", session.user.uuid);
+  console.log("[toggleProjectVisibilityAction] Authenticated user for permission check:", session.user.uuid);
 
   const projectUuid = formData.get('projectUuid') as string;
   const isPrivate = formData.get('isPrivate') === 'true';
@@ -592,11 +580,11 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
   }
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    const globalUser = await dbGetUserByUuid(session.user.uuid); // Fetch full user details for global role check
-    console.log(`[toggleProjectVisibilityAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}, Global role: ${globalUser?.role}`);
+    const globalUser = await dbGetUserByUuid(session.user.uuid); 
+    console.log(`[toggleProjectVisibilityAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}, Global role: ${globalUser?.role}`);
 
     if (userRole !== 'owner' && globalUser?.role !== 'admin') { 
-      return { error: `Only project owners or admins can change project visibility. Your project role: ${userRole || 'not a member'}, global role: ${globalUser?.role || 'unknown'}.` };
+      return { error: `Only project owners or admins can change project visibility. Your project role: ${userRole || 'not a member'}, global role: ${globalUser?.role || 'unknown'}. UUID: ${session.user.uuid}` };
     }
     const updatedProject = await dbUpdateProjectVisibility(projectUuid, isPrivate);
     if (!updatedProject) {
@@ -621,7 +609,7 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
     console.error("[toggleTaskPinAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-   console.log("[toggleTaskPinAction] Authenticated user:", session.user.uuid);
+   console.log("[toggleTaskPinAction] Authenticated user for permission check:", session.user.uuid);
 
 
   const taskUuid = formData.get('taskUuid') as string;
@@ -634,9 +622,9 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[toggleTaskPinAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[toggleTaskPinAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to pin/unpin tasks in this project. Your role: ${userRole || 'not a member'}.` };
+      return { error: `You do not have permission to pin/unpin tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
     const updatedTask = await dbToggleTaskPinStatus(taskUuid, isPinned);

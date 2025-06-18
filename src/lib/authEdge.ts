@@ -1,57 +1,80 @@
 
-// IMPORTANT: This file is intended for usage in Edge Functions or Server Components
-// where direct session management (e.g., from cookies) might occur.
-// For this mock setup, it will simulate getting a user.
-// In a real app, this would involve actual session validation.
-
 import type { User } from '@/types';
 import { getUserByUuid } from './db';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
 
-// (global as any).MOCK_CURRENT_USER_UUID is now expected to be set by authService.ts
-// and read here. We no longer initialize it in this file.
+const JWT_SECRET = process.env.JWT_SECRET;
+const AUTH_COOKIE_NAME = 'nqh_auth_token';
 
 interface Session {
   user?: {
-    uuid?: string;
-    name?: string;
-    email?: string;
-    // Add other relevant user fields from your User type
+    uuid: string;
+    name: string;
+    email: string;
+    role: User['role'];
   };
-  // other session data like expires, accessToken etc.
+}
+
+interface DecodedToken {
+  uuid: string;
+  role: User['role'];
+  email: string;
+  name: string;
+  iat: number;
+  exp: number;
 }
 
 export async function auth(): Promise<Session | null> {
-  // Explicitly check if global is defined before trying to access its properties.
-  const mockUserUuidFromGlobal = typeof global !== 'undefined' ? (global as any).MOCK_CURRENT_USER_UUID : undefined;
-  
-  console.log('[authEdge.auth] Attempting to get session. Value of global.MOCK_CURRENT_USER_UUID is:', mockUserUuidFromGlobal);
-
-  if (mockUserUuidFromGlobal) {
-    try {
-      // console.log(`[authEdge.auth] Fetching user from DB for UUID: ${mockUserUuidFromGlobal}`);
-      const user = await getUserByUuid(mockUserUuidFromGlobal);
-      if (user) {
-        // console.log(`[authEdge.auth] User found in DB: ${user.name} (UUID: ${user.uuid}). Creating mock session.`);
-        return {
-          user: {
-            uuid: user.uuid,
-            name: user.name,
-            email: user.email,
-          },
-        };
-      } else {
-        console.warn(`[authEdge.auth] No user found in DB for UUID: ${mockUserUuidFromGlobal}. MOCK_CURRENT_USER_UUID might be stale or incorrect.`);
-      }
-    } catch (e) {
-      console.error("[authEdge.auth] Error during mock auth (getUserByUuid failed):", e);
-      return null;
-    }
-  } else {
-    console.log('[authEdge.auth] No MOCK_CURRENT_USER_UUID value found in global. User is not "logged in" for this server action.');
+  if (!JWT_SECRET) {
+    console.error("[authEdge.auth] JWT_SECRET is not defined. Authentication check will fail.");
+    return null;
   }
-  
-  // console.log('[authEdge.auth] Returning null session.');
-  return null; 
+
+  const cookieStore = cookies();
+  const tokenCookie = cookieStore.get(AUTH_COOKIE_NAME);
+
+  if (!tokenCookie?.value) {
+    // console.log('[authEdge.auth] No auth token cookie found.');
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(tokenCookie.value, JWT_SECRET) as DecodedToken;
+    // console.log('[authEdge.auth] Token decoded successfully for UUID:', decoded.uuid);
+    
+    // Optionally, re-fetch user from DB to ensure data is fresh and user still exists/is active.
+    // For higher security or if roles can change frequently, this is recommended.
+    // For this example, we'll trust the JWT payload for basic info after verification.
+    // However, for permission checks based on role, it's good to have the fresh role from DB if it can change.
+    // For now, let's directly use JWT payload and only fetch from DB if more details are needed
+    // or if we want to ensure the user wasn't deleted/disabled since token issuance.
+    // const userFromDb = await getUserByUuid(decoded.uuid);
+    // if (!userFromDb) {
+    //   console.warn(`[authEdge.auth] User ${decoded.uuid} from JWT not found in DB.`);
+    //   cookies().delete(AUTH_COOKIE_NAME); // Clear invalid cookie
+    //   return null;
+    // }
+    // const { hashedPassword, ...userToReturn } = userFromDb;
+
+
+    // Returning data directly from JWT payload for simplicity in this step
+    // In a real app, consider fetching from DB for up-to-date info, especially roles.
+    return {
+      user: {
+        uuid: decoded.uuid,
+        name: decoded.name,
+        email: decoded.email,
+        role: decoded.role,
+      },
+    };
+
+  } catch (error) {
+    console.warn('[authEdge.auth] JWT verification failed:', error instanceof Error ? error.message : error);
+    // Clear invalid or expired cookie
+    cookies().delete(AUTH_COOKIE_NAME);
+    return null;
+  }
 }
 
 // Helper to get the current user's UUID from the session
