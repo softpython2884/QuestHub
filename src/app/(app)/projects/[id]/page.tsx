@@ -31,7 +31,7 @@ import {
   createTaskAction,
   type CreateTaskFormState,
   fetchTasksAction,
-  updateTaskStatusAction, // Imported server action
+  updateTaskStatusAction,
   type UpdateTaskStatusFormState,
   updateTaskAction,
   type UpdateTaskFormState,
@@ -90,7 +90,7 @@ const taskFormSchema = z.object({
   description: z.string().optional(),
   todoListMarkdown: z.string().optional(),
   status: z.enum(taskStatuses),
-  assigneeUuid: z.string().optional(),
+  assigneeUuid: z.string().optional(), // Handles empty string for "UNASSIGNED_VALUE" and actual UUIDs
   tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -294,7 +294,7 @@ export default function ProjectDetailPage() {
     if (!isUpdateTaskStatusPending && updateTaskStatusState) {
         if (updateTaskStatusState.message && !updateTaskStatusState.error) {
             toast({ title: "Success", description: updateTaskStatusState.message });
-            loadTasks(); // Reload tasks on successful status update
+            loadTasks();
         }
         if (updateTaskStatusState.error) {
             toast({ variant: "destructive", title: "Status Update Error", description: updateTaskStatusState.error });
@@ -422,7 +422,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole;
+  const canEditTaskStatus = !!currentUserRole; // Any member can change status, refined in updateTaskStatusAction
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -455,7 +455,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    formData.append('todoListMarkdown', values.todoListMarkdown || '');
+    // todoListMarkdown is not set at creation
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -490,16 +490,15 @@ export default function ProjectDetailPage() {
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
-    // Only send todoListMarkdown and necessary identifiers to ensure only it is updated if possible
-    // However, our current updateTaskAction updates all fields present in formData.
-    // For a partial update only on todoListMarkdown, the action or db function would need specific logic.
-    // For now, we send all current fields to ensure data integrity with the current action setup.
-    formData.append('title', taskToUpdate.title);
-    formData.append('description', taskToUpdate.description || '');
     formData.append('todoListMarkdown', newTodoListMarkdown);
+    // Send only necessary fields for partial update if action supports it
+    // Or send all fields if action overwrites (current behavior)
+    formData.append('title', taskToUpdate.title);
     formData.append('status', taskToUpdate.status);
-    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || ''); // Send current assignee
-    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); // Send current tags
+    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || '');
+    formData.append('description', taskToUpdate.description || '');
+    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || '');
+
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -629,6 +628,10 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
+        // If status is somehow invalid, default to Archived or handle as an error
+        // For now, let's assume status is always one of the predefined TaskStatus values.
+        // If tasks can have an unknown status, add it to 'Archived' or a specific 'Unknown' category.
+        console.warn(`Task ${task.uuid} has an unknown status: ${task.status}. Grouping under Archived.`);
         grouped['Archived'].push(task);
       }
     });
@@ -840,7 +843,7 @@ export default function ProjectDetailPage() {
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem> <FormLabel>Sub-tasks (Checklist Format: * [ ] item)</FormLabel> <FormControl><Textarea {...field} rows={4} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            {/* todoListMarkdown field removed from create task dialog */}
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
@@ -914,8 +917,8 @@ export default function ProjectDetailPage() {
                                 </Select>
                                 {canCreateUpdateDeleteTasks && (
                                     <div className="flex mt-1 sm:mt-0">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" title={task.isPinned ? "Unpin Task" : "Pin Task"} onClick={() => handleToggleTaskPin(task.uuid, task.isPinned || false)}>
-                                            {task.isPinned ? <PinOff className="h-4 w-4 text-primary" /> : <Pin className="h-4 w-4" />}
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" title={task.isPinned ? "Unpin Task" : "Pin Task"} onClick={() => handleToggleTaskPin(task.uuid, task.isPinned || false)} disabled={isToggleTaskPinPending}>
+                                            {isToggleTaskPinPending && taskToEdit?.uuid === task.uuid ? <Loader2 className="h-4 w-4 animate-spin"/> : task.isPinned ? <PinOff className="h-4 w-4 text-primary" /> : <Pin className="h-4 w-4" />}
                                         </Button>
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
                                             <Edit3 className="h-4 w-4" />
