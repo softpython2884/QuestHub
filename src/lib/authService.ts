@@ -18,9 +18,9 @@ export const login = async (email: string, password?: string): Promise<User | nu
     const isValidPassword = await bcrypt.compare(password, userFromDb.hashedPassword);
     if (isValidPassword) {
       const { hashedPassword, ...userToReturn } = userFromDb;
-      // HACK: For mock server-side session in authEdge.ts
       if (typeof global !== 'undefined') {
         (global as any).MOCK_CURRENT_USER_UUID = userToReturn.uuid;
+        console.log('[authService.login] Set global.MOCK_CURRENT_USER_UUID to:', userToReturn.uuid);
       }
       return userToReturn;
     }
@@ -41,9 +41,9 @@ export const signup = async (name: string, email: string, password?: string, rol
     }
 
     const newUser = await dbCreateUser(name, email, password, role);
-     // HACK: For mock server-side session in authEdge.ts
     if (typeof global !== 'undefined' && newUser) {
       (global as any).MOCK_CURRENT_USER_UUID = newUser.uuid;
+      console.log('[authService.signup] Set global.MOCK_CURRENT_USER_UUID to:', newUser.uuid);
     }
     return newUser;
   } catch (error: any) {
@@ -56,9 +56,9 @@ export const signup = async (name: string, email: string, password?: string, rol
 
 export const logout = async (): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  // HACK: For mock server-side session in authEdge.ts
   if (typeof global !== 'undefined') {
     (global as any).MOCK_CURRENT_USER_UUID = null;
+    console.log('[authService.logout] Cleared global.MOCK_CURRENT_USER_UUID.');
   }
 };
 
@@ -76,17 +76,19 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
 };
 
 export const refreshCurrentUserStateFromDb = async (uuid: string): Promise<User | null> => {
+  console.log('[authService.refreshCurrentUserStateFromDb] Attempting to refresh user from DB for UUID:', uuid);
   const userFromDb = await dbGetUserByUuid(uuid);
   if (userFromDb) {
     const { hashedPassword, ...userToReturn } = userFromDb as User & { hashedPassword?: string };
-    // HACK: Ensure mock session is updated on refresh too
     if (typeof global !== 'undefined') {
         (global as any).MOCK_CURRENT_USER_UUID = userToReturn.uuid;
+        console.log('[authService.refreshCurrentUserStateFromDb] Refreshed and set global.MOCK_CURRENT_USER_UUID to:', userToReturn.uuid);
     }
     return userToReturn;
   }
   if (typeof global !== 'undefined') {
     (global as any).MOCK_CURRENT_USER_UUID = null;
+     console.log('[authService.refreshCurrentUserStateFromDb] User not found in DB for UUID, cleared global.MOCK_CURRENT_USER_UUID.');
   }
   return null;
 };

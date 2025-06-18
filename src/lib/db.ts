@@ -25,6 +25,166 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Enhancement', color: '#22C55E' }, // Bright Green
 ];
 
+const DEFAULT_PROJECT_README_CONTENT = `# 📝 Bienvenue sur FlowUp – Guide Markdown
+
+Ce document vous montre comment structurer vos fichiers \`.md\` (Markdown) dans FlowUp. Le Markdown vous permet de créer des documents lisibles, structurés et interactifs pour votre équipe (documentation, notes, wiki, README, etc.).
+
+---
+
+## 🔤 Titres et sous-titres
+
+Utilisez \`#\` pour structurer votre document :
+
+\`\`\`markdown
+# Titre principal (H1)
+## Sous-titre (H2)
+### Sous-sous-titre (H3)
+\`\`\`
+
+Exemple :
+
+# Titre H1  
+## Titre H2  
+### Titre H3
+
+---
+
+## ✍️ Style de texte
+
+\`\`\`markdown
+Texte en **gras**, *italique*, ~~barré~~.
+\`\`\`
+
+Exemple :  
+Texte en **gras**, *italique*, ~~barré~~.
+
+---
+
+## 📋 Listes
+
+### Listes à puces
+
+\`\`\`markdown
+- Élément 1
+- Élément 2
+  - Sous-élément
+\`\`\`
+
+### Listes numérotées
+
+\`\`\`markdown
+1. Étape 1
+2. Étape 2
+\`\`\`
+
+---
+
+## 📦 Blocs de code
+
+Utilisez des accents graves (\`\`\`) pour insérer du code :
+
+\`\`\`js  
+console.log('Hello FlowUp')  
+\`\`\`
+
+\`\`\`js
+console.log('Hello FlowUp')
+\`\`\`
+
+---
+
+## 🔗 Liens
+
+\`\`\`markdown
+[Nom du lien](https://www.exemple.com)
+\`\`\`
+
+Exemple :  
+[Visitez NationQuest](https://nationquest.fr)
+
+---
+
+## 🖼️ Images
+
+\`\`\`markdown
+![Texte alternatif](https://via.placeholder.com/150)
+\`\`\`
+
+Exemple :
+
+![Image de démonstration](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/130cbde8-9815-42f7-bf47-63bed996b100/dfl8gzd-983a6ce1-bb3c-49ef-a2fe-dceb5a21f60c.png/v1/fill/w_894,h_894,q_70,strp/realistic_real_life_night_fury_4k__night_fury_army_by_brawlfury_dfl8gzd-pre.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9MTI4MCIsInBhdGgiOiJcL2ZcLzEzMGNiZGU4LTk4MTUtNDJmNy1iZjQ3LTYzYmVkOTk2YjEwMFwvZGZsOGd6ZC05ODNhNmNlMS1iYjNjLTQ5ZWYtYTJmZS1kY2ViNWEyMWY2MGMucG5nIiwid2lkdGgiOiI8PTEyODAifV1dLCJhdWQiOlsidXJuOnNlcnZpY2U6aW1hZ2Uub3BlcmF0aW9ucyJdfQ.7ncNv51RbeanSB7oEtebvKNRiRsa1vAgimiU4l5dkdU)
+
+---
+
+## 🧾 Citations
+
+\`\`\`markdown
+> Ceci est une citation.
+\`\`\`
+
+> Ceci est une citation.
+
+---
+
+## ☑️ Listes de tâches
+
+\`\`\`markdown
+- [x] Étape terminée
+- [ ] Étape à faire
+\`\`\`
+
+- [x] Étape terminée  
+- [ ] Étape à faire
+
+---
+
+## 🧮 Tableaux
+
+\`\`\`markdown
+| Titre 1 | Titre 2 |
+|---------|---------|
+| Valeur 1 | Valeur 2 |
+\`\`\`
+
+Exemple :
+
+| Nom     | Rôle       |
+|---------|------------|
+| Alice   | Développeuse |
+| Bob     | Designer    |
+
+---
+
+## ⚠️ Limitations sur FlowUp
+
+Certains éléments Markdown **ne sont pas toujours pris en charge**, comme :
+
+- Le **soulignement** (\`<u>texte</u>\`)
+- Le **HTML brut**
+- Les **équations LaTeX** (\`$E = mc^2$\`)
+
+---
+
+## ✅ Bonnes pratiques
+
+- Utilisez des titres pour structurer votre document
+- Favorisez les listes pour les instructions
+- Ajoutez des liens ou images pour enrichir la lecture
+- Utilisez les blocs de code pour montrer du code ou des commandes
+
+---
+
+## 📚 Ressources
+
+- [Cheat Sheet Markdown (en anglais)](https://www.markdownguide.org/cheat-sheet/)
+- [MarkText – éditeur Markdown](https://marktext.app/)
+- [Markdown sur GitHub](https://guides.github.com/features/mastering-markdown/)
+
+---
+
+💡 **Astuce FlowUp** : Utilisez les Markdown pour créer des wikis de projet, des spécifications techniques, ou des notes de sprint !
+`;
+
 
 export async function getDbConnection() {
   if (db) {
@@ -82,6 +242,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
+      todoListMarkdown TEXT, /* For interactive checklists */
       status TEXT NOT NULL, 
       assigneeUuid TEXT,      
       dueDate TEXT,
@@ -273,7 +434,7 @@ export async function createProject(name: string, description: string | undefine
   try {
     const result = await connection.run(
       'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, '# Welcome to your new project!\n\nStart by editing this README.', false
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false
     );
 
     if (!result.lastID) {
@@ -300,7 +461,7 @@ export async function createProject(name: string, description: string | undefine
       createdAt: now,
       updatedAt: now,
       isPrivate: true,
-      readmeContent: '# Welcome to your new project!\n\nStart by editing this README.',
+      readmeContent: DEFAULT_PROJECT_README_CONTENT,
       isUrgent: false,
     };
   } catch (err) {
@@ -529,6 +690,7 @@ export async function createTask(data: {
   projectUuid: string;
   title: string;
   description?: string;
+  todoListMarkdown?: string;
   status: TaskStatus;
   assigneeUuid?: string | null;
   tagsString?: string; // Comma-separated tag names
@@ -540,8 +702,8 @@ export async function createTask(data: {
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO tasks (uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      taskUuid, data.projectUuid, data.title, data.description, data.status, data.assigneeUuid, now, now, false
+      'INSERT INTO tasks (uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      taskUuid, data.projectUuid, data.title, data.description, data.todoListMarkdown, data.status, data.assigneeUuid, now, now, false
     );
     if (!result.lastID) throw new Error('Task creation failed.');
 
@@ -550,9 +712,8 @@ export async function createTask(data: {
       for (const tagName of tagNames) {
         let tag = await getProjectTagByName(data.projectUuid, tagName);
         if (!tag) {
-          // Find if this tag name matches one of the default tags, if so use its color
           const defaultTagInfo = DEFAULT_PROJECT_TAGS.find(dt => dt.name.toLowerCase() === tagName.toLowerCase());
-          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280'; // Default gray if not a known default tag
+          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280'; 
           tag = await createProjectTag(data.projectUuid, tagName, color);
         }
         await linkTagToTask(taskUuid, tag.uuid);
@@ -572,7 +733,7 @@ export async function createTask(data: {
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
   const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName'>>(
-    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned 
+    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned 
      FROM tasks 
      WHERE uuid = ?`,
     taskUuid
@@ -592,10 +753,10 @@ export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
 export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
   const connection = await getDbConnection();
   const taskRows = await connection.all<Omit<Task, 'tags' | 'assigneeName'>[]>(
-    `SELECT uuid, projectUuid, title, description, status, assigneeUuid, createdAt, updatedAt, isPinned
+    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
      FROM tasks
      WHERE projectUuid = ?
-     ORDER BY isPinned DESC, updatedAt DESC`, // Pinned tasks first, then by update date
+     ORDER BY isPinned DESC, updatedAt DESC`, 
     projectUuid
   );
 
@@ -617,10 +778,11 @@ export async function updateTask(
   data: {
     title?: string;
     description?: string;
+    todoListMarkdown?: string;
     status?: TaskStatus;
     assigneeUuid?: string | null;
-    tagsString?: string; // Comma-separated tag names
-    isPinned?: boolean; // Added for pinning
+    tagsString?: string;
+    isPinned?: boolean; 
   }
 ): Promise<Task | null> {
   const connection = await getDbConnection();
@@ -634,11 +796,12 @@ export async function updateTask(
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
   if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description); }
+  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
   if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
   if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned); }
   
-  if (updates.length === 0 && data.tagsString === undefined) return currentTask; // No actual data change for task table other than tags
+  if (updates.length === 0 && data.tagsString === undefined) return currentTask; 
 
   await connection.run('BEGIN TRANSACTION');
   try {
@@ -701,7 +864,7 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   await connection.run('BEGIN TRANSACTION');
   try {
-    await clearTagsForTask(taskUuid); // Remove associations first
+    await clearTagsForTask(taskUuid); 
     const result = await connection.run('DELETE FROM tasks WHERE uuid = ?', taskUuid);
     await connection.run('COMMIT');
     return result.changes ? result.changes > 0 : false;
@@ -710,4 +873,3 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
     throw error;
   }
 }
-

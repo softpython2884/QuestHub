@@ -75,7 +75,7 @@ const UNASSIGNED_VALUE = "__UNASSIGNED__";
 
 const editProjectFormSchema = z.object({
   name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
-  description: z.string().max(500, {message: "Description cannot exceed 500 characters."}).optional().or(z.literal('')),
+  description: z.string().max(5000, {message: "Description cannot exceed 5000 characters."}).optional().or(z.literal('')), // Increased limit for Markdown
 });
 type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
 
@@ -88,6 +88,7 @@ type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
+  todoListMarkdown: z.string().optional(),
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(), 
   tagsString: z.string().optional().describe("Comma-separated tag names"),
@@ -101,7 +102,7 @@ export default function ProjectDetailPage() {
   const { toast } = useToast();
   const projectUuid = params.id as string;
 
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, refreshUser } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [projectOwnerName, setProjectOwnerName] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
@@ -138,7 +139,7 @@ export default function ProjectDetailPage() {
 
   const taskForm = useForm<TaskFormValues>({ 
     resolver: zodResolver(taskFormSchema),
-    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
+    defaultValues: { title: '', description: '', todoListMarkdown: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
   });
 
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
@@ -169,22 +170,24 @@ export default function ProjectDetailPage() {
         try {
             const members = await fetchProjectMembersAction(projectUuid);
             setProjectMembers(members);
-            if (currentProjectOwnerUuid) {
-                const member = members.find(m => m.userUuid === user.uuid);
-                const role = currentProjectOwnerUuid === user.uuid ? 'owner' : member?.role || null;
-                setCurrentUserRole(role);
+            let role: ProjectMemberRole | null = null;
+            if (currentProjectOwnerUuid === user.uuid) {
+                role = 'owner';
             } else {
-                const fallbackMember = members.find(m => m.userUuid === user.uuid);
-                const projectData = await fetchProjectAction(projectUuid);
-                const role = projectData?.ownerUuid === user.uuid ? 'owner' : fallbackMember?.role || null;
-                setCurrentUserRole(role);
+                const member = members.find(m => m.userUuid === user.uuid);
+                role = member?.role || null;
             }
+             if(!role && project) { // Fallback if project data is already available
+                if(project.ownerUuid === user.uuid) role = 'owner';
+            }
+            setCurrentUserRole(role);
+            console.log('[ProjectDetail] Current user role set to:', role, 'for user', user.uuid, 'on project', projectUuid);
         } catch (error) {
             console.error("Failed to load project members or determine role", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members or determine your role." });
         }
     }
-  }, [projectUuid, user, toast]);
+  }, [projectUuid, user, toast, project]); // Added project to dependencies
 
 
   const loadProjectTagsData = useCallback(async () => {
@@ -200,41 +203,46 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     const performLoadProjectData = async () => {
-        if (projectUuid && user) {
+        if (projectUuid && user && !authLoading) { // Ensure user and !authLoading
             setIsLoadingData(true);
             try {
+                console.log('[ProjectDetail] performLoadProjectData: Fetching project for UUID:', projectUuid);
                 const projectData = await fetchProjectAction(projectUuid);
-                setProject(projectData);
+                setProject(projectData); // Set project state here
+
                 if (projectData) {
+                    console.log('[ProjectDetail] performLoadProjectData: Project data fetched:', projectData.name);
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
                     setProjectReadmeContent(projectData.readmeContent || '');
+                    
                     if (projectData.ownerUuid) {
                         const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
                         setProjectOwnerName(ownerName);
-                         await loadProjectMembersAndRole(projectData.ownerUuid);
+                        await loadProjectMembersAndRole(projectData.ownerUuid); // Pass ownerUuid
                     } else {
-                        await loadProjectMembersAndRole(); 
+                         await loadProjectMembersAndRole(); // Call without ownerUuid if not available
                     }
                     await loadTasks();
                     await loadProjectTagsData();
                 } else {
+                    console.warn('[ProjectDetail] performLoadProjectData: Project not found for UUID:', projectUuid);
                     toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded."})
                     router.push('/projects');
                 }
             } catch (err) {
-                console.error("Error fetching project on client:", err);
+                console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
                 setProject(null);
                 toast({variant: "destructive", title: "Error", description: "Could not load project details."})
             } finally {
                 setIsLoadingData(false);
+                console.log('[ProjectDetail] performLoadProjectData: Finished loading data.');
             }
         } else if (!authLoading && !user) {
+            console.log('[ProjectDetail] performLoadProjectData: No user or auth still loading, redirecting to login.');
             router.push('/login');
         }
     };
-    if (projectUuid && user && !authLoading) {
       performLoadProjectData();
-    }
   }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadTasks, loadProjectTagsData, loadProjectMembersAndRole]);
 
 
@@ -245,14 +253,14 @@ export default function ProjectDetailPage() {
         setIsEditDialogOpen(false);
         if(updateProjectFormState.project) {
           setProject(updateProjectFormState.project);
-          editProjectForm.reset({ name: updateProjectFormState.project.name, description: updateProjectFormState.project.description || '' });
+          // No need to reset form here if it's derived from `project` state which is now updated
         }
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
       }
     }
-  }, [updateProjectFormState, isUpdateProjectPending, toast, editProjectForm]);
+  }, [updateProjectFormState, isUpdateProjectPending, toast]);
 
   useEffect(() => {
     if (!isInvitePending && inviteFormState) {
@@ -273,7 +281,7 @@ export default function ProjectDetailPage() {
       if (createTaskState.message && !createTaskState.error) {
         toast({ title: "Success", description: createTaskState.message });
         setIsCreateTaskDialogOpen(false);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+        taskForm.reset({ title: '', description: '', todoListMarkdown: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
         loadTasks();
       }
       if (createTaskState.error) {
@@ -293,9 +301,9 @@ export default function ProjectDetailPage() {
     if (!isUpdateTaskPending && updateTaskState) {
       if (updateTaskState.message && !updateTaskState.error) {
         toast({ title: "Success", description: updateTaskState.message });
-        setIsEditTaskDialogOpen(false);
+        if (isEditTaskDialogOpen) setIsEditTaskDialogOpen(false);
         setTaskToEdit(null);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+        taskForm.reset({ title: '', description: '', todoListMarkdown: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
         loadTasks(); 
       }
       if (updateTaskState.error) {
@@ -309,7 +317,7 @@ export default function ProjectDetailPage() {
          toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
       }
     }
-  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm]);
+  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm, isEditTaskDialogOpen]);
 
   useEffect(() => {
     if (!isDeleteTaskPending && deleteTaskState) {
@@ -325,12 +333,17 @@ export default function ProjectDetailPage() {
   }, [deleteTaskState, isDeleteTaskPending, toast, loadTasks]);
 
   useEffect(() => {
-    if (!isSaveReadmePending && saveReadmeState?.message) {
-      toast({ title: "Success", description: saveReadmeState.message });
-      if(saveReadmeState.project) setProject(saveReadmeState.project);
-    }
-    if (!isSaveReadmePending && saveReadmeState?.error) {
-      toast({ variant: "destructive", title: "README Error", description: saveReadmeState.error });
+    if (!isSaveReadmePending && saveReadmeState) {
+        if (saveReadmeState.message && !saveReadmeState.error) {
+            toast({ title: "Success", description: saveReadmeState.message });
+            if(saveReadmeState.project) {
+                setProject(saveReadmeState.project);
+                setProjectReadmeContent(saveReadmeState.project.readmeContent || '');
+            }
+        }
+        if (saveReadmeState.error) {
+            toast({ variant: "destructive", title: "README Error", description: saveReadmeState.error });
+        }
     }
   }, [saveReadmeState, isSaveReadmePending, toast]);
 
@@ -362,13 +375,21 @@ export default function ProjectDetailPage() {
     if (!isToggleTaskPinPending && toggleTaskPinState) {
         if (toggleTaskPinState.message && !toggleTaskPinState.error) {
             toast({ title: "Success", description: toggleTaskPinState.message });
-            loadTasks(); // Reload tasks to reflect pin status change
+            loadTasks(); 
         }
         if (toggleTaskPinState.error) {
             toast({ variant: "destructive", title: "Pin Error", description: toggleTaskPinState.error });
         }
     }
   }, [toggleTaskPinState, isToggleTaskPinPending, toast, loadTasks]);
+
+  // Update editProjectForm when project state changes (e.g., after successful update)
+  useEffect(() => {
+    if (project) {
+      editProjectForm.reset({ name: project.name, description: project.description || '' });
+      setProjectReadmeContent(project.readmeContent || '');
+    }
+  }, [project, editProjectForm]);
 
 
   const handleContentChange = async (content: string) => {
@@ -397,7 +418,7 @@ export default function ProjectDetailPage() {
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
   const canEditTaskStatus = !!currentUserRole; 
-  const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin'; // For project visibility
+  const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
@@ -429,6 +450,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
+    formData.append('todoListMarkdown', values.todoListMarkdown || '');
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -446,6 +468,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
+    formData.append('todoListMarkdown', values.todoListMarkdown || '');
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || ''); 
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -454,7 +477,7 @@ export default function ProjectDetailPage() {
     });
   };
 
-  const handleSubTaskDescriptionChange = async (taskUuid: string, newDescription: string) => {
+  const handleTodoListChange = async (taskUuid: string, newTodoListMarkdown: string) => {
     if (!project) return;
     const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
     if (!taskToUpdate) return;
@@ -462,9 +485,10 @@ export default function ProjectDetailPage() {
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid); 
-    formData.append('title', taskToUpdate.title); 
-    formData.append('description', newDescription); 
-    formData.append('status', taskToUpdate.status); 
+    formData.append('title', taskToUpdate.title); // Keep current title
+    formData.append('description', taskToUpdate.description || ''); // Keep current description
+    formData.append('todoListMarkdown', newTodoListMarkdown); // Update todoListMarkdown
+    formData.append('status', taskToUpdate.status); // Keep current status
     
     const currentAssigneeUuid = taskToUpdate.assigneeUuid || '';
     formData.append('assigneeUuid', currentAssigneeUuid);
@@ -474,7 +498,6 @@ export default function ProjectDetailPage() {
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
     });
-    setTasks(prevTasks => prevTasks.map(t => t.uuid === taskUuid ? {...t, description: newDescription} : t));
   };
 
 
@@ -483,6 +506,7 @@ export default function ProjectDetailPage() {
     taskForm.reset({
       title: task.title,
       description: task.description || '',
+      todoListMarkdown: task.todoListMarkdown || '',
       status: task.status,
       assigneeUuid: task.assigneeUuid || UNASSIGNED_VALUE,
       tagsString: task.tags.map(t => t.name).join(', ') || '',
@@ -509,6 +533,7 @@ export default function ProjectDetailPage() {
     formData.append('status', newStatus);
     
     ReactStartTransition(async () => {
+        // No need for intermediate state for updateTaskStatusAction if not using useActionState for it
         const result = await updateTaskStatusAction({} as UpdateTaskStatusFormState, formData);
         if (result.error) {
         toast({ variant: 'destructive', title: 'Error', description: result.error });
@@ -605,6 +630,7 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
+        // Fallback for unknown statuses, though Zod should prevent this.
         grouped['Archived'].push(task); 
       }
     });
@@ -684,7 +710,13 @@ export default function ProjectDetailPage() {
                     {project.isPrivate ? "Private" : "Public"}
                 </Badge>
               </div>
-              <CardDescription className="mt-1">{project.description || "No description provided."}</CardDescription>
+              {project.description ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none mt-1 text-muted-foreground">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{project.description}</ReactMarkdown>
+                </div>
+              ) : (
+                <CardDescription className="mt-1">No description provided.</CardDescription>
+              )}
               <div className="mt-2 flex flex-wrap gap-2">
                 {projectTags.slice(0, 5).map(tag => ( 
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white text-xs">{tag.name}</Badge>
@@ -695,14 +727,14 @@ export default function ProjectDetailPage() {
             <div className="flex gap-2 flex-shrink-0">
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!canManageProjectSettings} onClick={() => editProjectForm.reset({ name: project.name, description: project.description || '' })}>
+                  <Button variant="outline" size="sm" disabled={!canManageProjectSettings}>
                     <Edit3 className="mr-2 h-4 w-4" /> Edit
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Edit Project</DialogTitle>
-                    <DialogDescription>Update the name and description of your project.</DialogDescription>
+                    <DialogDescription>Update the name and description (Markdown supported) of your project.</DialogDescription>
                   </DialogHeader>
                   <Form {...editProjectForm}>
                     <form onSubmit={editProjectForm.handleSubmit(handleEditProjectSubmit)} className="space-y-4">
@@ -724,9 +756,9 @@ export default function ProjectDetailPage() {
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Project Description (Optional)</FormLabel>
+                            <FormLabel>Project Description (Optional, Markdown)</FormLabel>
                             <FormControl>
-                              <Textarea {...field} rows={3} />
+                              <Textarea {...field} rows={5} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -798,7 +830,7 @@ export default function ProjectDetailPage() {
               <CardTitle>Tasks ({tasks.length})</CardTitle>
                <Dialog open={isCreateTaskDialogOpen} onOpenChange={setIsCreateTaskDialogOpen}>
                 <DialogTrigger asChild>
-                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
+                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', todoListMarkdown: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                     </Button>
                 </DialogTrigger>
@@ -810,7 +842,8 @@ export default function ProjectDetailPage() {
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem> <FormLabel>Sub-tasks (Checklist Format: * [ ] item)</FormLabel> <FormControl><Textarea {...field} rows={4} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
@@ -844,10 +877,16 @@ export default function ProjectDetailPage() {
                                    <h4 className="font-semibold break-words">{task.title}</h4>
                                 </div>
                                 {task.description && (
-                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    <div className="prose prose-sm dark:prose-invert max-w-none mt-1 text-muted-foreground">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
+                                    </div>
+                                )}
+                                {task.todoListMarkdown && (
+                                  <div className="mt-2 pt-2 border-t border-dashed">
+                                    <h5 className="text-xs font-semibold text-muted-foreground mb-1">Sub-tasks:</h5>
                                     <MarkdownTaskListRenderer
-                                      content={task.description}
-                                      onContentChange={(newDescription) => handleSubTaskDescriptionChange(task.uuid, newDescription)}
+                                      content={task.todoListMarkdown}
+                                      onContentChange={(newTodoListMarkdown) => handleTodoListChange(task.uuid, newTodoListMarkdown)}
                                       disabled={!canCreateUpdateDeleteTasks}
                                       />
                                   </div>
@@ -934,7 +973,8 @@ export default function ProjectDetailPage() {
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported for sub-tasks)</FormLabel> <FormControl><Textarea {...field} rows={5} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem> <FormLabel>Sub-tasks (Checklist Format: * [ ] item)</FormLabel> <FormControl><Textarea {...field} rows={4} placeholder="* [ ] Sub-task 1&#x0a;* [x] Sub-task 2 (completed)" /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
@@ -1255,4 +1295,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-

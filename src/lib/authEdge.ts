@@ -13,6 +13,7 @@ import { getUserByUuid } from './db';
 if (typeof global !== 'undefined') {
   if (!(global as any).MOCK_CURRENT_USER_UUID) {
     (global as any).MOCK_CURRENT_USER_UUID = null;
+    console.log('[authEdge] Initialized global.MOCK_CURRENT_USER_UUID to null');
   }
 }
 
@@ -27,15 +28,15 @@ interface Session {
 }
 
 export async function auth(): Promise<Session | null> {
-  const mockUserUuid = typeof global !== 'undefined' ? (global as any).MOCK_CURRENT_USER_UUID : null;
-  console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global:', mockUserUuid);
+  const mockUserUuidFromGlobal = typeof global !== 'undefined' ? (global as any).MOCK_CURRENT_USER_UUID : null;
+  console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global:', mockUserUuidFromGlobal);
 
-  if (mockUserUuid) {
+  if (mockUserUuidFromGlobal) {
     try {
-      console.log(`[authEdge] Fetching user from DB for UUID: ${mockUserUuid}`);
-      const user = await getUserByUuid(mockUserUuid);
+      console.log(`[authEdge] Fetching user from DB for UUID: ${mockUserUuidFromGlobal}`);
+      const user = await getUserByUuid(mockUserUuidFromGlobal);
       if (user) {
-        console.log(`[authEdge] User found in DB: ${user.name} (UUID: ${user.uuid})`);
+        console.log(`[authEdge] User found in DB: ${user.name} (UUID: ${user.uuid}). Creating mock session.`);
         return {
           user: {
             uuid: user.uuid,
@@ -44,7 +45,10 @@ export async function auth(): Promise<Session | null> {
           },
         };
       } else {
-        console.log(`[authEdge] No user found in DB for UUID: ${mockUserUuid}. MOCK_CURRENT_USER_UUID might be stale or incorrect.`);
+        console.log(`[authEdge] No user found in DB for UUID: ${mockUserUuidFromGlobal}. MOCK_CURRENT_USER_UUID might be stale or incorrect. Clearing it.`);
+        if (typeof global !== 'undefined') {
+            (global as any).MOCK_CURRENT_USER_UUID = null;
+        }
       }
     } catch (e) {
       console.error("[authEdge] Error during mock auth (getUserByUuid failed):", e);

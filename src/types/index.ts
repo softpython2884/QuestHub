@@ -22,7 +22,8 @@ export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Archived';
 export interface Task {
   uuid: string;
   title: string;
-  description?: string;
+  description?: string; // General Markdown description
+  todoListMarkdown?: string; // Markdown for interactive checklist
   status: TaskStatus;
   assigneeUuid?: string | null; // User UUID - null if unassigned or for "everyone"
   assigneeName?: string | null; // For display purposes
@@ -77,4 +78,3 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
-

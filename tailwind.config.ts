@@ -94,7 +94,7 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
       typography: ({ theme }: { theme: any }) => ({
-        DEFAULT: {
+        DEFAULT: { // Light theme prose
           css: {
             '--tw-prose-body': theme('colors.foreground / 1'),
             '--tw-prose-headings': theme('colors.foreground / 1'),
@@ -107,22 +107,33 @@ export default {
             '--tw-prose-quotes': theme('colors.foreground / 1'),
             '--tw-prose-quote-borders': theme('colors.primary.DEFAULT / 1'),
             '--tw-prose-captions': theme('colors.muted.foreground / 1'),
-            '--tw-prose-code': theme('colors.foreground / 1'),
-            '--tw-prose-pre-code': theme('colors.card.foreground / 1'),
-            '--tw-prose-pre-bg': theme('colors.card.DEFAULT / 1'),
+            '--tw-prose-code': theme('colors.foreground / 1'), // Code text color
+            '--tw-prose-pre-code': theme('colors.foreground / 1'), // Code block text color
+            '--tw-prose-pre-bg': theme('colors.muted.DEFAULT / 0.5'), // Code block background (light gray)
             '--tw-prose-th-borders': theme('colors.border / 1'),
             '--tw-prose-td-borders': theme('colors.border / 1'),
+             // Ensure list items in prose have some space
+            'ul > li::before': { backgroundColor: theme('colors.muted.foreground / 1') },
+            'ol > li::before': { color: theme('colors.muted.foreground / 1') },
+            'li': { marginTop: theme('spacing.1'), marginBottom: theme('spacing.1') },
+             // Style for task list items
+            '.task-list-item': { display: 'flex', alignItems: 'center' },
+            '.task-list-item-checkbox': { marginRight: theme('spacing.2') },
           },
         },
-        invert: {
+        invert: { // Dark theme prose
           css: {
-            '--tw-prose-body': theme('colors.foreground / 1'), // Use the same body color for dark mode text
+            '--tw-prose-body': theme('colors.foreground / 1'), 
             '--tw-prose-headings': theme('colors.foreground / 1'),
             '--tw-prose-lead': theme('colors.muted.foreground / 1'),
             '--tw-prose-links': theme('colors.primary.DEFAULT / 1'),
             '--tw-prose-bold': theme('colors.foreground / 1'),
-            '--tw-prose-pre-code': theme('colors.card.foreground / 1'), 
-            '--tw-prose-pre-bg': theme('colors.card.DEFAULT / 1'), 
+            '--tw-prose-code': theme('colors.foreground / 1'), // Code text color for dark
+            '--tw-prose-pre-code': theme('colors.foreground / 1'), // Code block text color for dark
+            '--tw-prose-pre-bg': theme('colors.secondary.DEFAULT / 0.7'), // Code block background for dark (slightly darker gray)
+            'ul > li::before': { backgroundColor: theme('colors.muted.foreground / 1') },
+            'ol > li::before': { color: theme('colors.muted.foreground / 1') },
+            'li': { marginTop: theme('spacing.1'), marginBottom: theme('spacing.1') },
           },
         },
       }),
