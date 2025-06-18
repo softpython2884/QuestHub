@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -61,7 +62,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 
 
 const mockDocuments: ProjectDocumentType[] = [
@@ -110,12 +111,12 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[1] !== undefined) {
-      return `** ${matchChecked[1].trim()}`;
+    if (matchChecked && matchChecked[2] !== undefined) { // Use group 2 for text
+      return `** ${matchChecked[2].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return `* ${matchUnchecked[1].trim()}`;
+    if (matchUnchecked && matchUnchecked[2] !== undefined) { // Use group 2 for text
+      return `* ${matchUnchecked[2].trim()}`;
     }
     return trimmedLine; 
   }).join('\n');
@@ -180,7 +181,7 @@ export default function ProjectDetailPage() {
   const [tagSuggestions, setTagSuggestions] = useState<TagType[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
-  const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null);
+  const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null); // To identify which form's tag input is active
 
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
 
@@ -404,7 +405,7 @@ export default function ProjectDetailPage() {
 
         if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
              setIsManageSubtasksDialogOpen(false); 
-             setTaskToManageSubtasks(null); // Clear the task being managed
+             setTaskToManageSubtasks(null); 
         } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
             setIsEditTaskDialogOpen(false);
             setTaskToEdit(null);
@@ -503,7 +504,7 @@ export default function ProjectDetailPage() {
         toast({ title: "Success", description: createProjectTagState.message });
         setIsAddProjectTagDialogOpen(false);
         projectTagForm.reset({ tagName: '', tagColor: '#6B7280' });
-        loadProjectTagsData(); // Reload tags for the project
+        loadProjectTagsData(); 
       }
       if (createProjectTagState.error) {
         toast({ variant: "destructive", title: "Tag Creation Error", description: createProjectTagState.error });
@@ -777,9 +778,12 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
+        // This case should ideally not happen if status is always one of the defined TaskStatus
+        // Defaulting to 'Archived' or another sensible default if status is unexpected
         grouped['Archived'].push(task); 
       }
     });
+    // Sort tasks within each status group: pinned tasks first, then by update date
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -810,13 +814,14 @@ export default function ProjectDetailPage() {
 
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
+        // Exclude tags already fully present in the input string (except the current fragment)
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
             .filter(tag => 
                 tag.name.toLowerCase().startsWith(lowerFragment) && 
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) // Check against all but the last (current) fragment
             )
-            .slice(0, 5); 
+            .slice(0, 5); // Limit to 5 suggestions
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
     } else {
@@ -832,17 +837,17 @@ export default function ProjectDetailPage() {
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name; 
+    parts[parts.length - 1] = suggestion.name; // Replace current fragment with selected tag
     
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) {
+    if (!newValue.endsWith(', ')) { // Ensure there's a comma and space for next tag
          newValue += ', ';
     }
     
-    fieldApi.onChange(newValue); 
-    setTagSuggestions([]);
-    setShowTagSuggestions(false);
-    setTimeout(() => tagInputRef.current?.focus(), 0); 
+    fieldApi.onChange(newValue); // Update form field
+    setTagSuggestions([]); // Clear suggestions
+    setShowTagSuggestions(false); // Hide popover
+    setTimeout(() => tagInputRef.current?.focus(), 0); // Re-focus input
   };
 
   const handleCreateProjectTagSubmit = async (values: ProjectTagFormValues) => {
@@ -1081,7 +1086,6 @@ export default function ProjectDetailPage() {
                                       </PopoverAnchor>
                                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Filter tags..." className="h-9" />
                                             <CommandList>
                                             <CommandEmpty>No matching tags found.</CommandEmpty>
                                             <CommandGroup>
@@ -1089,7 +1093,9 @@ export default function ProjectDetailPage() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => handleTagSuggestionClick(suggestion, field, taskForm)}
+                                                    onSelect={() => {
+                                                        handleTagSuggestionClick(suggestion, field, taskForm);
+                                                    }}
                                                     className="cursor-pointer"
                                                 >
                                                     {suggestion.name}
@@ -1150,9 +1156,14 @@ export default function ProjectDetailPage() {
                                         />
                                       </>
                                     ) : (
-                                      <p className="text-xs text-muted-foreground">
-                                        No sub-tasks defined. 
-                                      </p>
+                                        <p className="text-xs text-muted-foreground">
+                                        No sub-tasks defined.
+                                        {canCreateUpdateDeleteTasks && (
+                                            <Button variant="link" size="sm" className="h-auto p-0 ml-1 text-xs" onClick={() => openManageSubtasksDialog(task)}>
+                                                Add sub-tasks
+                                            </Button>
+                                        )}
+                                        </p>
                                     )}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1270,7 +1281,6 @@ export default function ProjectDetailPage() {
                                       </PopoverAnchor>
                                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Filter tags..." className="h-9" />
                                             <CommandList>
                                             <CommandEmpty>No matching tags found.</CommandEmpty>
                                             <CommandGroup>
@@ -1278,7 +1288,9 @@ export default function ProjectDetailPage() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => handleTagSuggestionClick(suggestion, field, taskForm)}
+                                                    onSelect={() => {
+                                                        handleTagSuggestionClick(suggestion, field, taskForm);
+                                                    }}
                                                     className="cursor-pointer"
                                                 >
                                                     {suggestion.name}
@@ -1707,4 +1719,5 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
 
