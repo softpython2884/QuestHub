@@ -92,7 +92,7 @@ const taskFormSchema = z.object({
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
-  // todoListMarkdown is not part of this form anymore, handled separately
+  // todoListMarkdown is managed separately
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
@@ -101,15 +101,18 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
+    // Match * [x] Task text
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-
-    if (matchChecked && matchChecked[1]) { // Check if group 1 (text) exists
+    if (matchChecked && matchChecked[1] !== undefined) {
       return `** ${matchChecked[1].trim()}`;
-    } else if (matchUnchecked && matchUnchecked[1]) { // Check if group 1 (text) exists
+    }
+    // Match * [ ] Task text
+    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
+    if (matchUnchecked && matchUnchecked[1] !== undefined) {
       return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine; // Preserve empty lines or lines not matching task format
+    // Preserve lines that are not task items or are empty
+    return trimmedLine;
   }).join('\n');
 };
 
@@ -117,15 +120,15 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
 const convertSubtaskInputToMarkdown = (input: string): string => {
   return input.split('\n').map(line => {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('** ')) {
+    if (trimmedLine.startsWith('** ')) { // Starts with ** (completed)
       return `* [x] ${trimmedLine.substring(3).trim()}`;
-    } else if (trimmedLine.startsWith('* ')) {
+    } else if (trimmedLine.startsWith('* ')) { // Starts with * (open)
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { // Treat non-empty, non-formatted lines as new open tasks
+    } else if (trimmedLine.length > 0) { // Non-empty line, not starting with * or ** -> treat as new open task
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; // Keep empty lines as empty lines in Markdown, or filter them
-  }).filter(line => line.trim().length > 0).join('\n'); // Filter out effectively empty lines
+    return ''; // Keep empty lines as empty, or filter them
+  }).filter(line => line.trim().length > 0).join('\n'); // Filter out lines that became empty
 };
 
 
@@ -169,6 +172,7 @@ export default function ProjectDetailPage() {
   const [newScriptContentValue, setNewScriptContent] = useState('');
 
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const lastSubmitSourceRef = useRef<'subtasks' | 'main' | null>(null);
 
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -255,26 +259,20 @@ export default function ProjectDetailPage() {
                 const projectData = await fetchProjectAction(projectUuid);
 
                 if (projectData) {
-                    let userRoleForProject: ProjectMemberRole | null = null;
-                    if (projectData.ownerUuid) {
-                        userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
-                    } else {
-                         userRoleForProject = await loadProjectMembersAndRole();
-                    }
+                    const userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
                     
-                    // Strict access control for private projects
                     if (projectData.isPrivate && !userRoleForProject) {
                         setAccessDenied(true);
-                        setProject(null); // Clear project data if access is denied
+                        setProject(null); 
                         toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
                         setIsLoadingData(false);
-                        // Optional: router.push('/projects'); // Or a dedicated access-denied page
-                        return; // Important: Stop further processing for this project
+                        // Optional: router.push('/projects'); 
+                        return; 
                     }
 
                     setProject(projectData);
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
-                    setProjectReadmeContent(projectData.readmeContent || DEFAULT_PROJECT_README_CONTENT);
+                    setProjectReadmeContent(projectData.readmeContent || '');
 
 
                     if (projectData.ownerUuid) {
@@ -370,43 +368,45 @@ export default function ProjectDetailPage() {
 
 
   useEffect(() => {
-    if (!isUpdateTaskPending && updateTaskState?.updatedTask) {
-        if (updateTaskState.message && !updateTaskState.error) {
-            toast({ title: "Success", description: updateTaskState.message });
-            loadTasks();
+    if (isUpdateTaskPending || !updateTaskState?.updatedTask) {
+      // Handle errors or no-op if still pending or no updated task
+      if (updateTaskState?.error && !isUpdateTaskPending) {
+        let errorMessage = updateTaskState.error;
+        Object.entries(updateTaskState.fieldErrors || {}).forEach(([key, value]) => {
+            if (value) {
+                errorMessage += ` ${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`;
+            }
+        });
+        toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
+      }
+      return;
+    }
 
-            if (isManageSubtasksDialogOpen && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
-                // Keep subtask dialog updated if it was the source and is still open (or meant to be)
-                setTaskToManageSubtasks(updateTaskState.updatedTask);
-                // Close the subtask dialog after successful save
-                setIsManageSubtasksDialogOpen(false);
-            }
-            else if (isEditTaskDialogOpen && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
-                 // If main edit dialog was open and for this task, close it and reset.
-                setIsEditTaskDialogOpen(false);
-                setTaskToEdit(null); // Reset taskToEdit
-                // taskForm reset is now handled by its own useEffect
-            }
-        } else if (updateTaskState.error) {
-            let errorMessage = updateTaskState.error;
-            // Add specific field errors if they exist
-            Object.entries(updateTaskState.fieldErrors || {}).forEach(([key, value]) => {
-                if (value) {
-                    errorMessage += ` ${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`;
-                }
-            });
-            toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
-        }
+    // Successful update
+    if (updateTaskState.message && !updateTaskState.error) {
+      toast({ title: "Success", description: updateTaskState.message });
+      loadTasks(); // Refresh task list on any successful task update
+
+      if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
+        setTaskToManageSubtasks(updateTaskState.updatedTask); // Update data for the (now closing) dialog
+        setIsManageSubtasksDialogOpen(false); // Close subtask dialog
+      } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
+        setIsEditTaskDialogOpen(false); // Close main edit dialog
+        setTaskToEdit(null);
+      }
+      lastSubmitSourceRef.current = null; // Reset after processing
     }
   }, [
     updateTaskState, 
     isUpdateTaskPending, 
     toast, 
     loadTasks, 
-    isManageSubtasksDialogOpen, 
     taskToManageSubtasks, 
-    isEditTaskDialogOpen, 
-    taskToEdit
+    taskToEdit,
+    setTaskToManageSubtasks,
+    setIsManageSubtasksDialogOpen,
+    setTaskToEdit,
+    setIsEditTaskDialogOpen
   ]);
   
   // useEffect to reset taskForm when taskToEdit changes for the main edit dialog
@@ -419,9 +419,6 @@ export default function ProjectDetailPage() {
         assigneeUuid: taskToEdit.assigneeUuid || UNASSIGNED_VALUE,
         tagsString: taskToEdit.tags.map(t => t.name).join(', ') || '',
       });
-    } else if (!isEditTaskDialogOpen) {
-        // Optionally reset form when dialog closes if not submitting
-        // taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
     }
   }, [isEditTaskDialogOpen, taskToEdit, taskForm]);
 
@@ -501,7 +498,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (project) {
       editProjectForm.reset({ name: project.name, description: project.description || '' });
-      setProjectReadmeContent(project.readmeContent || DEFAULT_PROJECT_README_CONTENT);
+      setProjectReadmeContent(project.readmeContent || '');
     }
   }, [project, editProjectForm]);
 
@@ -531,7 +528,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole; // Any member can change status
+  const canEditTaskStatus = !!currentUserRole; 
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -567,7 +564,6 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    // todoListMarkdown is not set at creation from this dialog
     formData.append('todoListMarkdown', ''); 
 
     ReactStartTransition(() => {
@@ -577,7 +573,7 @@ export default function ProjectDetailPage() {
 
   const handleEditTaskSubmit = async (values: TaskFormValues) => {
     if (!project || !taskToEdit) return;
-
+    lastSubmitSourceRef.current = 'main';
     const formData = new FormData();
     const finalAssigneeUuid = values.assigneeUuid === UNASSIGNED_VALUE ? '' : values.assigneeUuid;
 
@@ -585,7 +581,6 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    // todoListMarkdown is managed separately via its own dialog, pass existing
     formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || ''); 
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
@@ -599,20 +594,18 @@ export default function ProjectDetailPage() {
 
   const openManageSubtasksDialog = (task: Task) => {
     setTaskToManageSubtasks(task);
-    // setSubtaskInput is handled by useEffect watching taskToManageSubtasks & isManageSubtasksDialogOpen
     setIsManageSubtasksDialogOpen(true);
   };
 
   const handleSaveSubtasks = () => {
     if (!project || !taskToManageSubtasks) return;
+    lastSubmitSourceRef.current = 'subtasks';
     const newTodoListMarkdown = convertSubtaskInputToMarkdown(subtaskInput);
 
     const formData = new FormData();
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
-
-    // Send other required fields for validation, but only todoListMarkdown is effectively changing from this dialog
     formData.append('title', taskToManageSubtasks.title); 
     formData.append('status', taskToManageSubtasks.status); 
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
@@ -633,13 +626,12 @@ export default function ProjectDetailPage() {
     if (debounceTimers.current[taskUuid]) {
       clearTimeout(debounceTimers.current[taskUuid]);
     }
-
+    lastSubmitSourceRef.current = 'subtasks'; // Indicate source for potential state updates
     debounceTimers.current[taskUuid] = setTimeout(() => {
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
-      // Pass other required fields from the current task state for validation
       formData.append('title', taskToUpdate.title); 
       formData.append('status', taskToUpdate.status); 
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -650,12 +642,12 @@ export default function ProjectDetailPage() {
       ReactStartTransition(() => {
         updateTaskFormAction(formData);
       });
-    }, 750); // 750ms debounce
+    }, 750); 
   };
 
 
   const openEditTaskDialog = (task: Task) => {
-    setTaskToEdit(task); // This will trigger the useEffect to reset the form
+    setTaskToEdit(task); 
     setIsEditTaskDialogOpen(true);
   };
 
@@ -768,11 +760,10 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        console.warn(`Task with unknown status: ${task.status}`, task);
-        grouped['Archived'].push(task); // Default to Archived if status is somehow invalid
+        // console.warn(`Task with unknown status: ${task.status}`, task);
+        grouped['Archived'].push(task); 
       }
     });
-     // Sort tasks within each status group: pinned first, then by updatedAt descending
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -830,8 +821,8 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const projectDocuments = mockDocuments; // TODO: Replace with actual data
-  const projectAnnouncements = mockAnnouncements; // TODO: Replace with actual data
+  const projectDocuments = mockDocuments; 
+  const projectAnnouncements = mockAnnouncements; 
 
 
   return (
@@ -978,7 +969,7 @@ export default function ProjectDetailPage() {
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Create New Task</DialogTitle>
-                        <DialogDescription>Fill in the details for the new task. Sub-tasks are managed separately after creation.</DialogDescription>
+                        <DialogDescription>Fill in the details for the new task. Sub-tasks are managed separately.</DialogDescription>
                     </DialogHeader>
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
@@ -1033,11 +1024,10 @@ export default function ProjectDetailPage() {
                                         />
                                       </>
                                     ) : (
-                                       canCreateUpdateDeleteTasks && (
-                                        <p className="text-xs text-muted-foreground">
-                                          No sub-tasks defined. Click &quot;Manage Sub-tasks&quot; below to add some.
-                                        </p>
-                                      )
+                                      <p className="text-xs text-muted-foreground">
+                                        No sub-tasks defined. 
+                                        {canCreateUpdateDeleteTasks && " Click 'Manage Sub-tasks' below to add some."}
+                                      </p>
                                     )}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -1121,7 +1111,7 @@ export default function ProjectDetailPage() {
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
                     <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
-                    <DialogDescription>Update the main details for this task. Sub-tasks are managed separately.</DialogDescription>
+                    <DialogDescription>Update the main details for this task. Sub-tasks are managed separately using the "Manage Sub-tasks" button on the task card.</DialogDescription>
                 </DialogHeader>
                 {taskToEdit && (
                     <Form {...taskForm}>
@@ -1150,8 +1140,8 @@ export default function ProjectDetailPage() {
                 <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks?.title}</DialogTitle>
                 <DialogDescription>
                   Enter sub-tasks one per line.
-                  Start with `* ` for an open task (e.g. `* Design mockups`).
-                  Start with `** ` for a completed task (e.g. `** Create schema`).
+                  Start with `* ` for an open task (e.g., `* Design mockups`).
+                  Start with `** ` for a completed task (e.g., `** Create schema`).
                   Other lines will be treated as new open tasks.
                 </DialogDescription>
               </DialogHeader>
@@ -1190,7 +1180,7 @@ export default function ProjectDetailPage() {
             <CardContent>
               <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px] bg-background/30">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {projectReadmeContent || DEFAULT_PROJECT_README_CONTENT}
+                  {projectReadmeContent || ''}
                 </ReactMarkdown>
               </div>
               <Textarea
@@ -1446,7 +1436,7 @@ export default function ProjectDetailPage() {
                     </Label>
                     <Switch
                         id="project-visibility"
-                        checked={project?.isPrivate === undefined ? true : project.isPrivate} // Default to true if undefined for safety
+                        checked={project?.isPrivate === undefined ? true : project.isPrivate} 
                         onCheckedChange={handleToggleVisibility}
                         disabled={!isAdminOrOwner || isToggleVisibilityPending}
                     />
@@ -1478,5 +1468,7 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
+    
 
     
