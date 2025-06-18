@@ -2,8 +2,8 @@
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
-  id: string; // This is the auto-incremented ID from the DB
-  uuid: string; // This is the globally unique identifier
+  id: string; 
+  uuid: string; 
   email: string;
   name: string;
   role: UserRole;
@@ -22,26 +22,28 @@ export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Archived';
 export interface Task {
   uuid: string;
   title: string;
-  description?: string; // General Markdown description
-  todoListMarkdown?: string; // Markdown for interactive checklist
+  description?: string; 
+  todoListMarkdown?: string; 
   status: TaskStatus;
-  assigneeUuid?: string | null; // User UUID - null if unassigned or for "everyone"
-  assigneeName?: string | null; // For display purposes
+  assigneeUuid?: string | null; 
+  assigneeName?: string | null; 
   projectUuid: string;
-  tags: Tag[]; // Array of Tag objects
+  tags: Tag[]; 
   createdAt: string;
   updatedAt: string;
   isPinned?: boolean;
 }
 
 export interface Document {
-  id: string;
-  uuid: string;
+  id: string; // DB auto-increment ID
+  uuid: string; // Globally unique
   title: string;
-  content: string;
+  content?: string; // For markdown, txt, html
+  fileType: 'markdown' | 'txt' | 'html' | 'pdf' | 'other'; // Type of the document
+  filePath?: string; // URL or path for PDF or other uploaded files
   projectUuid: string;
+  createdByUuid: string; // UUID of the user who created/uploaded the document
   isPinned?: boolean;
-  tags: Tag[];
   createdAt: string;
   updatedAt: string;
 }

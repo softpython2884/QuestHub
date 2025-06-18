@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -16,65 +16,65 @@ const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   // Standard PM Tags
-  { name: 'Bug', color: '#EF4444' }, // Red-500
-  { name: 'Feature', color: '#3B82F6' }, // Blue-500
-  { name: 'Task', color: '#6B7280' }, // Gray-500
-  { name: 'Enhancement', color: '#22C55E' }, // Green-500
-  { name: 'Documentation', color: '#10B981' }, // Emerald-500
-  { name: 'Question', color: '#F97316' }, // Orange-500
-  { name: 'Idea', color: '#A855F7' }, // Purple-500
-  { name: 'Spike', color: '#F43F5E'}, // Rose-500
-  { name: 'User Story', color: '#93C5FD'}, // Blue-300
-  { name: 'Epic', color: '#7E22CE' }, // Purple-700
+  { name: 'Bug', color: '#EF4444' }, 
+  { name: 'Feature', color: '#3B82F6' }, 
+  { name: 'Task', color: '#6B7280' }, 
+  { name: 'Enhancement', color: '#22C55E' }, 
+  { name: 'Documentation', color: '#10B981' }, 
+  { name: 'Question', color: '#F97316' }, 
+  { name: 'Idea', color: '#A855F7' }, 
+  { name: 'Spike', color: '#F43F5E'}, 
+  { name: 'User Story', color: '#93C5FD'}, 
+  { name: 'Epic', color: '#7E22CE' }, 
 
   // Priority
-  { name: 'Urgent', color: '#DC2626' }, // Red-600
-  { name: 'High Priority', color: '#F59E0B' }, // Amber-500
-  { name: 'Medium Priority', color: '#84CC16' }, // Lime-500
-  { name: 'Low Priority', color: '#60A5FA' }, // Blue-400
+  { name: 'Urgent', color: '#DC2626' }, 
+  { name: 'High Priority', color: '#F59E0B' }, 
+  { name: 'Medium Priority', color: '#84CC16' }, 
+  { name: 'Low Priority', color: '#60A5FA' }, 
 
   // Departments/Areas
-  { name: 'Frontend', color: '#EC4899' }, // Pink-500
-  { name: 'Backend', color: '#D946EF' }, // Fuchsia-500
-  { name: 'UI/UX', color: '#8B5CF6' }, // Violet-500
-  { name: 'API', color: '#0EA5E9' }, // Sky-500
-  { name: 'Database', color: '#F472B6' }, // Rose-400
-  { name: 'DevOps', color: '#FDE047' }, // Yellow-300 (consider dark text for this color if used as background)
-  { name: 'Testing', color: '#4ADE80' }, // Green-400
-  { name: 'QA', color: '#34D399' }, // Emerald-400
-  { name: 'Mobile', color: '#2DD4BF' }, // Teal-400
-  { name: 'Web', color: '#38BDF8' }, // LightBlue-400
-  { name: 'Infrastructure', color: '#7DD3FC' }, // Sky-300
-  { name: 'Design', color: '#C084FC' }, // Purple-400
-  { name: 'Marketing', color: '#2563EB' }, // Blue-600
-  { name: 'Research', color: '#059669' }, // Emerald-600
-  { name: 'Support', color: '#F9A8D4' }, // Pink-300
-  { name: 'Sales', color: '#FB923C' }, // Orange-400
+  { name: 'Frontend', color: '#EC4899' }, 
+  { name: 'Backend', color: '#D946EF' }, 
+  { name: 'UI/UX', color: '#8B5CF6' }, 
+  { name: 'API', color: '#0EA5E9' }, 
+  { name: 'Database', color: '#F472B6' }, 
+  { name: 'DevOps', color: '#FDE047' }, 
+  { name: 'Testing', color: '#4ADE80' }, 
+  { name: 'QA', color: '#34D399' }, 
+  { name: 'Mobile', color: '#2DD4BF' }, 
+  { name: 'Web', color: '#38BDF8' }, 
+  { name: 'Infrastructure', color: '#7DD3FC' }, 
+  { name: 'Design', color: '#C084FC' }, 
+  { name: 'Marketing', color: '#2563EB' }, 
+  { name: 'Research', color: '#059669' }, 
+  { name: 'Support', color: '#F9A8D4' }, 
+  { name: 'Sales', color: '#FB923C' }, 
 
   // Status/Process
-  { name: 'Needs Review', color: '#EAB308' }, // Yellow-500
-  { name: 'In Review', color: '#FCD34D' }, // Amber-300
-  { name: 'Approved', color: '#A3E635' }, // Lime-400
-  { name: 'Rejected', color: '#F87171' }, // Red-400
-  { name: 'Blocked', color: '#78716C' }, // Stone-500
-  { name: 'Wont Fix', color: '#4B5563' }, // Gray-600
-  { name: 'Duplicate', color: '#A1A1AA' }, // Zinc-400
-  { name: 'On Hold', color: '#FDBA74' }, // Orange-300
-  { name: 'Deferred', color: '#9CA3AF' }, // Gray-400
+  { name: 'Needs Review', color: '#EAB308' }, 
+  { name: 'In Review', color: '#FCD34D' }, 
+  { name: 'Approved', color: '#A3E635' }, 
+  { name: 'Rejected', color: '#F87171' }, 
+  { name: 'Blocked', color: '#78716C' }, 
+  { name: 'Wont Fix', color: '#4B5563' }, 
+  { name: 'Duplicate', color: '#A1A1AA' }, 
+  { name: 'On Hold', color: '#FDBA74' }, 
+  { name: 'Deferred', color: '#9CA3AF' }, 
 
   // Other useful tags
-  { name: 'Refactor', color: '#FACC15' }, // Yellow-400
-  { name: 'Optimization', color: '#FB923C' }, // Orange-400
-  { name: 'Performance', color: '#F5A623'}, // Custom Orange/Yellow
-  { name: 'Security', color: '#B91C1C' }, // Red-700
-  { name: 'Accessibility', color: '#A78BFA'}, // Violet-400
-  { name: 'Technical Debt', color: '#FCA5A5'}, // Red-300
-  { name: 'Feedback', color: '#EA580C' }, // Orange-600
-  { name: 'Client Request', color: '#6366F1' }, // Indigo-500
-  { name: 'Release', color: '#06B6D4' }, // Cyan-500
-  { name: 'Hotfix', color: '#BE123C' }, // Rose-700
-  { name: 'Sprint Goal', color: '#1D4ED8' }, // Blue-700
-  { name: 'Milestone', color: '#5B21B6' }, // Violet-700
+  { name: 'Refactor', color: '#FACC15' }, 
+  { name: 'Optimization', color: '#FB923C' }, 
+  { name: 'Performance', color: '#F5A623'}, 
+  { name: 'Security', color: '#B91C1C' }, 
+  { name: 'Accessibility', color: '#A78BFA'}, 
+  { name: 'Technical Debt', color: '#FCA5A5'}, 
+  { name: 'Feedback', color: '#EA580C' }, 
+  { name: 'Client Request', color: '#6366F1' }, 
+  { name: 'Release', color: '#06B6D4' }, 
+  { name: 'Hotfix', color: '#BE123C' }, 
+  { name: 'Sprint Goal', color: '#1D4ED8' }, 
+  { name: 'Milestone', color: '#5B21B6' }, 
 ];
 
 
@@ -254,6 +254,7 @@ export async function getDbConnection() {
   });
 
   await db.exec(`PRAGMA foreign_keys = ON;`);
+
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,11 +311,15 @@ export async function getDbConnection() {
       uuid TEXT UNIQUE NOT NULL,
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
-      content TEXT,
+      content TEXT, 
+      fileType TEXT NOT NULL, 
+      filePath TEXT, 
+      createdByUuid TEXT NOT NULL,
       isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
-      FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE
+      FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
+      FOREIGN KEY (createdByUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS project_announcements (
@@ -934,3 +939,82 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
     throw error;
   }
 }
+
+
+// Document DB Functions
+export async function createDocument(data: {
+  projectUuid: string;
+  title: string;
+  content?: string;
+  fileType: ProjectDocumentType['fileType'];
+  filePath?: string;
+  createdByUuid: string;
+}): Promise<ProjectDocumentType> {
+  const connection = await getDbConnection();
+  const docUuid = uuidv4();
+  const now = new Date().toISOString();
+
+  const result = await connection.run(
+    'INSERT INTO project_documents (uuid, projectUuid, title, content, fileType, filePath, createdByUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    docUuid, data.projectUuid, data.title, data.content, data.fileType, data.filePath, data.createdByUuid, now, now, false
+  );
+  if (!result.lastID) throw new Error('Document creation failed.');
+
+  const newDoc = await getDocumentByUuid(docUuid);
+  if (!newDoc) throw new Error('Failed to retrieve created document.');
+  return newDoc;
+}
+
+export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocumentType[]> {
+  const connection = await getDbConnection();
+  const docs = await connection.all<Array<ProjectDocumentType & { isPinned: 0 | 1 }>>(
+    'SELECT * FROM project_documents WHERE projectUuid = ? ORDER BY updatedAt DESC',
+    projectUuid
+  );
+  return docs.map(doc => ({ ...doc, isPinned: !!doc.isPinned }));
+}
+
+export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentType | null> {
+  const connection = await getDbConnection();
+  const doc = await connection.get<ProjectDocumentType & { isPinned: 0 | 1 }>(
+    'SELECT * FROM project_documents WHERE uuid = ?',
+    uuid
+  );
+  if (!doc) return null;
+  return { ...doc, isPinned: !!doc.isPinned };
+}
+
+export async function updateDocumentContent(docUuid: string, title: string, content?: string): Promise<ProjectDocumentType | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  
+  // Fetch the document to check its type, as PDF content/filePath might not be updatable here
+  const currentDoc = await getDocumentByUuid(docUuid);
+  if (!currentDoc) return null;
+
+  let query = 'UPDATE project_documents SET title = ?, updatedAt = ?';
+  const params: (string | number | null | undefined)[] = [title, now];
+
+  // Only update content if it's not a PDF and content is provided
+  // For PDF, content is null, filePath is used. This function primarily updates text-based content.
+  if (currentDoc.fileType !== 'pdf' && content !== undefined) {
+    query += ', content = ?';
+    params.push(content);
+  }
+  
+  query += ' WHERE uuid = ?';
+  params.push(docUuid);
+
+  const result = await connection.run(query, ...params);
+  if (result.changes === 0) return null; // Or currentDoc if no actual change to content for PDF but title changed
+  
+  return getDocumentByUuid(docUuid);
+}
+
+export async function deleteDocument(docUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  // Note: If files were stored on a filesystem/S3, they'd need to be deleted here too.
+  const result = await connection.run('DELETE FROM project_documents WHERE uuid = ?', docUuid);
+  return result.changes ? result.changes > 0 : false;
+}
+

@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -22,8 +22,10 @@ import {
   updateProjectVisibility as dbUpdateProjectVisibility,
   toggleTaskPinStatus as dbToggleTaskPinStatus,
   createProjectTag as dbCreateProjectTag,
-  // deleteProjectTag as dbDeleteProjectTag, // TODO: Implement later
-  // updateProjectTag as dbUpdateProjectTag, // TODO: Implement later
+  createDocument as dbCreateDocument,
+  getDocumentsForProject as dbGetDocumentsForProject,
+  updateDocumentContent as dbUpdateDocumentContent,
+  deleteDocument as dbDeleteDocument,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -693,4 +695,171 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
   }
 }
 
+// Document Actions
+export interface CreateDocumentFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  createdDocument?: ProjectDocumentType;
+}
 
+const CreateDocumentSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  content: z.string().optional(),
+  fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other'] as [ProjectDocumentType['fileType'], ...ProjectDocumentType['fileType'][]]),
+  filePath: z.string().optional(), // For PDF path, actual file name for others if needed
+  fileName: z.string().optional(), // For original file name from upload
+});
+
+export async function createDocumentAction(prevState: CreateDocumentFormState, formData: FormData): Promise<CreateDocumentFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const validatedFields = CreateDocumentSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    content: formData.get('content') || '',
+    fileType: formData.get('fileType'),
+    filePath: formData.get('filePath'),
+    fileName: formData.get('fileName'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+  const { projectUuid, title, content, fileType, filePath, fileName } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: "You do not have permission to create documents in this project." };
+    }
+    
+    let finalFilePath = filePath;
+    if (fileType === 'pdf' && fileName && !filePath) { // If PDF and only fileName is present
+        finalFilePath = fileName; // Use fileName as filePath for PDF links
+    }
+
+    const createdDocument = await dbCreateDocument({
+      projectUuid,
+      title,
+      content: (fileType === 'markdown' || fileType === 'txt' || fileType === 'html') ? content : undefined,
+      fileType,
+      filePath: finalFilePath, // Use the potentially modified filePath
+      createdByUuid: session.user.uuid,
+    });
+    return { message: "Document created successfully!", createdDocument };
+  } catch (error: any) {
+    console.error("Error creating document:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export async function fetchDocumentsAction(projectUuid: string | undefined): Promise<ProjectDocumentType[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetDocumentsForProject(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch documents:", error);
+    return [];
+  }
+}
+
+
+export interface UpdateDocumentFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  updatedDocument?: ProjectDocumentType;
+}
+
+const UpdateDocumentSchema = z.object({
+  documentUuid: z.string().uuid("Invalid document UUID."),
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  content: z.string().optional(),
+  fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other']), // Keep for consistency, but only content of certain types is editable
+});
+
+
+export async function updateDocumentAction(prevState: UpdateDocumentFormState, formData: FormData): Promise<UpdateDocumentFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const validatedFields = UpdateDocumentSchema.safeParse({
+    documentUuid: formData.get('documentUuid'),
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    content: formData.get('content') || '',
+    fileType: formData.get('fileType'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+  const { documentUuid, projectUuid, title, content, fileType } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: "You do not have permission to update documents in this project." };
+    }
+    
+    // Only allow content update for specific types
+    let newContent: string | undefined = undefined;
+    if (fileType === 'markdown' || fileType === 'txt' || fileType === 'html') {
+        newContent = content;
+    } else if (fileType === 'pdf' || fileType === 'other') {
+        // For PDFs or 'other', content is not directly editable via this form. Title might be.
+        // If you want to allow changing PDF file links, that's a different flow.
+    }
+
+
+    const updatedDocument = await dbUpdateDocumentContent(documentUuid, title, newContent);
+    if (!updatedDocument) {
+        return { error: "Failed to update document or document not found."};
+    }
+    return { message: "Document updated successfully!", updatedDocument };
+  } catch (error: any) {
+    console.error("Error updating document:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface DeleteDocumentFormState {
+    message?: string;
+    error?: string;
+}
+export async function deleteDocumentAction(prevState: DeleteDocumentFormState, formData: FormData): Promise<DeleteDocumentFormState> {
+    const session = await auth();
+    if (!session?.user?.uuid) return { error: "Authentication required." };
+
+    const documentUuid = formData.get('documentUuid') as string;
+    const projectUuid = formData.get('projectUuid') as string; // Optional, for permission check context
+
+    if (!documentUuid) return { error: "Document UUID is required."};
+    
+    try {
+        if (projectUuid) { // If projectUuid is provided, perform role check
+            const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+            if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+                return { error: "You do not have permission to delete documents in this project." };
+            }
+        } else {
+            // Potentially check if user is creator if projectUuid is not available, or disallow if no project context
+            // For now, assume if projectUuid is not passed, it's a broader admin action or handled differently.
+            // Let's require projectUuid for now for simplicity and security.
+             return { error: "Project context is required for permission check." };
+        }
+
+        const success = await dbDeleteDocument(documentUuid);
+        if (success) {
+            return { message: "Document deleted successfully." };
+        }
+        return { error: "Failed to delete document." };
+    } catch (error: any) {
+        console.error("Error deleting document:", error);
+        return { error: error.message || "An unexpected error occurred." };
+    }
+}
