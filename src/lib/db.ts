@@ -15,14 +15,55 @@ const DB_DIR = path.join(process.cwd(), 'db');
 const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
-  { name: 'Bug', color: '#EF4444' }, // Red
-  { name: 'Feature', color: '#3B82F6' }, // Blue
-  { name: 'UI', color: '#A855F7' }, // Purple
-  { name: 'Backend', color: '#F97316' }, // Orange
-  { name: 'Docs', color: '#10B981' }, // Green
-  { name: 'Urgent', color: '#DC2626' }, // Darker Red
-  { name: 'Enhancement', color: '#22C55E' }, // Another Green
+  // Standard PM Tags
+  { name: 'Bug', color: '#EF4444' }, // Red-500
+  { name: 'Feature', color: '#3B82F6' }, // Blue-500
+  { name: 'Task', color: '#6B7280' }, // Gray-500
+  { name: 'Enhancement', color: '#22C55E' }, // Green-500
+  { name: 'Documentation', color: '#10B981' }, // Emerald-500
+  { name: 'Question', color: '#F97316' }, // Orange-500
+  { name: 'Idea', color: '#A855F7' }, // Purple-500
+
+  // Priority
+  { name: 'Urgent', color: '#DC2626' }, // Red-600
+  { name: 'High Priority', color: '#F59E0B' }, // Amber-500
+  { name: 'Medium Priority', color: '#84CC16' }, // Lime-500
+  { name: 'Low Priority', color: '#60A5FA' }, // Blue-400
+
+  // Departments/Areas
+  { name: 'Frontend', color: '#EC4899' }, // Pink-500
+  { name: 'Backend', color: '#D946EF' }, // Fuchsia-500
+  { name: 'UI/UX', color: '#8B5CF6' }, // Violet-500
+  { name: 'API', color: '#0EA5E9' }, // Sky-500
+  { name: 'Database', color: '#F472B6' }, // Rose-400
+  { name: 'DevOps', color: '#FDE047' }, // Yellow-300 (consider dark text for this color if used as background)
+  { name: 'Testing', color: '#4ADE80' }, // Green-400
+  { name: 'Mobile', color: '#2DD4BF' }, // Teal-400
+  { name: 'Web', color: '#38BDF8' }, // LightBlue-400
+  { name: 'Infrastructure', color: '#7DD3FC' }, // Sky-300
+
+  // Status/Process
+  { name: 'Needs Review', color: '#EAB308' }, // Yellow-500
+  { name: 'Blocked', color: '#78716C' }, // Stone-500
+  { name: 'Wont Fix', color: '#4B5563' }, // Gray-600
+  { name: 'Duplicate', color: '#A1A1AA' }, // Zinc-400
+  { name: 'On Hold', color: '#FDBA74' }, // Orange-300
+
+  // Other useful tags
+  { name: 'Refactor', color: '#FACC15' }, // Yellow-400
+  { name: 'Optimization', color: '#FB923C' }, // Orange-400
+  { name: 'Security', color: '#B91C1C' }, // Red-700
+  { name: 'Design', color: '#C084FC' }, // Purple-400
+  { name: 'Marketing', color: '#2563EB' }, // Blue-600
+  { name: 'Research', color: '#059669' }, // Emerald-600
+  { name: 'Feedback', color: '#EA580C' }, // Orange-600
+  { name: 'Performance', color: '#F5A623'}, // Custom Orange/Yellow
+  { name: 'Accessibility', color: '#A78BFA'}, // Violet-400
+  { name: 'Technical Debt', color: '#FCA5A5'}, // Red-300
+  { name: 'User Story', color: '#93C5FD'}, // Blue-300
+  { name: 'Spike', color: '#F43F5E'}, // Rose-500
 ];
+
 
 const DEFAULT_PROJECT_README_CONTENT = `# 📝 Bienvenue sur FlowUp – Guide Markdown
 
@@ -241,7 +282,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      todoListMarkdown TEXT, -- Added this column
+      todoListMarkdown TEXT, 
       status TEXT NOT NULL, 
       assigneeUuid TEXT,      
       dueDate TEXT,
@@ -401,13 +442,13 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   let finalAvatar = avatar;
   const currentUser = await getUserByUuid(uuid);
 
-  if (avatar === '') { // If empty string, reset to default placeholder
+  if (avatar === '') { 
     const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined && currentUser) { // If undefined (not changed), keep current
+  } else if (avatar === undefined && currentUser) { 
     finalAvatar = currentUser.avatar;
   }
-  // If avatar is a URL, it's used directly
+  
 
   await connection.run(
     'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
@@ -698,7 +739,7 @@ export async function createTask(data: {
   projectUuid: string;
   title: string;
   description?: string;
-  todoListMarkdown?: string; // Ensure this is handled
+  todoListMarkdown?: string; 
   status: TaskStatus;
   assigneeUuid?: string | null;
   tagsString?: string;
@@ -711,7 +752,7 @@ export async function createTask(data: {
   try {
     const result = await connection.run(
       'INSERT INTO tasks (uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      taskUuid, data.projectUuid, data.title, data.description || undefined, data.todoListMarkdown || undefined, data.status, data.assigneeUuid, now, now, false
+      taskUuid, data.projectUuid, data.title, data.description || undefined, data.todoListMarkdown || '', data.status, data.assigneeUuid, now, now, false
     );
     if (!result.lastID) throw new Error('Task creation failed.');
 
@@ -803,10 +844,10 @@ export async function updateTask(
   const values: (string | number | null | undefined )[] = []; 
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
-  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description || null); } // Allow setting description to empty
-  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown || null); } // Allow setting todoListMarkdown to empty
+  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description || null); } 
+  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown || ''); } 
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
-  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); } // null is fine here
+  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); } 
   if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); } 
   
   if (updates.length === 0 && data.tagsString === undefined) return currentTask; 
