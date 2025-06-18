@@ -12,7 +12,6 @@ import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
 import { Textarea } from '@/components/ui/textarea';
 import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useRef } from 'react';
 import { useActionState } from 'react';
@@ -48,12 +47,8 @@ import {
   type ToggleTaskPinState,
   createProjectTagAction,
   type CreateProjectTagFormState,
-  createDocumentAction,
-  type CreateDocumentFormState,
-  fetchDocumentsAction,
-  updateDocumentAction,
-  type UpdateDocumentFormState,
-  deleteDocumentAction,
+  fetchDocumentsAction, // Keep fetchDocumentsAction
+  deleteDocumentAction, // Keep deleteDocumentAction
   type DeleteDocumentFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
@@ -71,11 +66,7 @@ import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/compon
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 
 
-// const mockAnnouncements: Announcement[] = [
-//     { id: 'ann-mock-1', uuid: 'ann-uuid-mock-1', title: 'Project Kick-off Meeting', content: 'Team, our kick-off meeting is scheduled for next Monday at 10 AM.', authorUuid: 'user-uuid-1', projectUuid: 'CURRENT_PROJECT_UUID_PLACEHOLDER', isGlobal: false, createdAt: '2023-01-02', updatedAt: '2023-01-02' },
-// ];
-
-const projectAnnouncements: any[] = []; // Placeholder until announcements are fully implemented
+const projectAnnouncements: any[] = [];
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -110,26 +101,18 @@ const projectTagFormSchema = z.object({
 });
 type ProjectTagFormValues = z.infer<typeof projectTagFormSchema>;
 
-const documentFormSchema = z.object({
-  title: z.string().min(1, "Document title is required.").max(255),
-  content: z.string().optional(), // For Markdown
-  fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other']),
-  file: z.any().optional(), // For file uploads
-});
-type DocumentFormValues = z.infer<typeof documentFormSchema>;
-
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[1] !== undefined) {
-      return `** ${matchChecked[1].trim()}`;
+    if (matchChecked && matchChecked[2] !== undefined) {
+      return `** ${matchChecked[2].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return `* ${matchUnchecked[1].trim()}`;
+    if (matchUnchecked && matchUnchecked[2] !== undefined) {
+      return `* ${matchUnchecked[2].trim()}`;
     }
     return trimmedLine; 
   }).join('\n');
@@ -184,8 +167,6 @@ export default function ProjectDetailPage() {
 
   const [projectReadmeContent, setProjectReadmeContent] = useState('');
 
-  const [newDocContentForAiCheck, setNewDocContentForAiCheck] = useState(''); // Renamed for clarity
-  const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
   const [newScriptName, setNewScriptName] = useState('');
   const [newScriptContentValue, setNewScriptContent] = useState('');
 
@@ -202,13 +183,9 @@ export default function ProjectDetailPage() {
 
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
 
-  const [isAddDocumentDialogOpen, setIsAddDocumentDialogOpen] = useState(false);
-  const [documentToEdit, setDocumentToEdit] = useState<ProjectDocumentType | null>(null);
-  const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
+  const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
-  const [currentDocumentTab, setCurrentDocumentTab] = useState<'create' | 'import'>('create');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -231,10 +208,6 @@ export default function ProjectDetailPage() {
     defaultValues: { tagName: '', tagColor: '#6B7280' },
   });
 
-  const documentForm = useForm<DocumentFormValues>({
-    resolver: zodResolver(documentFormSchema),
-    defaultValues: { title: '', content: '', fileType: 'markdown' },
-  });
 
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
@@ -247,8 +220,6 @@ export default function ProjectDetailPage() {
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
   const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
-  const [createDocumentState, createDocumentFormAction, isCreateDocumentPending] = useActionState(createDocumentAction, { message: "", error: "" });
-  const [updateDocumentState, updateDocumentFormAction, isUpdateDocumentPending] = useActionState(updateDocumentAction, { message: "", error: "" });
   const [deleteDocumentState, deleteDocumentFormAction, isDeleteDocumentPending] = useActionState(deleteDocumentAction, { message: "", error: "" });
 
 
@@ -560,39 +531,6 @@ export default function ProjectDetailPage() {
   }, [createProjectTagState, isCreateProjectTagPending, toast, projectTagForm, loadProjectTagsData]);
 
   useEffect(() => {
-    if (!isCreateDocumentPending && createDocumentState) {
-      if (createDocumentState.message && !createDocumentState.error) {
-        toast({ title: "Success", description: createDocumentState.message });
-        setIsAddDocumentDialogOpen(false);
-        documentForm.reset({ title: '', content: '', fileType: 'markdown' });
-        setSelectedFile(null);
-        setNewDocContentForAiCheck(''); 
-        setApiKeyRisk(null);
-        loadProjectDocuments();
-      }
-      if (createDocumentState.error) {
-        toast({ variant: "destructive", title: "Document Creation Error", description: createDocumentState.error });
-      }
-    }
-  }, [createDocumentState, isCreateDocumentPending, toast, documentForm, loadProjectDocuments]);
-
-  useEffect(() => {
-    if (!isUpdateDocumentPending && updateDocumentState) {
-      if (updateDocumentState.message && !updateDocumentState.error) {
-        toast({ title: "Success", description: updateDocumentState.message });
-        setIsAddDocumentDialogOpen(false); // Also used for edit
-        setDocumentToEdit(null);
-        setNewDocContentForAiCheck('');
-        setApiKeyRisk(null);
-        loadProjectDocuments();
-      }
-      if (updateDocumentState.error) {
-        toast({ variant: "destructive", title: "Document Update Error", description: updateDocumentState.error });
-      }
-    }
-  }, [updateDocumentState, isUpdateDocumentPending, toast, loadProjectDocuments]);
-
-  useEffect(() => {
     if (!isDeleteDocumentPending && deleteDocumentState) {
         if (deleteDocumentState.message && !deleteDocumentState.error) {
             toast({ title: "Success", description: deleteDocumentState.message });
@@ -613,31 +551,6 @@ export default function ProjectDetailPage() {
     }
   }, [project, editProjectForm]);
 
-
-  const handleDocContentForAiCheckChange = async (content: string) => {
-    setNewDocContentForAiCheck(content); // Update the specific state for AI check
-    documentForm.setValue('content', content); // Also update the RHF state
-
-    if(content.trim().length > 10) {
-      try {
-        const riskResult = await flagApiKeyRisks({ text: content });
-        if (riskResult.flagged) {
-          setApiKeyRisk(riskResult.reason || "Potential API key or secret detected. Remember to use the Secure Vault for sensitive information.");
-           toast({
-            variant: "destructive",
-            title: "Security Alert",
-            description: riskResult.reason || "Potential API key or secret detected in the content. Please use the Secure Vault.",
-          });
-        } else {
-          setApiKeyRisk(null);
-        }
-      } catch (error) {
-        console.error("Error flagging API key risks:", error);
-      }
-    } else {
-      setApiKeyRisk(null);
-    }
-  };
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
@@ -876,10 +789,10 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        grouped['Archived'].push(task); // Default to Archived if status is somehow unknown
+        grouped['Archived'].push(task); 
       }
     });
-    // Sort by pinned then by date
+    
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -972,20 +885,18 @@ export default function ProjectDetailPage() {
         event.preventDefault(); 
         event.stopPropagation(); 
         handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
-        return; // Explicitly stop here
+        return; 
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
-        return; // Explicitly stop here
+        return; 
       }
     } else {
       if (event.key === 'Escape') {
-        // event.preventDefault(); // Not if suggestions aren't shown
-        // event.stopPropagation();
-        setShowTagSuggestions(false); // Still good to clear any lingering state
+        setShowTagSuggestions(false); 
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
       }
@@ -1004,84 +915,6 @@ export default function ProjectDetailPage() {
     });
   };
 
-  const openAddDocumentDialog = (docToEdit: ProjectDocumentType | null = null) => {
-    setApiKeyRisk(null);
-    setNewDocContentForAiCheck('');
-    setSelectedFile(null);
-    if (docToEdit) {
-        setDocumentToEdit(docToEdit);
-        documentForm.reset({
-            title: docToEdit.title,
-            content: docToEdit.content || '',
-            fileType: docToEdit.fileType,
-        });
-        setNewDocContentForAiCheck(docToEdit.content || '');
-        setCurrentDocumentTab('create'); // Assume editing always uses the 'create' (editor) tab
-    } else {
-        setDocumentToEdit(null);
-        documentForm.reset({ title: '', content: '', fileType: 'markdown' });
-        setCurrentDocumentTab('create');
-    }
-    setIsAddDocumentDialogOpen(true);
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      documentForm.setValue('title', file.name.split('.').slice(0, -1).join('.') || file.name); // Pre-fill title
-      const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      let fileType: ProjectDocumentType['fileType'] = 'other';
-      if (fileExtension === 'md') fileType = 'markdown';
-      else if (fileExtension === 'txt') fileType = 'txt';
-      else if (fileExtension === 'html') fileType = 'html';
-      else if (fileExtension === 'pdf') fileType = 'pdf';
-      documentForm.setValue('fileType', fileType);
-    } else {
-      setSelectedFile(null);
-    }
-  };
-
-  const handleDocumentSubmit = async (values: DocumentFormValues) => {
-    if (!project || !user) return;
-    const formData = new FormData();
-    formData.append('projectUuid', project.uuid);
-    formData.append('title', values.title);
-    formData.append('fileType', values.fileType);
-
-    if (documentToEdit) { // Editing existing document
-      formData.append('documentUuid', documentToEdit.uuid);
-      if (values.fileType === 'markdown' || values.fileType === 'txt' || values.fileType === 'html') {
-        formData.append('content', values.content || '');
-      }
-      ReactStartTransition(() => { updateDocumentFormAction(formData); });
-    } else { // Creating new document
-      if (currentDocumentTab === 'create') {
-        formData.append('content', values.content || '');
-        formData.append('fileType', 'markdown'); // Force markdown for "Create" tab
-      } else { // Importing
-        if (selectedFile) {
-          formData.append('fileName', selectedFile.name); // For PDF, just name. For others, content.
-          if (values.fileType === 'txt' || values.fileType === 'html') {
-            try {
-              const fileContent = await selectedFile.text();
-              formData.append('content', fileContent);
-            } catch (e) {
-              toast({ variant: 'destructive', title: 'Error', description: 'Could not read file content.'});
-              return;
-            }
-          } else if (values.fileType === 'pdf') {
-            formData.append('filePath', selectedFile.name); // Simulate path for PDF
-          }
-        } else if (values.fileType !== 'markdown') { // Markdown can be created without a file
-          toast({ variant: 'destructive', title: 'Error', description: 'Please select a file to import.'});
-          return;
-        }
-      }
-      ReactStartTransition(() => { createDocumentFormAction(formData); });
-    }
-  };
-
   const openViewDocumentDialog = (doc: ProjectDocumentType) => {
     setDocumentToView(doc);
     setIsViewDocumentDialogOpen(true);
@@ -1091,7 +924,7 @@ export default function ProjectDetailPage() {
     if (!documentToDelete || !project) return;
     const formData = new FormData();
     formData.append('documentUuid', documentToDelete.uuid);
-    formData.append('projectUuid', project.uuid); // For permission check potentially
+    formData.append('projectUuid', project.uuid); 
     ReactStartTransition(() => {
       deleteDocumentFormAction(formData);
     });
@@ -1538,7 +1371,7 @@ export default function ProjectDetailPage() {
                                       </PopoverAnchor>
                                       {showTagSuggestions && tagSuggestions.length > 0 && (
                                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                                        <Command shouldFilter={false}> {/* No CommandInput here */}
+                                        <Command shouldFilter={false}> 
                                             <CommandList>
                                             <CommandEmpty>No matching tags found.</CommandEmpty>
                                             <CommandGroup>
@@ -1644,9 +1477,13 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
-              <Button size="sm" onClick={() => openAddDocumentDialog()} disabled={!canManageDocuments}>
-                <PlusCircle className="mr-2 h-4 w-4"/> Add Document
-              </Button>
+               {canManageDocuments && (
+                <Button size="sm" asChild>
+                  <Link href={`/projects/${projectUuid}/documents/new`}>
+                    <PlusCircle className="mr-2 h-4 w-4"/> Add Document
+                  </Link>
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {projectDocuments.length === 0 ? (
@@ -1654,8 +1491,10 @@ export default function ProjectDetailPage() {
                     <FileText className="mx-auto h-12 w-12 mb-4" />
                     <p>No documents in this project yet.</p>
                     {canManageDocuments && 
-                        <Button size="sm" className="mt-4" onClick={() => openAddDocumentDialog()}>
+                        <Button size="sm" className="mt-4" asChild>
+                           <Link href={`/projects/${projectUuid}/documents/new`}>
                             <PlusCircle className="mr-2 h-4 w-4"/> Add your first document
+                          </Link>
                         </Button>
                     }
                 </div>
@@ -1678,8 +1517,10 @@ export default function ProjectDetailPage() {
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0 self-end sm:self-center">
                            {canManageDocuments && (doc.fileType === 'markdown' || doc.fileType === 'txt' || doc.fileType === 'html') && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Document" onClick={() => openAddDocumentDialog(doc)}>
-                              <Edit3 className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Document" asChild>
+                              <Link href={`/projects/${projectUuid}/documents/${doc.uuid}/edit`}>
+                                <Edit3 className="h-4 w-4" />
+                              </Link>
                             </Button>
                           )}
                            {canManageDocuments && (
@@ -1717,111 +1558,6 @@ export default function ProjectDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* Add/Edit Document Dialog */}
-        <Dialog open={isAddDocumentDialogOpen} onOpenChange={(isOpen) => {
-            setIsAddDocumentDialogOpen(isOpen);
-            if (!isOpen) {
-                setDocumentToEdit(null);
-                documentForm.reset({ title: '', content: '', fileType: 'markdown' });
-                setSelectedFile(null);
-                setNewDocContentForAiCheck('');
-                setApiKeyRisk(null);
-            }
-        }}>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>{documentToEdit ? 'Edit Document' : 'Add New Document'}</DialogTitle>
-                    <DialogDescription>
-                        {documentToEdit ? `Editing: ${documentToEdit.title}` : 'Create a new Markdown document or import a file.'}
-                    </DialogDescription>
-                </DialogHeader>
-                <Form {...documentForm}>
-                    <form onSubmit={documentForm.handleSubmit(handleDocumentSubmit)} className="space-y-4">
-                        {!documentToEdit && ( // Tabs only for new document
-                        <Tabs value={currentDocumentTab} onValueChange={(value) => setCurrentDocumentTab(value as 'create' | 'import')} className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="create">Create Document</TabsTrigger>
-                                <TabsTrigger value="import">Import File</TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                        )}
-
-                        <FormField
-                            control={documentForm.control}
-                            name="title"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Document Title</FormLabel>
-                                    <FormControl><Input {...field} placeholder="e.g., API Documentation, Meeting Notes" /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        {(currentDocumentTab === 'create' || documentToEdit?.fileType === 'markdown') && (
-                            <FormField
-                                control={documentForm.control}
-                                name="content"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Content (Markdown)</FormLabel>
-                                        <FormControl>
-                                            <Textarea
-                                                value={newDocContentForAiCheck} // Use specific state for AI check
-                                                onChange={(e) => handleDocContentForAiCheckChange(e.target.value)} // Use specific handler
-                                                rows={10}
-                                                placeholder="Write your document content using Markdown..."
-                                                className={cn(apiKeyRisk && "border-destructive ring-2 ring-destructive")}
-                                            />
-                                        </FormControl>
-                                        {apiKeyRisk && <p className="text-sm text-destructive mt-1 flex items-center"><AlertTriangle className="h-4 w-4 mr-1"/>{apiKeyRisk}</p>}
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        )}
-
-                        {currentDocumentTab === 'import' && !documentToEdit && (
-                            <FormField
-                                control={documentForm.control}
-                                name="file"
-                                render={({ field: { onChange, value, ...restField }}) => ( // Destructure onChange to avoid conflict
-                                    <FormItem>
-                                        <FormLabel>Import File</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="file"
-                                                accept=".md,.txt,.html,.pdf"
-                                                onChange={(e) => {
-                                                    onChange(e); // Call RHF's onChange
-                                                    handleFileChange(e); // Call custom handler
-                                                }}
-                                                {...restField}
-                                            />
-                                        </FormControl>
-                                        <FormDescription>
-                                            Supported types: .md, .txt, .html, .pdf.
-                                            (.txt, .html content will be imported. .pdf will be linked by name.)
-                                        </FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        )}
-                        {(createDocumentState?.error || updateDocumentState?.error) && <p className="text-sm text-destructive">{createDocumentState?.error || updateDocumentState?.error}</p>}
-
-                        <DialogFooter>
-                            <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                            <Button type="submit" disabled={isCreateDocumentPending || isUpdateDocumentPending}>
-                                {(isCreateDocumentPending || isUpdateDocumentPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {documentToEdit ? 'Save Changes' : (currentDocumentTab === 'create' ? 'Create Document' : 'Import Document')}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
-            </DialogContent>
-        </Dialog>
 
         {/* View Document Dialog */}
         <Dialog open={isViewDocumentDialogOpen} onOpenChange={setIsViewDocumentDialogOpen}>

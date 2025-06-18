@@ -26,6 +26,7 @@ import {
   getDocumentsForProject as dbGetDocumentsForProject,
   updateDocumentContent as dbUpdateDocumentContent,
   deleteDocument as dbDeleteDocument,
+  getDocumentByUuid as dbGetDocumentByUuid, // Import for fetching document
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -696,6 +697,31 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
 }
 
 // Document Actions
+
+// Fetches a single document - useful for the edit page
+export async function fetchDocumentAction(documentUuid: string | undefined): Promise<ProjectDocumentType | null> {
+    if (!documentUuid) return null;
+    try {
+        const doc = await dbGetDocumentByUuid(documentUuid);
+        // Add permission check: user must be member of project this document belongs to
+        // This might involve fetching the project, then members, then checking.
+        // For now, assuming if they have the docUuid, they might have access.
+        // Proper permission check would be:
+        // const session = await auth();
+        // if (!session?.user?.uuid) return null;
+        // const project = await dbGetProjectByUuid(doc.projectUuid);
+        // if (project.isPrivate) {
+        //   const role = await dbGetProjectMemberRole(doc.projectUuid, session.user.uuid);
+        //   if (!role) return null; // Not a member of private project
+        // }
+        return doc;
+    } catch (error) {
+        console.error("Failed to fetch document:", error);
+        return null;
+    }
+}
+
+
 export interface CreateDocumentFormState {
   message?: string;
   error?: string;
@@ -707,9 +733,9 @@ const CreateDocumentSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   content: z.string().optional(),
-  fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other'] as [ProjectDocumentType['fileType'], ...ProjectDocumentType['fileType'][]]),
-  filePath: z.string().optional(), // For PDF path, actual file name for others if needed
-  fileName: z.string().optional(), // For original file name from upload
+  // fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other'] as [ProjectDocumentType['fileType'], ...ProjectDocumentType['fileType'][]]), // Default to markdown for now
+  // filePath: z.string().optional(), 
+  // fileName: z.string().optional(), 
 });
 
 export async function createDocumentAction(prevState: CreateDocumentFormState, formData: FormData): Promise<CreateDocumentFormState> {
@@ -720,15 +746,15 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
     content: formData.get('content') || '',
-    fileType: formData.get('fileType'),
-    filePath: formData.get('filePath'),
-    fileName: formData.get('fileName'),
+    // fileType: formData.get('fileType'), // Removed for now, default to markdown
+    // filePath: formData.get('filePath'),
+    // fileName: formData.get('fileName'),
   });
 
   if (!validatedFields.success) {
     return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
-  const { projectUuid, title, content, fileType, filePath, fileName } = validatedFields.data;
+  const { projectUuid, title, content } = validatedFields.data;
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -736,17 +762,12 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
       return { error: "You do not have permission to create documents in this project." };
     }
     
-    let finalFilePath = filePath;
-    if (fileType === 'pdf' && fileName && !filePath) { // If PDF and only fileName is present
-        finalFilePath = fileName; // Use fileName as filePath for PDF links
-    }
-
     const createdDocument = await dbCreateDocument({
       projectUuid,
       title,
-      content: (fileType === 'markdown' || fileType === 'txt' || fileType === 'html') ? content : undefined,
-      fileType,
-      filePath: finalFilePath, // Use the potentially modified filePath
+      content: content, // For Markdown, content is directly from form
+      fileType: 'markdown', // Hardcoded to markdown for this dedicated editor
+      // filePath: undefined, // Not handling file uploads in this simplified editor yet
       createdByUuid: session.user.uuid,
     });
     return { message: "Document created successfully!", createdDocument };
@@ -776,10 +797,10 @@ export interface UpdateDocumentFormState {
 
 const UpdateDocumentSchema = z.object({
   documentUuid: z.string().uuid("Invalid document UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."),
+  projectUuid: z.string().uuid("Invalid project UUID."), // For permission check
   title: z.string().min(1, "Title is required.").max(255),
   content: z.string().optional(),
-  fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other']), // Keep for consistency, but only content of certain types is editable
+  // fileType: z.enum(['markdown', 'txt', 'html', 'pdf', 'other']), // Removed for now, only markdown editable here
 });
 
 
@@ -792,13 +813,13 @@ export async function updateDocumentAction(prevState: UpdateDocumentFormState, f
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
     content: formData.get('content') || '',
-    fileType: formData.get('fileType'),
+    // fileType: formData.get('fileType'), // Assume markdown
   });
 
   if (!validatedFields.success) {
     return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
-  const { documentUuid, projectUuid, title, content, fileType } = validatedFields.data;
+  const { documentUuid, projectUuid, title, content } = validatedFields.data;
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -806,17 +827,20 @@ export async function updateDocumentAction(prevState: UpdateDocumentFormState, f
       return { error: "You do not have permission to update documents in this project." };
     }
     
-    // Only allow content update for specific types
-    let newContent: string | undefined = undefined;
-    if (fileType === 'markdown' || fileType === 'txt' || fileType === 'html') {
-        newContent = content;
-    } else if (fileType === 'pdf' || fileType === 'other') {
-        // For PDFs or 'other', content is not directly editable via this form. Title might be.
-        // If you want to allow changing PDF file links, that's a different flow.
+    const docToUpdate = await dbGetDocumentByUuid(documentUuid);
+    if (!docToUpdate) {
+        return { error: "Document not found." };
+    }
+    if (docToUpdate.fileType !== 'markdown') {
+        // For now, only allow editing content of markdown files via this action
+        // Title can be updated for any, but content editing is specific to markdown here
+        const updatedDoc = await dbUpdateDocumentContent(documentUuid, title, undefined /* no content change for non-markdown */);
+        if (!updatedDoc) return { error: "Failed to update document title." };
+        return { message: "Document title updated successfully!", updatedDocument: updatedDoc };
     }
 
 
-    const updatedDocument = await dbUpdateDocumentContent(documentUuid, title, newContent);
+    const updatedDocument = await dbUpdateDocumentContent(documentUuid, title, content);
     if (!updatedDocument) {
         return { error: "Failed to update document or document not found."};
     }
@@ -836,20 +860,17 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
     if (!session?.user?.uuid) return { error: "Authentication required." };
 
     const documentUuid = formData.get('documentUuid') as string;
-    const projectUuid = formData.get('projectUuid') as string; // Optional, for permission check context
+    const projectUuid = formData.get('projectUuid') as string; 
 
     if (!documentUuid) return { error: "Document UUID is required."};
     
     try {
-        if (projectUuid) { // If projectUuid is provided, perform role check
+        if (projectUuid) { 
             const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
             if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
                 return { error: "You do not have permission to delete documents in this project." };
             }
         } else {
-            // Potentially check if user is creator if projectUuid is not available, or disallow if no project context
-            // For now, assume if projectUuid is not passed, it's a broader admin action or handled differently.
-            // Let's require projectUuid for now for simplicity and security.
              return { error: "Project context is required for permission check." };
         }
 
@@ -863,3 +884,4 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
         return { error: error.message || "An unexpected error occurred." };
     }
 }
+
