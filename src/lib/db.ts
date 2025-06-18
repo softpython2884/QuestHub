@@ -23,6 +23,9 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Documentation', color: '#10B981' }, // Emerald-500
   { name: 'Question', color: '#F97316' }, // Orange-500
   { name: 'Idea', color: '#A855F7' }, // Purple-500
+  { name: 'Spike', color: '#F43F5E'}, // Rose-500
+  { name: 'User Story', color: '#93C5FD'}, // Blue-300
+  { name: 'Epic', color: '#7E22CE' }, // Purple-700
 
   // Priority
   { name: 'Urgent', color: '#DC2626' }, // Red-600
@@ -38,30 +41,40 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Database', color: '#F472B6' }, // Rose-400
   { name: 'DevOps', color: '#FDE047' }, // Yellow-300 (consider dark text for this color if used as background)
   { name: 'Testing', color: '#4ADE80' }, // Green-400
+  { name: 'QA', color: '#34D399' }, // Emerald-400
   { name: 'Mobile', color: '#2DD4BF' }, // Teal-400
   { name: 'Web', color: '#38BDF8' }, // LightBlue-400
   { name: 'Infrastructure', color: '#7DD3FC' }, // Sky-300
+  { name: 'Design', color: '#C084FC' }, // Purple-400
+  { name: 'Marketing', color: '#2563EB' }, // Blue-600
+  { name: 'Research', color: '#059669' }, // Emerald-600
+  { name: 'Support', color: '#F9A8D4' }, // Pink-300
+  { name: 'Sales', color: '#FB923C' }, // Orange-400
 
   // Status/Process
   { name: 'Needs Review', color: '#EAB308' }, // Yellow-500
+  { name: 'In Review', color: '#FCD34D' }, // Amber-300
+  { name: 'Approved', color: '#A3E635' }, // Lime-400
+  { name: 'Rejected', color: '#F87171' }, // Red-400
   { name: 'Blocked', color: '#78716C' }, // Stone-500
   { name: 'Wont Fix', color: '#4B5563' }, // Gray-600
   { name: 'Duplicate', color: '#A1A1AA' }, // Zinc-400
   { name: 'On Hold', color: '#FDBA74' }, // Orange-300
+  { name: 'Deferred', color: '#9CA3AF' }, // Gray-400
 
   // Other useful tags
   { name: 'Refactor', color: '#FACC15' }, // Yellow-400
   { name: 'Optimization', color: '#FB923C' }, // Orange-400
-  { name: 'Security', color: '#B91C1C' }, // Red-700
-  { name: 'Design', color: '#C084FC' }, // Purple-400
-  { name: 'Marketing', color: '#2563EB' }, // Blue-600
-  { name: 'Research', color: '#059669' }, // Emerald-600
-  { name: 'Feedback', color: '#EA580C' }, // Orange-600
   { name: 'Performance', color: '#F5A623'}, // Custom Orange/Yellow
+  { name: 'Security', color: '#B91C1C' }, // Red-700
   { name: 'Accessibility', color: '#A78BFA'}, // Violet-400
   { name: 'Technical Debt', color: '#FCA5A5'}, // Red-300
-  { name: 'User Story', color: '#93C5FD'}, // Blue-300
-  { name: 'Spike', color: '#F43F5E'}, // Rose-500
+  { name: 'Feedback', color: '#EA580C' }, // Orange-600
+  { name: 'Client Request', color: '#6366F1' }, // Indigo-500
+  { name: 'Release', color: '#06B6D4' }, // Cyan-500
+  { name: 'Hotfix', color: '#BE123C' }, // Rose-700
+  { name: 'Sprint Goal', color: '#1D4ED8' }, // Blue-700
+  { name: 'Milestone', color: '#5B21B6' }, // Violet-700
 ];
 
 
@@ -241,7 +254,6 @@ export async function getDbConnection() {
   });
 
   await db.exec(`PRAGMA foreign_keys = ON;`);
-
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

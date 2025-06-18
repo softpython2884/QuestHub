@@ -59,6 +59,8 @@ import { MarkdownTaskListRenderer } from '@/components/MarkdownTaskListRenderer'
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 
 const mockDocuments: ProjectDocumentType[] = [
@@ -92,7 +94,6 @@ const taskFormSchema = z.object({
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
-  // todoListMarkdown is managed separately
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
@@ -101,18 +102,15 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
-    // Match * [x] Task text
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
     if (matchChecked && matchChecked[1] !== undefined) {
-      return `** ${matchChecked[1].trim()}`;
+      return `** ${matchChecked[1].trim()}`; // Use index 1 for text after [x]
     }
-    // Match * [ ] Task text
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
     if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return `* ${matchUnchecked[1].trim()}`;
+      return `* ${matchUnchecked[1].trim()}`; // Use index 1 for text after [ ]
     }
-    // Preserve lines that are not task items or are empty
-    return trimmedLine;
+    return trimmedLine; // Preserve lines that are not task items or are empty
   }).join('\n');
 };
 
@@ -120,15 +118,15 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
 const convertSubtaskInputToMarkdown = (input: string): string => {
   return input.split('\n').map(line => {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('** ')) { // Starts with ** (completed)
+    if (trimmedLine.startsWith('** ')) { 
       return `* [x] ${trimmedLine.substring(3).trim()}`;
-    } else if (trimmedLine.startsWith('* ')) { // Starts with * (open)
+    } else if (trimmedLine.startsWith('* ')) { 
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { // Non-empty line, not starting with * or ** -> treat as new open task
+    } else if (trimmedLine.length > 0) { 
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; // Keep empty lines as empty, or filter them
-  }).filter(line => line.trim().length > 0).join('\n'); // Filter out lines that became empty
+    return ''; 
+  }).filter(line => line.trim().length > 0).join('\n'); 
 };
 
 
@@ -173,6 +171,11 @@ export default function ProjectDetailPage() {
 
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const lastSubmitSourceRef = useRef<'subtasks' | 'main' | null>(null);
+
+  const [tagSuggestions, setTagSuggestions] = useState<TagType[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
 
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -283,9 +286,9 @@ export default function ProjectDetailPage() {
                     await loadProjectTagsData();
 
                 } else {
-                    setAccessDenied(true);
+                    setAccessDenied(true); // If projectData is null, it's either not found or access is implicitly denied by fetchProjectAction logic
                     setProject(null);
-                    toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded."});
+                    toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded or you don't have access."});
                 }
             } catch (err) {
                 console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
@@ -368,9 +371,9 @@ export default function ProjectDetailPage() {
 
 
   useEffect(() => {
-    if (isUpdateTaskPending || !updateTaskState?.updatedTask) {
-      // Handle errors or no-op if still pending or no updated task
-      if (updateTaskState?.error && !isUpdateTaskPending) {
+    if (isUpdateTaskPending || !updateTaskState) return; // Wait for pending to finish and state to be set
+
+    if (updateTaskState.error && !isUpdateTaskPending) {
         let errorMessage = updateTaskState.error;
         Object.entries(updateTaskState.fieldErrors || {}).forEach(([key, value]) => {
             if (value) {
@@ -378,38 +381,25 @@ export default function ProjectDetailPage() {
             }
         });
         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
-      }
-      return;
+        lastSubmitSourceRef.current = null; // Reset on error
+        return;
     }
 
-    // Successful update
-    if (updateTaskState.message && !updateTaskState.error) {
-      toast({ title: "Success", description: updateTaskState.message });
-      loadTasks(); // Refresh task list on any successful task update
+    if (updateTaskState.message && !updateTaskState.error && updateTaskState.updatedTask) {
+        toast({ title: "Success", description: updateTaskState.message });
+        loadTasks();
 
-      if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
-        setTaskToManageSubtasks(updateTaskState.updatedTask); // Update data for the (now closing) dialog
-        setIsManageSubtasksDialogOpen(false); // Close subtask dialog
-      } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
-        setIsEditTaskDialogOpen(false); // Close main edit dialog
-        setTaskToEdit(null);
-      }
-      lastSubmitSourceRef.current = null; // Reset after processing
+        if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
+            setTaskToManageSubtasks(updateTaskState.updatedTask); // Keep dialog data fresh if it remains open
+            setIsManageSubtasksDialogOpen(false); // Explicitly close subtask dialog
+        } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
+            setIsEditTaskDialogOpen(false);
+            setTaskToEdit(null);
+        }
+        lastSubmitSourceRef.current = null;
     }
-  }, [
-    updateTaskState, 
-    isUpdateTaskPending, 
-    toast, 
-    loadTasks, 
-    taskToManageSubtasks, 
-    taskToEdit,
-    setTaskToManageSubtasks,
-    setIsManageSubtasksDialogOpen,
-    setTaskToEdit,
-    setIsEditTaskDialogOpen
-  ]);
+}, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskToManageSubtasks, taskToEdit]);
   
-  // useEffect to reset taskForm when taskToEdit changes for the main edit dialog
   useEffect(() => {
     if (isEditTaskDialogOpen && taskToEdit) {
       taskForm.reset({
@@ -423,7 +413,6 @@ export default function ProjectDetailPage() {
   }, [isEditTaskDialogOpen, taskToEdit, taskForm]);
 
 
-  // useEffect to prepare subtaskInput when "Manage Subtasks" dialog opens
   useEffect(() => {
     if (isManageSubtasksDialogOpen && taskToManageSubtasks) {
       setSubtaskInput(convertMarkdownToSubtaskInput(taskToManageSubtasks.todoListMarkdown));
@@ -581,6 +570,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
+    // todoListMarkdown is managed separately now, pass existing value
     formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || ''); 
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
@@ -606,12 +596,16 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
+    // Pass other existing task fields to ensure they are not wiped if updateTaskAction expects them
+    // or if dbUpdateTask is a full update rather than partial.
+    // Assuming partial update, only todoListMarkdown is strictly needed here if other fields are not changing.
     formData.append('title', taskToManageSubtasks.title); 
     formData.append('status', taskToManageSubtasks.status); 
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
     if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
     const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
     if (currentTagsString) formData.append('tagsString', currentTagsString);
+
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -626,12 +620,15 @@ export default function ProjectDetailPage() {
     if (debounceTimers.current[taskUuid]) {
       clearTimeout(debounceTimers.current[taskUuid]);
     }
-    lastSubmitSourceRef.current = 'subtasks'; // Indicate source for potential state updates
+    
     debounceTimers.current[taskUuid] = setTimeout(() => {
+      lastSubmitSourceRef.current = null; // Not from a specific dialog, but a card action
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
+      // Pass other essential fields, assuming updateTaskAction might expect them
+      // or dbUpdateTask could be a full update.
       formData.append('title', taskToUpdate.title); 
       formData.append('status', taskToUpdate.status); 
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -760,7 +757,6 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // console.warn(`Task with unknown status: ${task.status}`, task);
         grouped['Archived'].push(task); 
       }
     });
@@ -774,8 +770,55 @@ export default function ProjectDetailPage() {
     return grouped;
   };
 
-
   const tasksByStatus = groupTasksByStatus();
+
+  const getCurrentTagFragment = (value: string): string => {
+    const parts = value.split(',');
+    return parts[parts.length - 1].trimStart();
+  };
+
+  const handleTagsStringInputChange = (
+      event: React.ChangeEvent<HTMLInputElement>,
+      currentFieldValue: string,
+      setValue: (name: "tagsString", value: string) => void // from useForm
+  ) => {
+      const inputValue = event.target.value;
+      setValue("tagsString", inputValue); // Update RHF immediately
+
+      const fragment = getCurrentTagFragment(inputValue);
+
+      if (fragment) {
+          const lowerFragment = fragment.toLowerCase();
+          const typedTags = inputValue.split(',').map(t => t.trim().toLowerCase());
+          const filtered = projectTags
+              .filter(tag => tag.name.toLowerCase().startsWith(lowerFragment) && !typedTags.includes(tag.name.toLowerCase()))
+              .slice(0, 5); // Limit suggestions
+          setTagSuggestions(filtered);
+          setShowTagSuggestions(filtered.length > 0);
+      } else {
+          setTagSuggestions([]);
+          setShowTagSuggestions(false);
+      }
+  };
+
+  const handleTagSuggestionClick = (
+      suggestion: TagType,
+      currentFieldValue: string,
+      setValue: (name: "tagsString", value: string) => void // from useForm
+  ) => {
+      const parts = currentFieldValue.split(',');
+      parts[parts.length - 1] = suggestion.name; // Replace current fragment
+      
+      let newValue = parts.join(',');
+      if (!newValue.endsWith(', ')) {
+           newValue += ', ';
+      }
+      
+      setValue("tagsString", newValue); // Update RHF
+      setTagSuggestions([]);
+      setShowTagSuggestions(false);
+      tagInputRef.current?.focus();
+  };
 
 
   if (authLoading || isLoadingData) {
@@ -960,7 +1003,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({tasks.length})</CardTitle>
-               <Dialog open={isCreateTaskDialogOpen} onOpenChange={setIsCreateTaskDialogOpen}>
+               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); } }}>
                 <DialogTrigger asChild>
                     <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
@@ -977,7 +1020,52 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField
+                                control={taskForm.control}
+                                name="tagsString"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Tags (comma-separated)</FormLabel>
+                                    <Popover open={showTagSuggestions} onOpenChange={setShowTagSuggestions}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                        <Input
+                                            {...field}
+                                            ref={tagInputRef}
+                                            placeholder="e.g. frontend, bug, urgent"
+                                            onChange={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
+                                            onBlur={() => setTimeout(() => setShowTagSuggestions(false), 150)}
+                                            onFocus={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)} // Re-check on focus
+                                        />
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                        {tagSuggestions.length > 0 && (
+                                        <Command>
+                                            <CommandInput placeholder="Filter tags..." className="h-9" />
+                                            <CommandList>
+                                            <CommandEmpty>No matching tags found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {tagSuggestions.map((suggestion) => (
+                                                <CommandItem
+                                                    key={suggestion.uuid}
+                                                    value={suggestion.name}
+                                                    onSelect={() => handleTagSuggestionClick(suggestion, field.value, taskForm.setValue)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    {suggestion.name}
+                                                </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                        )}
+                                    </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
                             {createTaskState?.error && !createTaskState.fieldErrors && <p className="text-sm text-destructive">{createTaskState.error}</p>}
                             {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {createTaskState.fieldErrors.title.join(', ')}</p>}
                             {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
@@ -1107,11 +1195,11 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         {/* Main Edit Task Dialog */}
-        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) setTaskToEdit(null); }}>
+        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); } }}>
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
                     <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
-                    <DialogDescription>Update the main details for this task. Sub-tasks are managed separately using the "Manage Sub-tasks" button on the task card.</DialogDescription>
+                    <DialogDescription>Update the main details for this task. Sub-tasks are managed separately.</DialogDescription>
                 </DialogHeader>
                 {taskToEdit && (
                     <Form {...taskForm}>
@@ -1120,7 +1208,52 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField
+                                control={taskForm.control}
+                                name="tagsString"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Tags (comma-separated)</FormLabel>
+                                    <Popover open={showTagSuggestions && taskForm.formState.isDirty /* Only show if form is dirty or focused */} onOpenChange={setShowTagSuggestions}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                        <Input
+                                            {...field}
+                                            ref={tagInputRef}
+                                            placeholder="e.g. frontend, bug, urgent"
+                                            onChange={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
+                                            onBlur={() => setTimeout(() => setShowTagSuggestions(false), 150)}
+                                            onFocus={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
+                                        />
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                        {tagSuggestions.length > 0 && (
+                                        <Command>
+                                            <CommandInput placeholder="Filter tags..." className="h-9" />
+                                            <CommandList>
+                                            <CommandEmpty>No matching tags found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {tagSuggestions.map((suggestion) => (
+                                                <CommandItem
+                                                    key={suggestion.uuid}
+                                                    value={suggestion.name}
+                                                    onSelect={() => handleTagSuggestionClick(suggestion, field.value, taskForm.setValue)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    {suggestion.name}
+                                                </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                        )}
+                                    </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
                             {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
                             {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`}</p>)}
                             <DialogFooter>
@@ -1468,7 +1601,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
-    
-
-    
