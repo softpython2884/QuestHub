@@ -15,13 +15,13 @@ const DB_DIR = path.join(process.cwd(), 'db');
 const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
-  { name: 'Bug', color: '#EF4444' },
-  { name: 'Feature', color: '#3B82F6' },
-  { name: 'UI', color: '#A855F7' },
-  { name: 'Backend', color: '#F97316' },
-  { name: 'Docs', color: '#10B981' },
-  { name: 'Urgent', color: '#DC2626' },
-  { name: 'Enhancement', color: '#22C55E' },
+  { name: 'Bug', color: '#EF4444' }, // Red
+  { name: 'Feature', color: '#3B82F6' }, // Blue
+  { name: 'UI', color: '#A855F7' }, // Purple
+  { name: 'Backend', color: '#F97316' }, // Orange
+  { name: 'Docs', color: '#10B981' }, // Green
+  { name: 'Urgent', color: '#DC2626' }, // Darker Red
+  { name: 'Enhancement', color: '#22C55E' }, // Another Green
 ];
 
 const DEFAULT_PROJECT_README_CONTENT = `# 📝 Bienvenue sur FlowUp – Guide Markdown
@@ -241,7 +241,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      todoListMarkdown TEXT,
+      todoListMarkdown TEXT, -- Added this column
       status TEXT NOT NULL, 
       assigneeUuid TEXT,      
       dueDate TEXT,
@@ -401,13 +401,13 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   let finalAvatar = avatar;
   const currentUser = await getUserByUuid(uuid);
 
-  if (avatar === '') {
-    const defaultAvatarText = currentUser?.name.substring(0,2).toUpperCase() || 'NA';
+  if (avatar === '') { // If empty string, reset to default placeholder
+    const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined && currentUser) { // Ensure currentUser exists before accessing its avatar
+  } else if (avatar === undefined && currentUser) { // If undefined (not changed), keep current
     finalAvatar = currentUser.avatar;
   }
-
+  // If avatar is a URL, it's used directly
 
   await connection.run(
     'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
@@ -473,15 +473,15 @@ export async function createProject(name: string, description: string | undefine
 
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
-  const project = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>( // Type hint for SQLite boolean
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
     'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
-  if (!project) return null;
+  if (!projectRow) return null;
   return {
-    ...project,
-    isUrgent: !!project.isUrgent, // Convert 0/1 to boolean
-    isPrivate: !!project.isPrivate, // Convert 0/1 to boolean
+    ...projectRow,
+    isUrgent: !!projectRow.isUrgent, 
+    isPrivate: !!projectRow.isPrivate,
   };
 }
 
@@ -519,7 +519,7 @@ export async function updateProjectUrgency(projectUuid: string, isUrgent: boolea
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE projects SET isUrgent = ?, updatedAt = ? WHERE uuid = ?',
-    isUrgent ? 1 : 0, now, projectUuid // Store as 0 or 1
+    isUrgent ? 1 : 0, now, projectUuid 
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -530,7 +530,7 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE projects SET isPrivate = ?, updatedAt = ? WHERE uuid = ?',
-    isPrivate ? 1 : 0, now, projectUuid // Store as 0 or 1
+    isPrivate ? 1 : 0, now, projectUuid
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -698,7 +698,7 @@ export async function createTask(data: {
   projectUuid: string;
   title: string;
   description?: string;
-  todoListMarkdown?: string;
+  todoListMarkdown?: string; // Ensure this is handled
   status: TaskStatus;
   assigneeUuid?: string | null;
   tagsString?: string;
@@ -740,7 +740,7 @@ export async function createTask(data: {
 
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
-  const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>( // Type hint for SQLite boolean
+  const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>(
     `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned 
      FROM tasks 
      WHERE uuid = ?`,
@@ -754,13 +754,13 @@ export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
     const assignee = await getUserByUuid(taskData.assigneeUuid);
     assigneeName = assignee?.name || null;
   }
-  return { ...taskData, tags, assigneeName: assigneeName || undefined, isPinned: !!taskData.isPinned }; // Convert 0/1 to boolean
+  return { ...taskData, tags, assigneeName: assigneeName || undefined, isPinned: !!taskData.isPinned };
 }
 
 
 export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
   const connection = await getDbConnection();
-  const taskRows = await connection.all<Array<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>>( // Type hint for SQLite boolean
+  const taskRows = await connection.all<Array<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>>(
     `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
      FROM tasks
      WHERE projectUuid = ?
@@ -776,7 +776,7 @@ export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
       const assignee = await getUserByUuid(taskRow.assigneeUuid);
       assigneeName = assignee?.name || null;
     }
-    tasksWithDetails.push({ ...taskRow, tags, assigneeName: assigneeName || undefined, isPinned: !!taskRow.isPinned }); // Convert 0/1 to boolean
+    tasksWithDetails.push({ ...taskRow, tags, assigneeName: assigneeName || undefined, isPinned: !!taskRow.isPinned });
   }
   return tasksWithDetails;
 }
@@ -800,14 +800,14 @@ export async function updateTask(
   if (!currentTask) return null;
 
   const updates: string[] = [];
-  const values: (string | number | null | undefined | boolean)[] = []; // Allow number for boolean storage
+  const values: (string | number | null | undefined )[] = []; 
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
-  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description); }
-  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown); }
+  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description || null); } // Allow setting description to empty
+  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown || null); } // Allow setting todoListMarkdown to empty
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
-  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
-  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); } // Store as 0 or 1
+  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); } // null is fine here
+  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); } 
   
   if (updates.length === 0 && data.tagsString === undefined) return currentTask; 
 
@@ -862,7 +862,7 @@ export async function toggleTaskPinStatus(taskUuid: string, isPinned: boolean): 
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE tasks SET isPinned = ?, updatedAt = ? WHERE uuid = ?',
-    isPinned ? 1 : 0, now, taskUuid // Store as 0 or 1
+    isPinned ? 1 : 0, now, taskUuid
   );
   if (result.changes === 0) return null;
   return getTaskByUuid(taskUuid);

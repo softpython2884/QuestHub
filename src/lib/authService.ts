@@ -7,34 +7,45 @@ import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateU
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const AUTH_COOKIE_NAME = 'nqh_auth_token';
 
-if (!JWT_SECRET) {
-  console.error("FATAL ERROR: JWT_SECRET is not defined in .env. Authentication will not work.");
-}
+const getJwtSecretOrThrow = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("CRITICAL: JWT_SECRET is not defined. Authentication will fail.");
+    throw new Error('JWT_SECRET is not configured on the server.');
+  }
+  return secret;
+};
 
 const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
-  if (!JWT_SECRET) {
-    console.error('[authService.generateTokenAndSetCookie] JWT_SECRET is not defined. Cannot generate token.');
-    throw new Error('Server configuration error for JWT.');
-  }
+  const JWT_SECRET = getJwtSecretOrThrow();
   const tokenPayload = {
     uuid: user.uuid,
-    role: user.role,
-    email: user.email,
-    name: user.name
+    // Add other non-sensitive identifiers if needed, but keep payload small
+    // role: user.role, 
+    // email: user.email,
+    // name: user.name
   };
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
 
-  cookies().set(AUTH_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    sameSite: 'lax',
-  });
-  console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}. Secure flag: ${process.env.NODE_ENV === 'production'}`);
+  // const cookieStore = cookies(); // This was the error point, calling cookies() directly.
+  // Instead, call it where it's used if needed, or better, ensure it's called once per request context.
+  // For server actions, `cookies()` from `next/headers` should be fine at the top level of the action.
+
+  try {
+    cookies().set(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // FALSE for local HTTP, TRUE for production HTTPS
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      sameSite: 'lax',
+    });
+    console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}. Secure flag: ${process.env.NODE_ENV === 'production'}`);
+  } catch (error) {
+     console.error("[authService.generateTokenAndSetCookie] Error setting cookie:", error);
+     // Potentially re-throw or handle as critical since session won't be established
+  }
 };
 
 export const login = async (email: string, password?: string): Promise<User | null> => {
@@ -43,10 +54,7 @@ export const login = async (email: string, password?: string): Promise<User | nu
     console.error('[authService.login] Password is required.');
     throw new Error('Password is required for login.');
   }
-  if (!JWT_SECRET) {
-    throw new Error('Authentication service is not configured (JWT_SECRET missing).');
-  }
-
+  
   await new Promise(resolve => setTimeout(resolve, 500)); 
   
   const userFromDb = await dbGetUserByEmail(email);
@@ -70,9 +78,6 @@ export const signup = async (name: string, email: string, password?: string, rol
      console.error('[authService.signup] Password is required.');
     throw new Error('Password is required for signup.');
   }
-   if (!JWT_SECRET) {
-    throw new Error('Authentication service is not configured (JWT_SECRET missing).');
-  }
   await new Promise(resolve => setTimeout(resolve, 500));
 
   try {
@@ -86,7 +91,7 @@ export const signup = async (name: string, email: string, password?: string, rol
     if (newUser) {
         const { hashedPassword, ...userToReturn } = newUser;
         generateTokenAndSetCookie(userToReturn);
-        console.log('[authService.signup] Signup SUCCESSFUL for email:', email);
+        console.log('[authService.signup] Signup SUCCESSFUL for email:', email, 'UUID:', userToReturn.uuid);
         return userToReturn;
     }
     console.error('[authService.signup] dbCreateUser returned null.');
@@ -103,8 +108,12 @@ export const signup = async (name: string, email: string, password?: string, rol
 
 export const logout = async (): Promise<void> => {
   console.log('[authService.logout] Logging out user.');
-  cookies().delete(AUTH_COOKIE_NAME);
-  console.log('[authService.logout] Auth cookie deleted.');
+  try {
+    cookies().delete(AUTH_COOKIE_NAME);
+    console.log('[authService.logout] Auth cookie deleted.');
+  } catch (error) {
+    console.error("[authService.logout] Error deleting cookie:", error);
+  }
 };
 
 export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
@@ -112,9 +121,11 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
     const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email, avatar);
     if (updatedUserFromDb) {
         const { hashedPassword, ...userToReturn } = updatedUserFromDb;
-        const currentTokenUser = await getCurrentUserSession(); // Get current user from cookie to check if critical data changed
-        if (currentTokenUser?.email !== userToReturn.email || currentTokenUser?.name !== userToReturn.name || currentTokenUser?.avatar !== userToReturn.avatar) {
-            console.log('[authService.updateUserProfile] User data changed, re-issuing token.');
+        
+        // Re-issue token if sensitive info in payload changed or just to refresh expiry
+        const session = await auth(); // from authEdge
+        if (session?.user?.uuid === userToReturn.uuid) {
+            console.log('[authService.updateUserProfile] User data changed, re-issuing token for UUID:', userToReturn.uuid);
             generateTokenAndSetCookie(userToReturn);
         }
         return userToReturn;
@@ -126,14 +137,26 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
   }
 };
 
+// This function is called by the client (AuthContext) to get the current user based on the cookie
 export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] Attempting to get current user session from cookie.');
   const session = await auth(); 
   
-  if (session?.user) {
-    console.log('[authService.getCurrentUserSession] Session found for user UUID:', session.user.uuid);
-    return session.user as User;
+  if (session?.user?.uuid) {
+    console.log('[authService.getCurrentUserSession] Session found via auth() for user UUID:', session.user.uuid);
+    // The user object from auth() is already up-to-date from DB
+    return session.user;
   }
-  console.log('[authService.getCurrentUserSession] No active session found.');
+  console.log('[authService.getCurrentUserSession] No active session found via auth().');
   return null;
 };
+
+// Removed the problematic re-export of auth. 
+// Server actions needing auth() should import it directly from '@/lib/authEdge'.
+// Example of how auth is imported from authEdge and used:
+import { auth } from '@/lib/authEdge';
+// async function someOtherAction() {
+//   const session = await auth();
+//   if (!session) { /* handle unauthorized */ }
+//   // ... proceed with action
+// }

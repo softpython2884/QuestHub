@@ -47,11 +47,10 @@ import {
   toggleTaskPinAction,
   type ToggleTaskPinState,
 } from './actions';
-import * as authService from '@/lib/authService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -89,7 +88,7 @@ type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional().default(''),
+  todoListMarkdown: z.string().optional().default(''), // Managed separately in its own UI/dialog now
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
@@ -141,7 +140,8 @@ export default function ProjectDetailPage() {
 
   const taskForm = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: { title: '', description: '', todoListMarkdown: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
+    // todoListMarkdown is removed from defaultValues here as it's managed separately
+    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: ''},
   });
 
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
@@ -181,7 +181,7 @@ export default function ProjectDetailPage() {
                 role = member?.role || null;
             }
             setCurrentUserRole(role);
-            return role;
+            return role; // Return the determined role
         } catch (error) {
             console.error("Failed to load project members or determine role", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members or determine your role." });
@@ -213,19 +213,23 @@ export default function ProjectDetailPage() {
 
                 if (projectData) {
                     let userRoleForProject: ProjectMemberRole | null = null;
-                    if (projectData.ownerUuid) {
+                    if (projectData.ownerUuid) { // Ensure ownerUuid is available
                         userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
                     } else {
+                         // This case should ideally not happen if projectData is valid
                          userRoleForProject = await loadProjectMembersAndRole();
                     }
-
+                    
+                    // CRITICAL: Access Control Check
                     if (projectData.isPrivate && !userRoleForProject) {
                         setAccessDenied(true);
-                        setProject(null);
+                        setProject(null); // Clear project data if access denied
                         setIsLoadingData(false);
                         toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
-                        return; // Critical: Stop further processing if access is denied
+                        // router.push('/projects'); // Optional: Redirect to projects list or a dedicated access denied page
+                        return; // Stop further processing
                     }
+
 
                     setProject(projectData);
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
@@ -246,6 +250,7 @@ export default function ProjectDetailPage() {
             } catch (err) {
                 console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
                 setProject(null);
+                setAccessDenied(true); // Assume access denied or error
                 toast({variant: "destructive", title: "Error", description: "Could not load project details."})
             } finally {
                 setIsLoadingData(false);
@@ -256,7 +261,7 @@ export default function ProjectDetailPage() {
     };
       performLoadProjectData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectUuid, user, authLoading]); // Simplified dependencies for main data load
+  }, [projectUuid, user, authLoading]); 
 
 
   useEffect(() => {
@@ -447,7 +452,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole;
+  const canEditTaskStatus = !!currentUserRole; // Any member can change status
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -480,7 +485,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    // todoListMarkdown is NOT set at creation, only through edit
+    formData.append('todoListMarkdown', ''); // Sub-tasks are not set at creation from this dialog
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -495,16 +500,20 @@ export default function ProjectDetailPage() {
     }
     const lines = rawInput.split('\n');
     const processedLines = lines.map(line => {
-      const trimmedLine = line.trimStart(); // Keep leading spaces for potential indentation later if needed, but trim for checks
-      if (trimmedLine === '') return line; // Preserve empty lines if user intended for spacing
+      const trimmedLine = line.trimStart(); 
+      if (trimmedLine === '') return line; 
 
       if (trimmedLine.startsWith('* [ ] ') || trimmedLine.startsWith('* [x] ')) {
-        return line; // Already correctly formatted
+        return line; 
       }
       if (trimmedLine.startsWith('* ')) {
-        return line.replace(/^\s*\*\s/, '* [ ] '); // Convert "* item" to "* [ ] item"
+        return line.replace(/^\s*\*\s/, '* [ ] '); 
       }
-      return `* [ ] ${line}`; // Prepend to non-list items
+      // If it's just text, and not empty, prepend the markdown for an unchecked item.
+      if (trimmedLine.length > 0) {
+         return `* [ ] ${line.trim()}`; // Trim to avoid unintended leading/trailing spaces in the task item itself
+      }
+      return line; // Return original line if it was only whitespace or some other non-task format
     });
     return processedLines.join('\n');
   };
@@ -513,7 +522,11 @@ export default function ProjectDetailPage() {
   const handleEditTaskSubmit = async (values: TaskFormValues) => {
     if (!project || !taskToEdit) return;
 
-    const processedTodoList = processTodoListMarkdownInput(values.todoListMarkdown || '');
+    // todoListMarkdown is now edited in a separate flow/dialog
+    // Keep the existing todoListMarkdown unless a new dedicated UI modifies it
+    const currentTodoListMarkdown = taskToEdit.todoListMarkdown || '';
+    const processedTodoList = values.todoListMarkdown !== undefined ? processTodoListMarkdownInput(values.todoListMarkdown) : currentTodoListMarkdown;
+
 
     const formData = new FormData();
     const finalAssigneeUuid = values.assigneeUuid === UNASSIGNED_VALUE ? '' : values.assigneeUuid;
@@ -526,6 +539,7 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
+    
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
     });
@@ -539,8 +553,11 @@ export default function ProjectDetailPage() {
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
+    
+    // Only include todoListMarkdown if it's the field being changed
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
+    // To satisfy the schema for partial updates, send other fields as they are
     formData.append('title', taskToUpdate.title);
     formData.append('status', taskToUpdate.status);
     formData.append('assigneeUuid', taskToUpdate.assigneeUuid || '');
@@ -558,7 +575,8 @@ export default function ProjectDetailPage() {
     taskForm.reset({
       title: task.title,
       description: task.description || '',
-      todoListMarkdown: task.todoListMarkdown || '',
+      // Do not reset todoListMarkdown here; it's managed by MarkdownTaskListRenderer or a future dedicated UI
+      todoListMarkdown: task.todoListMarkdown || '', 
       status: task.status,
       assigneeUuid: task.assigneeUuid || UNASSIGNED_VALUE,
       tagsString: task.tags.map(t => t.name).join(', ') || '',
@@ -675,7 +693,6 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // console.warn(`Task ${task.uuid} has an unknown status: ${task.status}. Grouping under Archived.`);
         grouped['Archived'].push(task);
       }
     });
@@ -727,16 +744,16 @@ export default function ProjectDetailPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects List
             </Button>
             <AlertCircle className="mx-auto h-16 w-16 text-destructive mt-12" />
-            <h2 className="text-2xl font-semibold mt-4">Access Denied</h2>
+            <h2 className="text-2xl font-semibold mt-4">Access Denied or Project Not Found</h2>
             <p className="text-muted-foreground">
-              {project ? "You do not have permission to view this private project." : `Project (ID: ${projectUuid}) not found or access is restricted.`}
+              {accessDenied ? "You do not have permission to view this private project." : `Project (ID: ${projectUuid}) not found or access is restricted.`}
             </p>
         </div>
     );
   }
 
-  const projectDocuments = mockDocuments;
-  const projectAnnouncements = mockAnnouncements;
+  const projectDocuments = mockDocuments; // Still mock
+  const projectAnnouncements = mockAnnouncements; // Still mock
 
 
   return (
@@ -752,7 +769,7 @@ export default function ProjectDetailPage() {
               <div className="flex items-center gap-2">
                 <CardTitle className="text-3xl font-headline">{project.name}</CardTitle>
                 {project.isUrgent && <Flame className="h-7 w-7 text-destructive" />}
-                <Badge variant={project.isPrivate ? "secondary" : "outline"} className={cn(!project.isPrivate && "border-green-500 text-green-600")}>
+                <Badge variant={project.isPrivate ? "secondary" : "outline"} className={cn("border",project.isPrivate ? "border-amber-500 text-amber-600" : "border-green-500 text-green-600")}>
                     {project.isPrivate ? "Private" : "Public"}
                 </Badge>
               </div>
@@ -947,8 +964,8 @@ export default function ProjectDetailPage() {
                               </div>
                               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
                                 <Select
-                                  defaultValue={task.status}
-                                  disabled={!canEditTaskStatus}
+                                  value={task.status} // Controlled component
+                                  disabled={!canEditTaskStatus || isUpdateTaskStatusPending}
                                   onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
                                 >
                                   <SelectTrigger className="w-full sm:w-[150px] text-xs h-8">
@@ -1013,16 +1030,20 @@ export default function ProjectDetailPage() {
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Edit Task: {taskToEdit.title}</DialogTitle>
-                        <DialogDescription>Update the details for this task.</DialogDescription>
+                        <DialogDescription>Update the details for this task. Sub-tasks (TodoList) are managed via the interactive checklist on the task card or a dedicated sub-task editor in the future.</DialogDescription>
                     </DialogHeader>
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem> <FormLabel>Sub-tasks</FormLabel> <FormControl><Textarea {...field} rows={4} placeholder="Enter sub-tasks, one per line. Start with '*' or just type the text. e.g.&#x0a;* Sub-task 1&#x0a;Another sub-task" /></FormControl> <FormDescription>Lines starting with '*' or plain text will be converted to checklist items. Existing '* [ ]' or '* [x]' items will be preserved.</FormDescription><FormMessage /> </FormItem> )}/>
+                             {/* todoListMarkdown field is removed from this main edit dialog */}
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
+                            
+                            {/* Hidden field to pass todoListMarkdown to the form action if needed by other logic, but not user-editable here */}
+                            <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => <Input type="hidden" {...field} />} />
+
                             {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
                             {updateTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {updateTaskState.fieldErrors.title.join(', ')}</p>}
                             {updateTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {updateTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
@@ -1305,7 +1326,7 @@ export default function ProjectDetailPage() {
                 <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
                      <Label htmlFor="project-visibility" className="flex flex-col">
                         <span>Private Project</span>
-                        <span className="text-xs font-normal text-muted-foreground">If unchecked, project becomes public. Only owners/admins can make projects public.</span>
+                        <span className="text-xs font-normal text-muted-foreground">If unchecked, project becomes public. Only owners/admins can change project visibility.</span>
                     </Label>
                     <Switch
                         id="project-visibility"
@@ -1341,5 +1362,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
-

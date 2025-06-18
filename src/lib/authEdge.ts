@@ -6,11 +6,10 @@ import { getUserByUuid as dbGetUserByUuid } from './db';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const AUTH_COOKIE_NAME = 'nqh_auth_token';
 
 interface Session {
-  user?: Omit<User, 'hashedPassword'>;
+  user?: Omit<User, 'hashedPassword'>; 
 }
 
 interface DecodedToken {
@@ -19,14 +18,21 @@ interface DecodedToken {
   exp: number;
 }
 
+const getJwtSecretOrThrow = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("CRITICAL: JWT_SECRET is not defined. This will cause authentication failures.");
+    throw new Error('JWT_SECRET is not configured on the server.');
+  }
+  return secret;
+};
+
 export async function auth(): Promise<Session | null> {
   console.log('[authEdge.auth] Attempting to get session.');
-  if (!JWT_SECRET) {
-    console.error("[authEdge.auth] JWT_SECRET is not defined. Authentication check will fail.");
-    return null;
-  }
+  const cookieStore = cookies();
+  const jwtSecret = getJwtSecretOrThrow(); // Will throw if secret is missing
 
-  const tokenCookieValue = cookies().get(AUTH_COOKIE_NAME)?.value;
+  const tokenCookieValue = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
   if (!tokenCookieValue) {
     console.log('[authEdge.auth] No auth token cookie found.');
@@ -35,27 +41,30 @@ export async function auth(): Promise<Session | null> {
   console.log('[authEdge.auth] Auth token cookie found.');
 
   try {
-    const decoded = jwt.verify(tokenCookieValue, JWT_SECRET) as DecodedToken;
+    const decoded = jwt.verify(tokenCookieValue, jwtSecret) as DecodedToken;
     console.log('[authEdge.auth] Token decoded successfully for UUID:', decoded.uuid);
     
     const userFromDb = await dbGetUserByUuid(decoded.uuid);
     
     if (!userFromDb) {
       console.warn(`[authEdge.auth] User ${decoded.uuid} from JWT not found in DB. Invalidating session.`);
-      cookies().delete(AUTH_COOKIE_NAME);
+      cookieStore.delete(AUTH_COOKIE_NAME);
       return null;
     }
 
-    const { hashedPassword, ...userToReturn } = userFromDb;
+    // Return only non-sensitive parts necessary for session identification.
+    // The full user object can be fetched by services that need it, using this UUID.
+    const { hashedPassword, ...userToReturn } = userFromDb; 
     
     console.log('[authEdge.auth] User found in DB, returning session for:', userToReturn.name);
     return {
-      user: userToReturn,
+      user: userToReturn, // Contains uuid, name, email, role, avatar
     };
 
   } catch (error: any) {
     console.warn('[authEdge.auth] JWT verification failed:', error.message ? error.message : error);
-    cookies().delete(AUTH_COOKIE_NAME);
+    // If verification fails (e.g. invalid signature, expired), delete the bad cookie
+    cookieStore.delete(AUTH_COOKIE_NAME);
     return null;
   }
 }
