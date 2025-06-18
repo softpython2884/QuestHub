@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -47,19 +47,21 @@ import {
   type ToggleProjectVisibilityFormState,
   toggleTaskPinAction,
   type ToggleTaskPinState,
+  createProjectTagAction,
+  type CreateProjectTagFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { MarkdownTaskListRenderer } from '@/components/MarkdownTaskListRenderer';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 
@@ -97,20 +99,26 @@ const taskFormSchema = z.object({
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
+const projectTagFormSchema = z.object({
+  tagName: z.string().min(1, "Tag name is required.").max(50, "Tag name too long."),
+  tagColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format. Must be #RRGGBB."),
+});
+type ProjectTagFormValues = z.infer<typeof projectTagFormSchema>;
+
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[1] !== undefined) {
-      return `** ${matchChecked[1].trim()}`; // Use index 1 for text after [x]
+    if (matchChecked && matchChecked[2] !== undefined) { // Use index 2 for text after [x]
+      return `** ${matchChecked[2].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return `* ${matchUnchecked[1].trim()}`; // Use index 1 for text after [ ]
+    if (matchUnchecked && matchUnchecked[2] !== undefined) { // Use index 2 for text after [ ]
+      return `* ${matchUnchecked[2].trim()}`;
     }
-    return trimmedLine; // Preserve lines that are not task items or are empty
+    return trimmedLine; 
   }).join('\n');
 };
 
@@ -149,8 +157,8 @@ export default function ProjectDetailPage() {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
-  const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
   
+  const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   
@@ -160,9 +168,7 @@ export default function ProjectDetailPage() {
   const [isManageSubtasksDialogOpen, setIsManageSubtasksDialogOpen] = useState(false);
   const [subtaskInput, setSubtaskInput] = useState('');
 
-
   const [projectReadmeContent, setProjectReadmeContent] = useState('');
-
 
   const [newDocContent, setNewDocContent] = useState('');
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
@@ -175,7 +181,9 @@ export default function ProjectDetailPage() {
   const [tagSuggestions, setTagSuggestions] = useState<TagType[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null);
 
+  const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
 
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -193,6 +201,11 @@ export default function ProjectDetailPage() {
     defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
   });
 
+  const projectTagForm = useForm<ProjectTagFormValues>({
+    resolver: zodResolver(projectTagFormSchema),
+    defaultValues: { tagName: '', tagColor: '#6B7280' },
+  });
+
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
   const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
@@ -203,6 +216,7 @@ export default function ProjectDetailPage() {
   const [toggleUrgencyState, toggleUrgencyFormAction, isToggleUrgencyPending] = useActionState(toggleProjectUrgencyAction, { message: "", error: "" });
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
+  const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
 
 
   const loadTasks = useCallback(async () => {
@@ -249,9 +263,10 @@ export default function ProjectDetailPage() {
         setProjectTags(tags);
       } catch (error) {
         console.error("Failed to load project tags:", error);
+         toast({ variant: "destructive", title: "Error", description: "Could not load project tags." });
       }
     }
-  }, [projectUuid]);
+  }, [projectUuid, toast]);
 
  useEffect(() => {
     const performLoadProjectData = async () => {
@@ -269,7 +284,7 @@ export default function ProjectDetailPage() {
                         setProject(null); 
                         toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
                         setIsLoadingData(false);
-                        // Optional: router.push('/projects'); 
+                        router.push('/projects'); 
                         return; 
                     }
 
@@ -286,7 +301,7 @@ export default function ProjectDetailPage() {
                     await loadProjectTagsData();
 
                 } else {
-                    setAccessDenied(true); // If projectData is null, it's either not found or access is implicitly denied by fetchProjectAction logic
+                    setAccessDenied(true); 
                     setProject(null);
                     toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded or you don't have access."});
                 }
@@ -303,8 +318,7 @@ export default function ProjectDetailPage() {
         }
     };
       performLoadProjectData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectUuid, user, authLoading, router]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData]);
 
 
   useEffect(() => {
@@ -371,7 +385,7 @@ export default function ProjectDetailPage() {
 
 
   useEffect(() => {
-    if (isUpdateTaskPending || !updateTaskState) return; // Wait for pending to finish and state to be set
+    if (isUpdateTaskPending || !updateTaskState) return; 
 
     if (updateTaskState.error && !isUpdateTaskPending) {
         let errorMessage = updateTaskState.error;
@@ -381,7 +395,7 @@ export default function ProjectDetailPage() {
             }
         });
         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
-        lastSubmitSourceRef.current = null; // Reset on error
+        lastSubmitSourceRef.current = null; 
         return;
     }
 
@@ -390,8 +404,7 @@ export default function ProjectDetailPage() {
         loadTasks();
 
         if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
-            setTaskToManageSubtasks(updateTaskState.updatedTask); // Keep dialog data fresh if it remains open
-            setIsManageSubtasksDialogOpen(false); // Explicitly close subtask dialog
+             setIsManageSubtasksDialogOpen(false); 
         } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
             setIsEditTaskDialogOpen(false);
             setTaskToEdit(null);
@@ -400,7 +413,7 @@ export default function ProjectDetailPage() {
     }
 }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskToManageSubtasks, taskToEdit]);
   
-  useEffect(() => {
+ useEffect(() => {
     if (isEditTaskDialogOpen && taskToEdit) {
       taskForm.reset({
         title: taskToEdit.title,
@@ -483,6 +496,20 @@ export default function ProjectDetailPage() {
         }
     }
   }, [toggleTaskPinState, isToggleTaskPinPending, toast, loadTasks]);
+
+  useEffect(() => {
+    if (!isCreateProjectTagPending && createProjectTagState) {
+      if (createProjectTagState.message && !createProjectTagState.error) {
+        toast({ title: "Success", description: createProjectTagState.message });
+        setIsAddProjectTagDialogOpen(false);
+        projectTagForm.reset({ tagName: '', tagColor: '#6B7280' });
+        loadProjectTagsData(); // Reload tags for the project
+      }
+      if (createProjectTagState.error) {
+        toast({ variant: "destructive", title: "Tag Creation Error", description: createProjectTagState.error });
+      }
+    }
+  }, [createProjectTagState, isCreateProjectTagPending, toast, projectTagForm, loadProjectTagsData]);
 
   useEffect(() => {
     if (project) {
@@ -570,7 +597,6 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    // todoListMarkdown is managed separately now, pass existing value
     formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || ''); 
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
@@ -596,16 +622,12 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
-    // Pass other existing task fields to ensure they are not wiped if updateTaskAction expects them
-    // or if dbUpdateTask is a full update rather than partial.
-    // Assuming partial update, only todoListMarkdown is strictly needed here if other fields are not changing.
     formData.append('title', taskToManageSubtasks.title); 
     formData.append('status', taskToManageSubtasks.status); 
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
     if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
     const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
     if (currentTagsString) formData.append('tagsString', currentTagsString);
-
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -622,13 +644,11 @@ export default function ProjectDetailPage() {
     }
     
     debounceTimers.current[taskUuid] = setTimeout(() => {
-      lastSubmitSourceRef.current = null; // Not from a specific dialog, but a card action
+      lastSubmitSourceRef.current = null; 
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
-      // Pass other essential fields, assuming updateTaskAction might expect them
-      // or dbUpdateTask could be a full update.
       formData.append('title', taskToUpdate.title); 
       formData.append('status', taskToUpdate.status); 
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -777,47 +797,63 @@ export default function ProjectDetailPage() {
     return parts[parts.length - 1].trimStart();
   };
 
-  const handleTagsStringInputChange = (
-      event: React.ChangeEvent<HTMLInputElement>,
-      currentFieldValue: string,
-      setValue: (name: "tagsString", value: string) => void // from useForm
+  const handleTagsInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    fieldApi: any, // From RHF Controller render prop: field
+    formApi: any  // From RHF useForm()
   ) => {
-      const inputValue = event.target.value;
-      setValue("tagsString", inputValue); // Update RHF immediately
+    const inputValue = event.target.value;
+    fieldApi.onChange(inputValue); // Update RHF immediately
 
-      const fragment = getCurrentTagFragment(inputValue);
+    const fragment = getCurrentTagFragment(inputValue);
+    setActiveTagInputName(fieldApi.name as "tagsString");
 
-      if (fragment) {
-          const lowerFragment = fragment.toLowerCase();
-          const typedTags = inputValue.split(',').map(t => t.trim().toLowerCase());
-          const filtered = projectTags
-              .filter(tag => tag.name.toLowerCase().startsWith(lowerFragment) && !typedTags.includes(tag.name.toLowerCase()))
-              .slice(0, 5); // Limit suggestions
-          setTagSuggestions(filtered);
-          setShowTagSuggestions(filtered.length > 0);
-      } else {
-          setTagSuggestions([]);
-          setShowTagSuggestions(false);
-      }
+    if (fragment) {
+        const lowerFragment = fragment.toLowerCase();
+        const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+        const filtered = projectTags
+            .filter(tag => 
+                tag.name.toLowerCase().startsWith(lowerFragment) && 
+                !currentTagsInInput.includes(tag.name.toLowerCase())
+            )
+            .slice(0, 5); 
+        setTagSuggestions(filtered);
+        setShowTagSuggestions(filtered.length > 0);
+    } else {
+        setTagSuggestions([]);
+        setShowTagSuggestions(false);
+    }
   };
 
   const handleTagSuggestionClick = (
-      suggestion: TagType,
-      currentFieldValue: string,
-      setValue: (name: "tagsString", value: string) => void // from useForm
+    suggestion: TagType,
+    fieldApi: any, // From RHF Controller render prop: field
+    formApi: any  // From RHF useForm()
   ) => {
-      const parts = currentFieldValue.split(',');
-      parts[parts.length - 1] = suggestion.name; // Replace current fragment
-      
-      let newValue = parts.join(',');
-      if (!newValue.endsWith(', ')) {
-           newValue += ', ';
-      }
-      
-      setValue("tagsString", newValue); // Update RHF
-      setTagSuggestions([]);
-      setShowTagSuggestions(false);
-      tagInputRef.current?.focus();
+    const currentFieldValue = fieldApi.value || "";
+    const parts = currentFieldValue.split(',');
+    parts[parts.length - 1] = suggestion.name; 
+    
+    let newValue = parts.join(',');
+    if (!newValue.endsWith(', ')) {
+         newValue += ', ';
+    }
+    
+    fieldApi.onChange(newValue); // Update RHF
+    setTagSuggestions([]);
+    setShowTagSuggestions(false);
+    tagInputRef.current?.focus();
+  };
+
+  const handleCreateProjectTagSubmit = async (values: ProjectTagFormValues) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('tagName', values.tagName);
+    formData.append('tagColor', values.tagColor);
+    ReactStartTransition(() => {
+      createProjectTagFormAction(formData);
+    });
   };
 
 
@@ -1003,7 +1039,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({tasks.length})</CardTitle>
-               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); } }}>
+               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); } }}>
                 <DialogTrigger asChild>
                     <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
@@ -1020,27 +1056,26 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField
+                            <Controller
                                 control={taskForm.control}
                                 name="tagsString"
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions} onOpenChange={setShowTagSuggestions}>
-                                    <PopoverTrigger asChild>
+                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open) { setShowTagSuggestions(false); setActiveTagInputName(null); }}}>
+                                      <PopoverAnchor>
                                         <FormControl>
                                         <Input
                                             {...field}
                                             ref={tagInputRef}
                                             placeholder="e.g. frontend, bug, urgent"
-                                            onChange={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
-                                            onBlur={() => setTimeout(() => setShowTagSuggestions(false), 150)}
-                                            onFocus={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)} // Re-check on focus
+                                            onFocus={() => setActiveTagInputName('tagsString')}
+                                            onChange={(e) => handleTagsInputChange(e, field, taskForm)}
+                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]')) setShowTagSuggestions(false); }, 150)}
                                         />
                                         </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        {tagSuggestions.length > 0 && (
+                                      </PopoverAnchor>
+                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                         <Command>
                                             <CommandInput placeholder="Filter tags..." className="h-9" />
                                             <CommandList>
@@ -1050,7 +1085,7 @@ export default function ProjectDetailPage() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => handleTagSuggestionClick(suggestion, field.value, taskForm.setValue)}
+                                                    onSelect={() => handleTagSuggestionClick(suggestion, field, taskForm)}
                                                     className="cursor-pointer"
                                                 >
                                                     {suggestion.name}
@@ -1059,8 +1094,7 @@ export default function ProjectDetailPage() {
                                             </CommandGroup>
                                             </CommandList>
                                         </Command>
-                                        )}
-                                    </PopoverContent>
+                                      </PopoverContent>
                                     </Popover>
                                     <FormMessage />
                                 </FormItem>
@@ -1114,7 +1148,6 @@ export default function ProjectDetailPage() {
                                     ) : (
                                       <p className="text-xs text-muted-foreground">
                                         No sub-tasks defined. 
-                                        {canCreateUpdateDeleteTasks && " Click 'Manage Sub-tasks' below to add some."}
                                       </p>
                                     )}
                                 </div>
@@ -1195,7 +1228,7 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         {/* Main Edit Task Dialog */}
-        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); } }}>
+        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); } }}>
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
                     <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
@@ -1208,27 +1241,26 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField
+                            <Controller
                                 control={taskForm.control}
                                 name="tagsString"
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions && taskForm.formState.isDirty /* Only show if form is dirty or focused */} onOpenChange={setShowTagSuggestions}>
-                                    <PopoverTrigger asChild>
+                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open) { setShowTagSuggestions(false); setActiveTagInputName(null); }}}>
+                                      <PopoverAnchor>
                                         <FormControl>
                                         <Input
                                             {...field}
                                             ref={tagInputRef}
                                             placeholder="e.g. frontend, bug, urgent"
-                                            onChange={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
-                                            onBlur={() => setTimeout(() => setShowTagSuggestions(false), 150)}
-                                            onFocus={(e) => handleTagsStringInputChange(e, field.value, taskForm.setValue)}
+                                            onFocus={() => setActiveTagInputName('tagsString')}
+                                            onChange={(e) => handleTagsInputChange(e, field, taskForm)}
+                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]')) setShowTagSuggestions(false); }, 150)}
                                         />
                                         </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        {tagSuggestions.length > 0 && (
+                                      </PopoverAnchor>
+                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                         <Command>
                                             <CommandInput placeholder="Filter tags..." className="h-9" />
                                             <CommandList>
@@ -1238,7 +1270,7 @@ export default function ProjectDetailPage() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => handleTagSuggestionClick(suggestion, field.value, taskForm.setValue)}
+                                                    onSelect={() => handleTagSuggestionClick(suggestion, field, taskForm)}
                                                     className="cursor-pointer"
                                                 >
                                                     {suggestion.name}
@@ -1247,8 +1279,7 @@ export default function ProjectDetailPage() {
                                             </CommandGroup>
                                             </CommandList>
                                         </Command>
-                                        )}
-                                    </PopoverContent>
+                                      </PopoverContent>
                                     </Popover>
                                     <FormMessage />
                                 </FormItem>
@@ -1578,11 +1609,78 @@ export default function ProjectDetailPage() {
               </div>
 
               <div>
-                <h4 className="font-semibold mb-2 text-lg">Project Tags</h4>
-                 <div className="border p-4 rounded-md text-muted-foreground">
-                    <p>Project-specific tag management (creating, editing, deleting tags) is planned.</p>
-                    {canManageProjectSettings && <Button className="mt-3" size="sm" disabled><TagIcon className="mr-2 h-4 w-4"/>Manage Tags</Button>}
-                 </div>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-semibold text-lg">Project Tags</h4>
+                    {canManageProjectSettings && (
+                        <Dialog open={isAddProjectTagDialogOpen} onOpenChange={setIsAddProjectTagDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button size="sm" onClick={() => projectTagForm.reset({ tagName: '', tagColor: '#6B7280' })}><TagIcon className="mr-2 h-4 w-4"/>Add Project Tag</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Add New Project Tag</DialogTitle>
+                                    <DialogDescription>Create a new tag with a specific color for this project.</DialogDescription>
+                                </DialogHeader>
+                                <Form {...projectTagForm}>
+                                    <form onSubmit={projectTagForm.handleSubmit(handleCreateProjectTagSubmit)} className="space-y-4">
+                                        <FormField
+                                            control={projectTagForm.control}
+                                            name="tagName"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Tag Name</FormLabel>
+                                                    <FormControl><Input {...field} placeholder="e.g., Backend" /></FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={projectTagForm.control}
+                                            name="tagColor"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Tag Color</FormLabel>
+                                                    <div className="flex items-center gap-2">
+                                                        <FormControl><Input type="color" {...field} className="p-1 h-10 w-14 block" /></FormControl>
+                                                        <Input type="text" {...field} placeholder="#RRGGBB" className="max-w-[120px]" 
+                                                          onChange={(e) => {
+                                                            field.onChange(e);
+                                                            const colorInput = e.target.previousElementSibling as HTMLInputElement;
+                                                            if (colorInput && /^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                                                              colorInput.value = e.target.value;
+                                                            }
+                                                          }}
+                                                        />
+                                                        <div className="w-8 h-8 rounded border" style={{ backgroundColor: field.value }}></div>
+                                                    </div>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        {createProjectTagState?.error && <p className="text-sm text-destructive">{createProjectTagState.error}</p>}
+                                        <DialogFooter>
+                                            <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                                            <Button type="submit" disabled={isCreateProjectTagPending}>
+                                                {isCreateProjectTagPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Add Tag
+                                            </Button>
+                                        </DialogFooter>
+                                    </form>
+                                </Form>
+                            </DialogContent>
+                        </Dialog>
+                    )}
+                </div>
+                 <Card className="border p-4 rounded-md ">
+                    {projectTags.length === 0 && <p className="text-muted-foreground text-center py-2">No custom tags defined for this project yet.</p>}
+                    <div className="flex flex-wrap gap-2">
+                        {projectTags.map(tag => (
+                            <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: '#fff' /* Assuming white text for colored badges */ }} className="text-sm px-3 py-1">
+                                {tag.name}
+                                {/* Add Edit/Delete buttons here later if needed, with permissions */}
+                            </Badge>
+                        ))}
+                    </div>
+                 </Card>
               </div>
                {currentUserRole === 'owner' && (
                 <div>
@@ -1601,3 +1699,703 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
+
+</content>
+  </change>
+  <change>
+    <file>/src/app/(app)/projects/[id]/actions.ts</file>
+    <content><![CDATA[
+'use server';
+
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag } from '@/types';
+import {
+  getProjectByUuid as dbGetProjectByUuid,
+  getUserByUuid as dbGetUserByUuid,
+  updateProjectDetails as dbUpdateProjectDetails,
+  addProjectMember as dbAddProjectMember,
+  getProjectMembers as dbGetProjectMembers,
+  getUserByEmail as dbGetUserByEmail,
+  removeProjectMember as dbRemoveProjectMember,
+  getProjectMemberRole as dbGetProjectMemberRole,
+  createTask as dbCreateTask,
+  getTasksForProject as dbGetTasksForProject,
+  updateTaskStatus as dbUpdateTaskStatus,
+  updateTask as dbUpdateTask,
+  deleteTask as dbDeleteTask,
+  getProjectTags as dbGetProjectTags,
+  updateProjectReadme as dbUpdateProjectReadme,
+  updateProjectUrgency as dbUpdateProjectUrgency,
+  updateProjectVisibility as dbUpdateProjectVisibility,
+  toggleTaskPinStatus as dbToggleTaskPinStatus,
+  createProjectTag as dbCreateProjectTag,
+  // deleteProjectTag as dbDeleteProjectTag, // TODO: Implement later
+  // updateProjectTag as dbUpdateProjectTag, // TODO: Implement later
+} from '@/lib/db';
+import { z } from 'zod';
+import { auth } from '@/lib/authEdge';
+
+export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
+  if (!uuid) return null;
+  try {
+    const project = await dbGetProjectByUuid(uuid);
+    if (!project) return null;
+    return project;
+  } catch (error) {
+    console.error("Failed to fetch project:", error);
+    return null;
+  }
+}
+
+export async function fetchProjectOwnerNameAction(ownerUuid: string | undefined): Promise<string | null> {
+  if (!ownerUuid) return null;
+  const owner = await dbGetUserByUuid(ownerUuid);
+  return owner?.name || null;
+}
+
+const UpdateProjectSchema = z.object({
+  name: z.string().min(3, "Project name must be at least 3 characters.").max(100),
+  description: z.string().max(5000, "Description cannot exceed 5000 characters.").optional().or(z.literal('')),
+  projectUuid: z.string().uuid("Invalid project UUID."),
+});
+
+export async function updateProjectAction(
+  prevState: { error?: string; errors?: Record<string, string[] | undefined>; message?: string },
+  formData: FormData
+): Promise<{ error?: string; errors?: Record<string, string[] | undefined>; message?: string; project?: Project }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+     console.error("[updateProjectAction] Authentication required. No session user UUID.");
+     return { error: "Authentication required." };
+  }
+  console.log("[updateProjectAction] Authenticated user:", session.user.uuid);
+
+
+  const validatedFields = UpdateProjectSchema.safeParse({
+    name: formData.get('name'),
+    description: formData.get('description'),
+    projectUuid: formData.get('projectUuid'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      errors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { projectUuid, name, description } = validatedFields.data;
+
+  try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project) return { error: "Project not found." };
+
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[updateProjectAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+        return { error: `You do not have permission to edit this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+
+    const updatedProject = await dbUpdateProjectDetails(projectUuid, name, description || undefined);
+    if (!updatedProject) {
+      return { error: 'Failed to update project or project not found.' };
+    }
+    return { message: 'Project updated successfully!', project: updatedProject };
+  } catch (error: any) {
+    console.error('Failed to update project (server action):', error);
+    return { error: error.message || 'An unexpected error occurred.' };
+  }
+}
+
+
+export interface InviteUserFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  invitedMember?: ProjectMember;
+}
+
+const InviteUserSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  email: z.string().email("Invalid email address."),
+  role: z.enum(['co-owner', 'editor', 'viewer'] as [ProjectMemberRole, ...ProjectMemberRole[]]),
+});
+
+
+export async function inviteUserToProjectAction(
+  prevState: InviteUserFormState,
+  formData: FormData
+): Promise<InviteUserFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[inviteUserToProjectAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+  console.log("[inviteUserToProjectAction] Authenticated user for permission check:", session.user.uuid);
+
+  const validatedFields = InviteUserSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    email: formData.get('emailToInvite'),
+    role: formData.get('roleToInvite'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+  const { projectUuid, email, role } = validatedFields.data;
+
+  try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project) return { error: "Project not found." };
+
+    const inviterRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[inviteUserToProjectAction] Inviter role check for project ${projectUuid} (user ${session.user.uuid}): ${inviterRole}`);
+     if (!inviterRole || !['owner', 'co-owner'].includes(inviterRole)) {
+      return { error: `You do not have permission to invite users to this project. Your role: ${inviterRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+
+    const userToInvite = await dbGetUserByEmail(email);
+    if (!userToInvite) {
+      return { error: "User with this email not found." };
+    }
+
+    if (userToInvite.uuid === project.ownerUuid && role !== 'owner') {
+      return { error: "Cannot change the project owner's role through invitation. Ownership must be transferred explicitly."};
+    }
+    if (userToInvite.uuid === project.ownerUuid && role === 'owner') {
+      return { error: "This user is already the project owner."};
+    }
+
+    const currentMembers = await dbGetProjectMembers(projectUuid);
+    const existingMembership = currentMembers.find(member => member.userUuid === userToInvite.uuid);
+
+    if (existingMembership && existingMembership.role === role) {
+      return { error: `${userToInvite.name} is already a ${role} in this project.` };
+    }
+
+    const newOrUpdatedMember = await dbAddProjectMember(projectUuid, userToInvite.uuid, role);
+    if (!newOrUpdatedMember) {
+        return { error: "Failed to add or update user in the project."};
+    }
+    return { message: `${userToInvite.name} has been successfully ${existingMembership ? 'updated to role' : 'invited as'} ${role}.`, invitedMember: newOrUpdatedMember };
+  } catch (error: any) {
+    console.error("Error inviting user:", error);
+    return { error: error.message || "An unexpected error occurred while inviting the user." };
+  }
+}
+
+export async function fetchProjectMembersAction(projectUuid: string | undefined): Promise<ProjectMember[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetProjectMembers(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch project members:", error);
+    return [];
+  }
+}
+
+export async function removeUserFromProjectAction(projectUuid: string, userUuidToRemove: string): Promise<{success?: boolean, error?: string, message?: string}> {
+    const session = await auth();
+    if (!session?.user?.uuid) {
+      console.error("[removeUserFromProjectAction] Authentication required. No session user UUID.");
+      return { error: "Authentication required." };
+    }
+     console.log("[removeUserFromProjectAction] Authenticated user for permission check:", session.user.uuid);
+
+
+    if (!projectUuid || !userUuidToRemove) {
+        return { error: "Project UUID and User UUID are required." };
+    }
+    try {
+        const project = await dbGetProjectByUuid(projectUuid);
+        if (!project) return { error: "Project not found." };
+
+        const removerRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        console.log(`[removeUserFromProjectAction] Remover role check for project ${projectUuid} (user ${session.user.uuid}): ${removerRole}`);
+        if (!removerRole || !['owner', 'co-owner'].includes(removerRole)) {
+            return { error: `You do not have permission to remove users from this project. Your role: ${removerRole || 'not a member'}. UUID: ${session.user.uuid}` };
+        }
+        if (project.ownerUuid === userUuidToRemove) {
+            return { error: "Project owner cannot be removed. Transfer ownership first." };
+        }
+
+        const success = await dbRemoveProjectMember(projectUuid, userUuidToRemove);
+        if (success) {
+            return { success: true, message: "User removed from project successfully." };
+        }
+        return { error: "Failed to remove user from project." };
+    } catch (error: any)
+{
+        console.error("Error removing user from project:", error);
+        return { error: error.message || "An unexpected error occurred." };
+    }
+}
+
+
+// Task Actions
+const CreateTaskSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  description: z.string().optional(),
+  todoListMarkdown: z.string().optional().default(''),
+  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
+  assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
+  tagsString: z.string().optional(),
+});
+
+export interface CreateTaskFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  createdTask?: Task;
+}
+
+export async function createTaskAction(prevState: CreateTaskFormState, formData: FormData): Promise<CreateTaskFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[createTaskAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+  console.log("[createTaskAction] Authenticated user:", session.user.uuid);
+
+  const validatedFields = CreateTaskSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    description: formData.get('description') || '', 
+    todoListMarkdown: formData.get('todoListMarkdown') || '', 
+    status: formData.get('status'),
+    assigneeUuid: formData.get('assigneeUuid') || '', 
+    tagsString: formData.get('tagsString'),
+  });
+
+  if (!validatedFields.success) {
+    console.error("[createTaskAction] Validation failed:", validatedFields.error.flatten().fieldErrors);
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { projectUuid, title, description, todoListMarkdown, status, assigneeUuid: rawAssigneeUuid, tagsString } = validatedFields.data;
+
+  let finalAssigneeUuid: string | null = null;
+  if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
+    finalAssigneeUuid = rawAssigneeUuid;
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[createTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: `You do not have permission to create tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+
+    const taskData = {
+      projectUuid,
+      title,
+      description: description || undefined,
+      todoListMarkdown: todoListMarkdown || undefined,
+      status,
+      assigneeUuid: finalAssigneeUuid,
+      tagsString: tagsString || undefined,
+    };
+    const createdTask = await dbCreateTask(taskData);
+    return { message: "Task created successfully!", createdTask };
+  } catch (error: any) {
+    console.error("Error creating task:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export async function fetchTasksAction(projectUuid: string | undefined): Promise<Task[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetTasksForProject(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+    return [];
+  }
+}
+
+const UpdateTaskStatusSchema = z.object({
+  taskUuid: z.string().uuid("Invalid task UUID."),
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
+});
+
+export interface UpdateTaskStatusFormState {
+  message?: string;
+  error?: string;
+  updatedTask?: Task;
+}
+
+export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormState, formData: FormData): Promise<UpdateTaskStatusFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+     console.error("[updateTaskStatusAction] Authentication required. No session user UUID.");
+     return { error: "Authentication required." };
+    }
+  console.log("[updateTaskStatusAction] Authenticated user for permission check:", session.user.uuid);
+
+  const validatedFields = UpdateTaskStatusSchema.safeParse({
+    taskUuid: formData.get('taskUuid'),
+    projectUuid: formData.get('projectUuid'),
+    status: formData.get('status'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input: " + JSON.stringify(validatedFields.error.flatten().fieldErrors) };
+  }
+  const { taskUuid, projectUuid, status } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[updateTaskStatusAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole) { 
+      return { error: `You are not a member of this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+
+    const updatedTask = await dbUpdateTaskStatus(taskUuid, status);
+    if (!updatedTask) {
+      return { error: "Failed to update task status." };
+    }
+    return { message: "Task status updated successfully!", updatedTask };
+  } catch (error: any) {
+    console.error("Error updating task status:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+const UpdateTaskSchema = z.object({
+  taskUuid: z.string().uuid("Invalid task UUID."),
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  description: z.string().optional(),
+  todoListMarkdown: z.string().optional().default(''),
+  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
+  assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
+  tagsString: z.string().optional(),
+});
+
+export interface UpdateTaskFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  updatedTask?: Task;
+}
+
+export async function updateTaskAction(prevState: UpdateTaskFormState, formData: FormData): Promise<UpdateTaskFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[updateTaskAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+   console.log("[updateTaskAction] Authenticated user for permission check:", session.user.uuid);
+
+
+  const validatedFields = UpdateTaskSchema.safeParse({
+    taskUuid: formData.get('taskUuid'),
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    description: formData.get('description') || '', 
+    todoListMarkdown: formData.get('todoListMarkdown') || '',
+    status: formData.get('status'),
+    assigneeUuid: formData.get('assigneeUuid') || '', 
+    tagsString: formData.get('tagsString'),
+  });
+
+  if (!validatedFields.success) {
+    console.error("[updateTaskAction] Validation failed:", validatedFields.error.flatten().fieldErrors);
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { taskUuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid: rawAssigneeUuid, tagsString } = validatedFields.data;
+  
+  let finalAssigneeUuid: string | null = null;
+    if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
+        finalAssigneeUuid = rawAssigneeUuid;
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[updateTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+    
+    const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
+    
+    if (formData.has('title')) taskData.title = title;
+    if (formData.has('description')) taskData.description = description || undefined; 
+    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined; 
+    if (formData.has('status')) taskData.status = status;
+    if (formData.has('assigneeUuid')) taskData.assigneeUuid = finalAssigneeUuid;
+    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined; 
+    
+
+    const updatedTask = await dbUpdateTask(taskUuid, taskData);
+    if (!updatedTask) {
+      return { error: "Failed to update task."};
+    }
+    return { message: "Task updated successfully!", updatedTask };
+  } catch (error: any) {
+    console.error("Error updating task:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface DeleteTaskFormState {
+    message?: string;
+    error?: string;
+}
+
+export async function deleteTaskAction(prevState: DeleteTaskFormState, formData: FormData): Promise<DeleteTaskFormState> {
+    const session = await auth();
+    if (!session?.user?.uuid) {
+      console.error("[deleteTaskAction] Authentication required. No session user UUID.");
+      return { error: "Authentication required." };
+    }
+    console.log("[deleteTaskAction] Authenticated user for permission check:", session.user.uuid);
+
+    const taskUuid = formData.get('taskUuid') as string;
+    const projectUuid = formData.get('projectUuid') as string;
+
+    if (!taskUuid || !projectUuid) {
+        return { error: "Task UUID and Project UUID are required."};
+    }
+    
+    try {
+        const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        console.log(`[deleteTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+        if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+            return { error: `You do not have permission to delete tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+        }
+        const success = await dbDeleteTask(taskUuid);
+        if (success) {
+            return { message: "Task deleted successfully." };
+        }
+        return { error: "Failed to delete task." };
+    } catch (error: any) {
+        console.error("Error deleting task:", error);
+        return { error: error.message || "An unexpected error occurred." };
+    }
+}
+
+
+// Tag Actions
+export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetProjectTags(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch project tags:", error);
+    return [];
+  }
+}
+
+export interface CreateProjectTagFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  createdTag?: Tag;
+}
+
+const CreateProjectTagSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  tagName: z.string().min(1, "Tag name is required.").max(50, "Tag name too long."),
+  tagColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format. Must be #RRGGBB."),
+});
+
+export async function createProjectTagAction(prevState: CreateProjectTagFormState, formData: FormData): Promise<CreateProjectTagFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[createProjectTagAction] Authentication required.");
+    return { error: "Authentication required." };
+  }
+
+  const validatedFields = CreateProjectTagSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    tagName: formData.get('tagName'),
+    tagColor: formData.get('tagColor'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { projectUuid, tagName, tagColor } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to create tags for this project." };
+    }
+
+    const existingTag = await dbGetProjectTags(projectUuid).then(tags => tags.find(t => t.name.toLowerCase() === tagName.toLowerCase()));
+    if (existingTag) {
+      return { error: `Tag "${tagName}" already exists in this project.`};
+    }
+
+    const newTag = await dbCreateProjectTag(projectUuid, tagName, tagColor);
+    return { message: `Tag "${newTag.name}" created successfully!`, createdTag: newTag };
+  } catch (error: any) {
+    console.error("Error creating project tag:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+
+// Project Settings Actions
+export interface SaveProjectReadmeFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormState, formData: FormData): Promise<SaveProjectReadmeFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[saveProjectReadmeAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+  console.log("[saveProjectReadmeAction] Authenticated user for permission check:", session.user.uuid);
+
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const readmeContent = formData.get('readmeContent') as string;
+
+  if (!projectUuid || readmeContent === null || readmeContent === undefined) {
+    return { error: "Project UUID and README content are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[saveProjectReadmeAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: `You do not have permission to edit the README for this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+    const updatedProject = await dbUpdateProjectReadme(projectUuid, readmeContent);
+    if (!updatedProject) {
+      return { error: "Failed to save README." };
+    }
+    return { message: "README saved successfully.", project: updatedProject };
+  } catch (error: any) {
+    console.error("Error saving README:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface ToggleProjectUrgencyFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgencyFormState, formData: FormData): Promise<ToggleProjectUrgencyFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[toggleProjectUrgencyAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+   console.log("[toggleProjectUrgencyAction] Authenticated user for permission check:", session.user.uuid);
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const isUrgent = formData.get('isUrgent') === 'true';
+
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[toggleProjectUrgencyAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+     if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: `You do not have permission to change urgency for this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+    const updatedProject = await dbUpdateProjectUrgency(projectUuid, isUrgent);
+    if (!updatedProject) {
+      return { error: "Failed to update project urgency." };
+    }
+    return { message: `Project urgency ${isUrgent ? 'set' : 'unset'}.`, project: updatedProject };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface ToggleProjectVisibilityFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisibilityFormState, formData: FormData): Promise<ToggleProjectVisibilityFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[toggleProjectVisibilityAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+  console.log("[toggleProjectVisibilityAction] Authenticated user for permission check:", session.user.uuid);
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const isPrivate = formData.get('isPrivate') === 'true';
+
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    const globalUser = await dbGetUserByUuid(session.user.uuid); 
+    console.log(`[toggleProjectVisibilityAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}, Global role: ${globalUser?.role}`);
+
+    if (userRole !== 'owner' && globalUser?.role !== 'admin') { 
+      return { error: `Only project owners or admins can change project visibility. Your project role: ${userRole || 'not a member'}, global role: ${globalUser?.role || 'unknown'}. UUID: ${session.user.uuid}` };
+    }
+    const updatedProject = await dbUpdateProjectVisibility(projectUuid, isPrivate);
+    if (!updatedProject) {
+      return { error: "Failed to update project visibility." };
+    }
+    return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'}.`, project: updatedProject };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+// Task Pinning Action
+export interface ToggleTaskPinState {
+  message?: string;
+  error?: string;
+  updatedTask?: Task;
+}
+
+export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formData: FormData): Promise<ToggleTaskPinState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[toggleTaskPinAction] Authentication required. No session user UUID.");
+    return { error: "Authentication required." };
+  }
+   console.log("[toggleTaskPinAction] Authenticated user for permission check:", session.user.uuid);
+
+
+  const taskUuid = formData.get('taskUuid') as string;
+  const projectUuid = formData.get('projectUuid') as string; 
+  const isPinned = formData.get('isPinned') === 'true';
+
+  if (!taskUuid || !projectUuid) {
+    return { error: "Task UUID and Project UUID are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    console.log(`[toggleTaskPinAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+      return { error: `You do not have permission to pin/unpin tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+    }
+
+    const updatedTask = await dbToggleTaskPinStatus(taskUuid, isPinned);
+    if (!updatedTask) {
+      return { error: "Failed to update task pin status." };
+    }
+    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+

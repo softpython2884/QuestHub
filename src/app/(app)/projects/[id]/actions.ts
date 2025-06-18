@@ -21,6 +21,9 @@ import {
   updateProjectUrgency as dbUpdateProjectUrgency,
   updateProjectVisibility as dbUpdateProjectVisibility,
   toggleTaskPinStatus as dbToggleTaskPinStatus,
+  createProjectTag as dbCreateProjectTag,
+  // deleteProjectTag as dbDeleteProjectTag, // TODO: Implement later
+  // updateProjectTag as dbUpdateProjectTag, // TODO: Implement later
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -415,14 +418,12 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     
     const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
     
-    // Check if each field was actually present in formData before adding to taskData
-    // This is important for partial updates, e.g., when only todoListMarkdown is changed.
     if (formData.has('title')) taskData.title = title;
-    if (formData.has('description')) taskData.description = description || undefined; // Send undefined if empty
-    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined; // Send undefined if empty
+    if (formData.has('description')) taskData.description = description || undefined; 
+    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined; 
     if (formData.has('status')) taskData.status = status;
     if (formData.has('assigneeUuid')) taskData.assigneeUuid = finalAssigneeUuid;
-    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined; // Send undefined if empty
+    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined; 
     
 
     const updatedTask = await dbUpdateTask(taskUuid, taskData);
@@ -484,6 +485,58 @@ export async function fetchProjectTagsAction(projectUuid: string): Promise<Tag[]
     return [];
   }
 }
+
+export interface CreateProjectTagFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  createdTag?: Tag;
+}
+
+const CreateProjectTagSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  tagName: z.string().min(1, "Tag name is required.").max(50, "Tag name too long."),
+  tagColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format. Must be #RRGGBB."),
+});
+
+export async function createProjectTagAction(prevState: CreateProjectTagFormState, formData: FormData): Promise<CreateProjectTagFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[createProjectTagAction] Authentication required.");
+    return { error: "Authentication required." };
+  }
+
+  const validatedFields = CreateProjectTagSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    tagName: formData.get('tagName'),
+    tagColor: formData.get('tagColor'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { projectUuid, tagName, tagColor } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to create tags for this project." };
+    }
+
+    const existingTag = await dbGetProjectTags(projectUuid).then(tags => tags.find(t => t.name.toLowerCase() === tagName.toLowerCase()));
+    if (existingTag) {
+      return { error: `Tag "${tagName}" already exists in this project.`};
+    }
+
+    const newTag = await dbCreateProjectTag(projectUuid, tagName, tagColor);
+    return { message: `Tag "${newTag.name}" created successfully!`, createdTag: newTag };
+  } catch (error: any) {
+    console.error("Error creating project tag:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
 
 // Project Settings Actions
 export interface SaveProjectReadmeFormState {
@@ -634,8 +687,4 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
     if (!updatedTask) {
       return { error: "Failed to update task pin status." };
     }
-    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask };
-  } catch (error: any) {
-    return { error: error.message || "An unexpected error occurred." };
-  }
-}
+    return { message: `Task ${isPinned ? 'pinned' : 'unpinned'} successfully.`, updatedTask
