@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -111,14 +109,14 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[1] !== undefined) {
+    if (matchChecked && matchChecked[1] !== undefined) { // Original had matchChecked[1], should be matchChecked[1] for the text
       return `** ${matchChecked[1].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[1] !== undefined) {
+    if (matchUnchecked && matchUnchecked[1] !== undefined) { // Original had matchUnchecked[1], should be matchUnchecked[1] for the text
       return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine;
+    return trimmedLine; // Keep non-task lines as is, or handle as new tasks
   }).join('\n');
 };
 
@@ -130,10 +128,10 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
       return `* [x] ${trimmedLine.substring(3).trim()}`;
     } else if (trimmedLine.startsWith('* ')) {
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) {
+    } else if (trimmedLine.length > 0) { // Treat any other non-empty line as a new open task
       return `* [ ] ${trimmedLine}`;
     }
-    return '';
+    return ''; // Remove empty lines from output
   }).filter(line => line.trim().length > 0).join('\n');
 };
 
@@ -183,6 +181,7 @@ export default function ProjectDetailPage() {
   const tagInputRef = useRef<HTMLInputElement>(null);
   const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const lastTypedFragmentRef = useRef<string>("");
 
 
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
@@ -800,33 +799,41 @@ export default function ProjectDetailPage() {
   };
 
   const handleTagsStringInputChange = (
-    event: React.ChangeEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>,
-    fieldApi: any,
-    formApi: any
+    event: React.ChangeEvent<HTMLInputElement>,
+    fieldApi: any, // ControllerRenderProps['field']
+    formApi: any // UseFormReturn<TaskFormValues>
   ) => {
     const inputValue = event.currentTarget.value;
-    fieldApi.onChange(inputValue);
+    fieldApi.onChange(inputValue); // Update RHF state
 
     const fragment = getCurrentTagFragment(inputValue);
     setActiveTagInputName(fieldApi.name as "tagsString");
-    setActiveSuggestionIndex(-1); // Reset active suggestion on new input
-
+    
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
             .filter(tag =>
                 tag.name.toLowerCase().startsWith(lowerFragment) &&
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) // Exclude already fully typed tags
             )
-            .slice(0, 5);
+            .slice(0, 5); // Limit suggestions
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
+        
+        if (fragment !== lastTypedFragmentRef.current) {
+             setActiveSuggestionIndex(-1); // Reset selection if text fragment changes
+        }
+        lastTypedFragmentRef.current = fragment;
+
     } else {
         setTagSuggestions([]);
         setShowTagSuggestions(false);
+        setActiveSuggestionIndex(-1);
+        lastTypedFragmentRef.current = "";
     }
   };
+
 
   const handleTagSuggestionClick = (
     suggestion: TagType,
@@ -835,10 +842,10 @@ export default function ProjectDetailPage() {
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name;
+    parts[parts.length - 1] = suggestion.name; // Replace current fragment
 
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) {
+    if (!newValue.endsWith(', ')) { // Ensure there's a comma and space for next tag
          newValue += ', ';
     }
 
@@ -846,28 +853,40 @@ export default function ProjectDetailPage() {
     setTagSuggestions([]);
     setShowTagSuggestions(false);
     setActiveSuggestionIndex(-1);
-    setTimeout(() => tagInputRef.current?.focus(), 0);
+    lastTypedFragmentRef.current = ""; // Reset fragment after selection
+    setTimeout(() => tagInputRef.current?.focus(), 0); // Refocus the input
   };
 
   const handleTagInputKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>,
-    fieldApi: any,
-    formApi: any
+    fieldApi: any, 
+    formApi: any 
   ) => {
-    if (!showTagSuggestions || tagSuggestions.length === 0) return;
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setActiveSuggestionIndex(prev => Math.min(prev + 1, tagSuggestions.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
-    } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex !== -1) {
-      event.preventDefault();
-      handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
-    } else if (event.key === 'Escape') {
-      setShowTagSuggestions(false);
-      setActiveSuggestionIndex(-1);
+    if (showTagSuggestions && tagSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveSuggestionIndex(prev => Math.min(prev + 1, tagSuggestions.length - 1));
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
+      } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
+        event.preventDefault(); 
+        event.stopPropagation(); 
+        handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowTagSuggestions(false);
+        setActiveSuggestionIndex(-1);
+        lastTypedFragmentRef.current = "";
+      }
+    } else {
+      // If suggestions are not shown, Escape should still clear any lingering state
+      if (event.key === 'Escape') {
+        setShowTagSuggestions(false);
+        setActiveSuggestionIndex(-1);
+        lastTypedFragmentRef.current = "";
+      }
+      // Let Enter/Tab behave normally (submit form / move focus) if suggestions are not active.
     }
   };
 
@@ -1089,7 +1108,14 @@ export default function ProjectDetailPage() {
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); }}}>
+                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
+                                             onOpenChange={(open) => { 
+                                                if(!open && document.activeElement !== tagInputRef.current) { 
+                                                    setShowTagSuggestions(false); 
+                                                   
+                                                }
+                                            }}
+                                    >
                                       <PopoverAnchor>
                                         <FormControl>
                                         <Input
@@ -1103,7 +1129,12 @@ export default function ProjectDetailPage() {
                                             }}
                                             onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
                                             onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {setShowTagSuggestions(false); setActiveSuggestionIndex(-1);}; }, 150)}
+                                            onBlur={() => setTimeout(() => { 
+                                                if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
+                                                    setShowTagSuggestions(false); 
+                                                   
+                                                }
+                                            }, 150)}
                                         />
                                         </FormControl>
                                       </PopoverAnchor>
@@ -1117,7 +1148,7 @@ export default function ProjectDetailPage() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => {
+                                                    onSelect={() => { // Triggered by click or Enter on CommandItem
                                                         handleTagSuggestionClick(suggestion, field, taskForm);
                                                     }}
                                                     className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
@@ -1287,7 +1318,14 @@ export default function ProjectDetailPage() {
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); }}}>
+                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
+                                              onOpenChange={(open) => { 
+                                                if(!open && document.activeElement !== tagInputRef.current) { 
+                                                    setShowTagSuggestions(false); 
+                                                    
+                                                }
+                                            }}
+                                     >
                                       <PopoverAnchor>
                                         <FormControl>
                                         <Input
@@ -1301,7 +1339,11 @@ export default function ProjectDetailPage() {
                                             }}
                                             onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
                                             onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {setShowTagSuggestions(false); setActiveSuggestionIndex(-1);} }, 150)}
+                                            onBlur={() => setTimeout(() => { 
+                                                if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
+                                                    setShowTagSuggestions(false); 
+                                                }
+                                            }, 150)}
                                         />
                                         </FormControl>
                                       </PopoverAnchor>
@@ -1746,4 +1788,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
