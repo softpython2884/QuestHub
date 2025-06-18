@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, GripVertical, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Announcement, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +47,7 @@ import {
   toggleTaskPinAction,
   type ToggleTaskPinState,
 } from './actions';
+import * as authService from '@/lib/authService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
@@ -88,7 +89,7 @@ type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional(),
+  todoListMarkdown: z.string().optional().default(''),
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(), 
   tagsString: z.string().optional().describe("Comma-separated tag names"),
@@ -111,6 +112,7 @@ export default function ProjectDetailPage() {
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
   const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
@@ -179,11 +181,14 @@ export default function ProjectDetailPage() {
                 role = member?.role || null;
             }
             setCurrentUserRole(role);
+            return role; // Return the role for immediate use
         } catch (error) {
             console.error("Failed to load project members or determine role", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members or determine your role." });
+            return null;
         }
     }
+    return null;
   }, [projectUuid, user, toast]);
 
 
@@ -202,26 +207,41 @@ export default function ProjectDetailPage() {
     const performLoadProjectData = async () => {
         if (projectUuid && user && !authLoading) {
             setIsLoadingData(true);
+            setAccessDenied(false);
             try {
                 const projectData = await fetchProjectAction(projectUuid);
-                setProject(projectData);
-
+                
                 if (projectData) {
+                    let userRoleForProject: ProjectMemberRole | null = null;
+                    if (projectData.ownerUuid) {
+                        userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
+                    } else {
+                        userRoleForProject = await loadProjectMembersAndRole();
+                    }
+
+                    if (projectData.isPrivate && !userRoleForProject) {
+                        setAccessDenied(true);
+                        setProject(null);
+                        setIsLoadingData(false);
+                        toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
+                        return;
+                    }
+                    
+                    setProject(projectData);
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
                     setProjectReadmeContent(projectData.readmeContent || '');
 
                     if (projectData.ownerUuid) {
                         const ownerName = await fetchProjectOwnerNameAction(projectData.ownerUuid);
                         setProjectOwnerName(ownerName);
-                        await loadProjectMembersAndRole(projectData.ownerUuid);
-                    } else {
-                         await loadProjectMembersAndRole();
                     }
                     await loadTasks();
                     await loadProjectTagsData();
+
                 } else {
-                    toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded."})
-                    router.push('/projects');
+                    setAccessDenied(true); // Project not found can also be treated as access denied
+                    setProject(null);
+                    toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded."});
                 }
             } catch (err) {
                 console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
@@ -283,6 +303,9 @@ export default function ProjectDetailPage() {
         if (createTaskState.fieldErrors?.title) {
              errorMessage += ` Title: ${createTaskState.fieldErrors.title.join(', ')}`;
         }
+        if (createTaskState.fieldErrors?.todoListMarkdown) {
+          errorMessage += ` Sub-tasks: ${createTaskState.fieldErrors.todoListMarkdown.join(', ')}`;
+        }
         toast({ variant: "destructive", title: "Task Creation Error", description: errorMessage });
       }
     }
@@ -292,7 +315,7 @@ export default function ProjectDetailPage() {
     if (!isUpdateTaskStatusPending && updateTaskStatusState) {
         if (updateTaskStatusState.message && !updateTaskStatusState.error) {
             toast({ title: "Success", description: updateTaskStatusState.message });
-            loadTasks(); // Reload tasks to reflect status change
+            loadTasks(); 
         }
         if (updateTaskStatusState.error) {
             toast({ variant: "destructive", title: "Status Update Error", description: updateTaskStatusState.error });
@@ -420,7 +443,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole; // Any member can change status, refined in updateTaskStatusAction
+  const canEditTaskStatus = !!currentUserRole;
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -453,7 +476,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    // todoListMarkdown is not set at creation
+    formData.append('todoListMarkdown', ''); // Sub-tasks (todoListMarkdown) are not set at creation
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -489,13 +512,16 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
-    // Send only necessary fields for partial update if action supports it
-    // Or send all fields if action overwrites (current behavior)
-    formData.append('title', taskToUpdate.title); // Keep current title
-    formData.append('status', taskToUpdate.status); // Keep current status
-    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || ''); // Keep current assignee
-    formData.append('description', taskToUpdate.description || ''); // Keep current description
-    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); // Keep current tags
+    
+    // Send only necessary fields for partial update 
+    // To preserve other fields, we send them along.
+    // This logic relies on updateTaskAction correctly handling partial updates if some fields are missing
+    // For now, explicitly sending all fields known by the form to ensure atomicity of this specific update.
+    formData.append('title', taskToUpdate.title); 
+    formData.append('status', taskToUpdate.status);
+    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || '');
+    formData.append('description', taskToUpdate.description || '');
+    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || '');
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -670,15 +696,17 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (!project || !user) {
+  if (accessDenied || !project || !user) {
     return (
-        <div className="space-y-6 text-center">
-             <Button variant="outline" onClick={() => router.back()} className="mb-4 mr-auto block">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
+        <div className="space-y-6 text-center flex flex-col items-center justify-center min-h-[calc(100vh-12rem)]">
+            <Button variant="outline" onClick={() => router.push('/projects')} className="mb-4 self-start">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects List
             </Button>
-            <FolderKanban className="mx-auto h-16 w-16 text-muted-foreground mt-12" />
-            <h2 className="text-2xl font-semibold mt-4">Project Not Found</h2>
-            <p className="text-muted-foreground">The project (ID: {projectUuid}) could not be found or you may not have permission to view it.</p>
+            <AlertCircle className="mx-auto h-16 w-16 text-destructive mt-12" />
+            <h2 className="text-2xl font-semibold mt-4">Access Denied</h2>
+            <p className="text-muted-foreground">
+              {project ? "You do not have permission to view this private project." : `Project (ID: ${projectUuid}) not found or access is restricted.`}
+            </p>
         </div>
     );
   }
@@ -910,7 +938,7 @@ export default function ProjectDetailPage() {
                                 </Select>
                                 {canCreateUpdateDeleteTasks && (
                                     <div className="flex mt-1 sm:mt-0">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" title={task.isPinned ? "Unpin Task" : "Pin Task"} onClick={() => handleToggleTaskPin(task.uuid, task.isPinned || false)} disabled={isToggleTaskPinPending}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" title={task.isPinned ? "Unpin Task" : "Pin Task"} onClick={() => handleToggleTaskPin(task.uuid, task.isPinned || false)} disabled={isToggleTaskPinPending && taskToEdit?.uuid === task.uuid}>
                                             {isToggleTaskPinPending && taskToEdit?.uuid === task.uuid ? <Loader2 className="h-4 w-4 animate-spin"/> : task.isPinned ? <PinOff className="h-4 w-4 text-primary" /> : <Pin className="h-4 w-4" />}
                                         </Button>
                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTaskDialog(task)}>
@@ -993,7 +1021,7 @@ export default function ProjectDetailPage() {
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
                 </CardDescription>
               </div>
-               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canManageProjectSettings}>
+               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canCreateUpdateDeleteTasks}>
                 {isSaveReadmePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save README
               </Button>
             </CardHeader>
@@ -1009,7 +1037,7 @@ export default function ProjectDetailPage() {
                 onChange={(e) => setProjectReadmeContent(e.target.value)}
                 rows={15}
                 className="font-mono"
-                disabled={!canManageProjectSettings}
+                disabled={!canCreateUpdateDeleteTasks}
               />
               {saveReadmeState?.error && <p className="text-sm text-destructive mt-2">{saveReadmeState.error}</p>}
             </CardContent>

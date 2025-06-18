@@ -6,7 +6,6 @@ import * as bcrypt from 'bcryptjs';
 import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid } from './db';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
-import { ZodError } from 'zod';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const AUTH_COOKIE_NAME = 'nqh_auth_token';
@@ -22,7 +21,7 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
   }
   const tokenPayload = {
     uuid: user.uuid,
-    role: user.role, // Include role for potential direct use in JWT, but authEdge should re-verify from DB
+    role: user.role,
     email: user.email,
     name: user.name
   };
@@ -30,7 +29,7 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
 
   cookies().set(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // FALSE for local HTTP, TRUE for production HTTPS
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     sameSite: 'lax',
@@ -111,14 +110,10 @@ export const logout = async (): Promise<void> => {
 export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
   try {
     const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email, avatar);
-    // If email or other critical JWT payload data changes, consider re-issuing the token.
-    // For now, we are not re-issuing on profile update for simplicity.
-    // A full solution might involve a token refresh mechanism.
     if (updatedUserFromDb) {
-        // If user's name or email changed, re-issue token with new info
         const { hashedPassword, ...userToReturn } = updatedUserFromDb;
-        const currentSession = await getCurrentUserSession();
-        if (currentSession?.email !== userToReturn.email || currentSession?.name !== userToReturn.name) {
+        const currentTokenUser = await getCurrentUserSession(); // Get current user from cookie to check if critical data changed
+        if (currentTokenUser?.email !== userToReturn.email || currentTokenUser?.name !== userToReturn.name || currentTokenUser?.avatar !== userToReturn.avatar) {
             console.log('[authService.updateUserProfile] User data changed, re-issuing token.');
             generateTokenAndSetCookie(userToReturn);
         }
@@ -133,12 +128,11 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
 
 export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] Attempting to get current user session from cookie.');
-  const { auth } = await import('@/lib/authEdge'); 
-  const session = await auth(); // auth() now fetches from DB after JWT verification
+  const session = await auth(); 
   
   if (session?.user) {
     console.log('[authService.getCurrentUserSession] Session found for user UUID:', session.user.uuid);
-    return session.user as User; // Cast as User, as authEdge now returns full User object (minus password)
+    return session.user as User;
   }
   console.log('[authService.getCurrentUserSession] No active session found.');
   return null;

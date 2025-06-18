@@ -14,15 +14,14 @@ let db: Database | null = null;
 const DB_DIR = path.join(process.cwd(), 'db');
 const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
 
-// Default tags to be created for new projects
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
-  { name: 'Bug', color: '#EF4444' }, // Red
-  { name: 'Feature', color: '#3B82F6' }, // Blue
-  { name: 'UI', color: '#A855F7' }, // Purple
-  { name: 'Backend', color: '#F97316' }, // Orange
-  { name: 'Docs', color: '#10B981' }, // Green
-  { name: 'Urgent', color: '#DC2626' }, // Darker Red
-  { name: 'Enhancement', color: '#22C55E' }, // Bright Green
+  { name: 'Bug', color: '#EF4444' },
+  { name: 'Feature', color: '#3B82F6' },
+  { name: 'UI', color: '#A855F7' },
+  { name: 'Backend', color: '#F97316' },
+  { name: 'Docs', color: '#10B981' },
+  { name: 'Urgent', color: '#DC2626' },
+  { name: 'Enhancement', color: '#22C55E' },
 ];
 
 const DEFAULT_PROJECT_README_CONTENT = `# 📝 Bienvenue sur FlowUp – Guide Markdown
@@ -230,7 +229,7 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_members (
       projectUuid TEXT NOT NULL,
       userUuid TEXT NOT NULL,
-      roleInProject TEXT NOT NULL, /* 'owner', 'co-owner', 'editor', 'viewer' */
+      roleInProject TEXT NOT NULL, 
       PRIMARY KEY (projectUuid, userUuid),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
       FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -242,7 +241,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      todoListMarkdown TEXT, /* For interactive checklists */
+      todoListMarkdown TEXT,
       status TEXT NOT NULL, 
       assigneeUuid TEXT,      
       dueDate TEXT,
@@ -300,7 +299,7 @@ export async function getDbConnection() {
 
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@nationquest.com');
   if (!adminUser) {
-    const defaultAdminUUID = '00000000-0000-0000-0000-000000000001'; // Fixed UUID for mock admin
+    const defaultAdminUUID = '00000000-0000-0000-0000-000000000001'; 
     const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
@@ -330,7 +329,6 @@ export async function getDbConnection() {
   return db;
 }
 
-// User Functions
 export async function createUser(name: string, email: string, password: string, role: UserRole = 'member'): Promise<Omit<User, 'hashedPassword'>> {
   const connection = await getDbConnection();
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -406,9 +404,10 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   if (avatar === '') {
     const defaultAvatarText = currentUser?.name.substring(0,2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined) {
-    finalAvatar = currentUser?.avatar;
+  } else if (avatar === undefined && currentUser) { // Ensure currentUser exists before accessing its avatar
+    finalAvatar = currentUser.avatar;
   }
+
 
   await connection.run(
     'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
@@ -424,7 +423,6 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   return userToReturn;
 }
 
-// Project Functions
 export async function createProject(name: string, description: string | undefined, ownerUuid: string): Promise<Project> {
   const connection = await getDbConnection();
   const projectUuid = uuidv4();
@@ -446,7 +444,6 @@ export async function createProject(name: string, description: string | undefine
       projectUuid, ownerUuid, 'owner'
     );
 
-    // Create default tags for the new project
     for (const defaultTag of DEFAULT_PROJECT_TAGS) {
       await createProjectTag(projectUuid, defaultTag.name, defaultTag.color);
     }
@@ -467,7 +464,7 @@ export async function createProject(name: string, description: string | undefine
   } catch (err) {
     await connection.run('ROLLBACK');
     console.error("Error creating project:", err);
-    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && (err.message.includes('projects.name') || err.message.includes('projects.uuid'))) { // More specific check
+    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && (err.message.includes('projects.name') || err.message.includes('projects.uuid'))) { 
         throw new Error('A project with this name or UUID already exists.');
     }
     throw err;
@@ -476,11 +473,16 @@ export async function createProject(name: string, description: string | undefine
 
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
-  const project = await connection.get<Project>(
+  const project = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>( // Type hint for SQLite boolean
     'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
-  return project || null;
+  if (!project) return null;
+  return {
+    ...project,
+    isUrgent: !!project.isUrgent, // Convert 0/1 to boolean
+    isPrivate: !!project.isPrivate, // Convert 0/1 to boolean
+  };
 }
 
 export async function updateProjectDetails(uuid: string, name: string, description: string | undefined): Promise<Project | null> {
@@ -517,7 +519,7 @@ export async function updateProjectUrgency(projectUuid: string, isUrgent: boolea
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE projects SET isUrgent = ?, updatedAt = ? WHERE uuid = ?',
-    isUrgent, now, projectUuid
+    isUrgent ? 1 : 0, now, projectUuid // Store as 0 or 1
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -528,7 +530,7 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE projects SET isPrivate = ?, updatedAt = ? WHERE uuid = ?',
-    isPrivate, now, projectUuid
+    isPrivate ? 1 : 0, now, projectUuid // Store as 0 or 1
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -537,7 +539,7 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
-  const projects = await connection.all<Project[]>(
+  const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
     `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.createdAt, p.updatedAt
      FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
@@ -545,16 +547,25 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
      ORDER BY p.updatedAt DESC`,
     userUuid
   );
-  return projects;
+  return projectsData.map(p => ({
+    ...p,
+    isUrgent: !!p.isUrgent,
+    isPrivate: !!p.isPrivate,
+  }));
 }
 
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
-    const projects = await connection.all<Project[]>('SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC');
-    return projects;
+    const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
+      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
+    );
+    return projectsData.map(p => ({
+      ...p,
+      isUrgent: !!p.isUrgent,
+      isPrivate: !!p.isPrivate,
+    }));
 }
 
-// Project Member Functions
 export async function getProjectMemberRole(projectUuid: string, userUuid: string): Promise<ProjectMemberRole | null> {
   const connection = await getDbConnection();
   const member = await connection.get<{ roleInProject: ProjectMemberRole }>(
@@ -632,7 +643,6 @@ export async function removeProjectMember(projectUuid: string, userUuid: string)
 }
 
 
-// Tag Functions
 export async function createProjectTag(projectUuid: string, name: string, color: string): Promise<Tag> {
   const connection = await getDbConnection();
   const tagUuid = uuidv4();
@@ -644,10 +654,9 @@ export async function createProjectTag(projectUuid: string, name: string, color:
     return { uuid: tagUuid, projectUuid, name, color };
   } catch (error: any) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      // Tag with this name already exists for this project, fetch and return it
       const existingTag = await getProjectTagByName(projectUuid, name);
       if (existingTag) return existingTag;
-      throw new Error(`Failed to create or find tag: ${name}`); // Should not happen if UNIQUE constraint failed
+      throw new Error(`Failed to create or find tag: ${name}`);
     }
     throw error;
   }
@@ -685,7 +694,6 @@ export async function getTagsForTask(taskUuid: string): Promise<Tag[]> {
 }
 
 
-// Task Functions
 export async function createTask(data: {
   projectUuid: string;
   title: string;
@@ -693,7 +701,7 @@ export async function createTask(data: {
   todoListMarkdown?: string;
   status: TaskStatus;
   assigneeUuid?: string | null;
-  tagsString?: string; // Comma-separated tag names
+  tagsString?: string;
 }): Promise<Task> {
   const connection = await getDbConnection();
   const taskUuid = uuidv4();
@@ -703,7 +711,7 @@ export async function createTask(data: {
   try {
     const result = await connection.run(
       'INSERT INTO tasks (uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      taskUuid, data.projectUuid, data.title, data.description, data.todoListMarkdown, data.status, data.assigneeUuid, now, now, false
+      taskUuid, data.projectUuid, data.title, data.description || undefined, data.todoListMarkdown || undefined, data.status, data.assigneeUuid, now, now, false
     );
     if (!result.lastID) throw new Error('Task creation failed.');
 
@@ -732,7 +740,7 @@ export async function createTask(data: {
 
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
-  const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName'>>(
+  const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>( // Type hint for SQLite boolean
     `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned 
      FROM tasks 
      WHERE uuid = ?`,
@@ -746,13 +754,13 @@ export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
     const assignee = await getUserByUuid(taskData.assigneeUuid);
     assigneeName = assignee?.name || null;
   }
-  return { ...taskData, tags, assigneeName: assigneeName || undefined };
+  return { ...taskData, tags, assigneeName: assigneeName || undefined, isPinned: !!taskData.isPinned }; // Convert 0/1 to boolean
 }
 
 
 export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
   const connection = await getDbConnection();
-  const taskRows = await connection.all<Omit<Task, 'tags' | 'assigneeName'>[]>(
+  const taskRows = await connection.all<Array<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>>( // Type hint for SQLite boolean
     `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
      FROM tasks
      WHERE projectUuid = ?
@@ -768,7 +776,7 @@ export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
       const assignee = await getUserByUuid(taskRow.assigneeUuid);
       assigneeName = assignee?.name || null;
     }
-    tasksWithDetails.push({ ...taskRow, tags, assigneeName: assigneeName || undefined });
+    tasksWithDetails.push({ ...taskRow, tags, assigneeName: assigneeName || undefined, isPinned: !!taskRow.isPinned }); // Convert 0/1 to boolean
   }
   return tasksWithDetails;
 }
@@ -792,14 +800,14 @@ export async function updateTask(
   if (!currentTask) return null;
 
   const updates: string[] = [];
-  const values: (string | null | undefined | boolean)[] = [];
+  const values: (string | number | null | undefined | boolean)[] = []; // Allow number for boolean storage
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
   if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description); }
   if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
   if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
-  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned); }
+  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); } // Store as 0 or 1
   
   if (updates.length === 0 && data.tagsString === undefined) return currentTask; 
 
@@ -854,7 +862,7 @@ export async function toggleTaskPinStatus(taskUuid: string, isPinned: boolean): 
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE tasks SET isPinned = ?, updatedAt = ? WHERE uuid = ?',
-    isPinned, now, taskUuid
+    isPinned ? 1 : 0, now, taskUuid // Store as 0 or 1
   );
   if (result.changes === 0) return null;
   return getTaskByUuid(taskUuid);
