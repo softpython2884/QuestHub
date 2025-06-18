@@ -92,7 +92,6 @@ const taskFormSchema = z.object({
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
-  // todoListMarkdown is handled separately
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
@@ -101,27 +100,32 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
-    if (trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i)) { // Checked item: * [x] text
-      return `** ${trimmedLine.replace(/^\s*\*\s*\[x\]\s*/i, '$1').trim()}`;
-    } else if (trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i)) { // Unchecked item: * [ ] text
-      return `* ${trimmedLine.replace(/^\s*\*\s*\[ \]\s*/i, '$1').trim()}`;
+    const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
+    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
+
+    if (matchChecked) {
+      return `** ${matchChecked[1].trim()}`;
+    } else if (matchUnchecked) {
+      return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine; 
-  }).filter(line => line.length > 0).join('\n');
+    // Preserve empty lines or lines not matching task format
+    return trimmedLine;
+  }).join('\n');
 };
+
 
 // Helper to convert simplified subtask input from Textarea to Markdown for DB
 const convertSubtaskInputToMarkdown = (input: string): string => {
   return input.split('\n').map(line => {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('** ')) { // Starts with ** (completed)
+    if (trimmedLine.startsWith('** ')) {
       return `* [x] ${trimmedLine.substring(3).trim()}`;
-    } else if (trimmedLine.startsWith('* ')) { // Starts with * (to do)
+    } else if (trimmedLine.startsWith('* ')) {
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { // No prefix, assume to do
+    } else if (trimmedLine.length > 0) {
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; 
+    return '';
   }).filter(line => line.length > 0).join('\n');
 };
 
@@ -142,7 +146,7 @@ export default function ProjectDetailPage() {
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
-  
+
   // States for dialogs
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
@@ -150,7 +154,7 @@ export default function ProjectDetailPage() {
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
-  
+
   const [taskToManageSubtasks, setTaskToManageSubtasks] = useState<Task | null>(null);
   const [isManageSubtasksDialogOpen, setIsManageSubtasksDialogOpen] = useState(false);
   const [subtaskInput, setSubtaskInput] = useState('');
@@ -163,6 +167,8 @@ export default function ProjectDetailPage() {
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
   const [newScriptName, setNewScriptName] = useState('');
   const [newScriptContentValue, setNewScriptContent] = useState('');
+
+  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -190,8 +196,6 @@ export default function ProjectDetailPage() {
   const [toggleUrgencyState, toggleUrgencyFormAction, isToggleUrgencyPending] = useActionState(toggleProjectUrgencyAction, { message: "", error: "" });
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
-  
-  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
 
   const loadTasks = useCallback(async () => {
@@ -220,7 +224,7 @@ export default function ProjectDetailPage() {
                 role = member?.role || null;
             }
             setCurrentUserRole(role);
-            return role; 
+            return role;
         } catch (error) {
             console.error("Failed to load project members or determine role", error);
             toast({ variant: "destructive", title: "Error", description: "Could not load project members or determine your role." });
@@ -252,19 +256,19 @@ export default function ProjectDetailPage() {
 
                 if (projectData) {
                     let userRoleForProject: ProjectMemberRole | null = null;
-                    if (projectData.ownerUuid) { 
+                    if (projectData.ownerUuid) {
                         userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
                     } else {
                          userRoleForProject = await loadProjectMembersAndRole();
                     }
-                    
+
                     if (projectData.isPrivate && !userRoleForProject) {
                         setAccessDenied(true);
-                        setProject(null); 
-                        setIsLoadingData(false);
+                        setProject(null);
                         toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
-                        // router.push('/projects'); // Consider if immediate redirect is best UX
-                        return; 
+                        setIsLoadingData(false);
+                        // router.push('/projects'); // Consider redirecting
+                        return;
                     }
 
                     setProject(projectData);
@@ -286,7 +290,7 @@ export default function ProjectDetailPage() {
             } catch (err) {
                 console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
                 setProject(null);
-                setAccessDenied(true); 
+                setAccessDenied(true);
                 toast({variant: "destructive", title: "Error", description: "Could not load project details."})
             } finally {
                 setIsLoadingData(false);
@@ -297,7 +301,7 @@ export default function ProjectDetailPage() {
     };
       performLoadProjectData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectUuid, user, authLoading, router]); 
+  }, [projectUuid, user, authLoading, router]);
 
 
   useEffect(() => {
@@ -364,38 +368,33 @@ export default function ProjectDetailPage() {
 
 
    useEffect(() => {
-    if (!isUpdateTaskPending && updateTaskState) {
-      if (updateTaskState.message && !updateTaskState.error && updateTaskState.updatedTask) {
-        toast({ title: "Success", description: updateTaskState.message });
-        loadTasks(); // Reload tasks for consistency
+    if (!isUpdateTaskPending && updateTaskState?.updatedTask) {
+        if (updateTaskState.message && !updateTaskState.error) {
+            toast({ title: "Success", description: updateTaskState.message });
+            loadTasks();
 
-        // Check if the update came from the subtask management dialog
-        if (taskToManageSubtasks && taskToManageSubtasks.uuid === updateTaskState.updatedTask.uuid && isManageSubtasksDialogOpen) {
-          setTaskToManageSubtasks(updateTaskState.updatedTask); // Keep subtask dialog updated
-          // subtaskInput will be updated by its own useEffect watching taskToManageSubtasks
-          // No need to close the subtask dialog, user might want to make more changes. Or: setIsManageSubtasksDialogOpen(false);
-        } 
-        // Check if the update came from the main edit task dialog
-        else if (taskToEdit && taskToEdit.uuid === updateTaskState.updatedTask.uuid && isEditTaskDialogOpen) {
-          setIsEditTaskDialogOpen(false); // Close main edit dialog
-          setTaskToEdit(null);
-          taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+            // Check if the update came from the subtask management dialog
+            if (taskToManageSubtasks && taskToManageSubtasks.uuid === updateTaskState.updatedTask.uuid && isManageSubtasksDialogOpen) {
+                setTaskToManageSubtasks(updateTaskState.updatedTask); // Keep subtask dialog updated
+                setIsManageSubtasksDialogOpen(false); // Close dialog after successful save
+            }
+            // Check if the update came from the main edit task dialog
+            else if (taskToEdit && taskToEdit.uuid === updateTaskState.updatedTask.uuid && isEditTaskDialogOpen) {
+                setIsEditTaskDialogOpen(false);
+                setTaskToEdit(null);
+                taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+            }
+        } else if (updateTaskState.error) {
+            let errorMessage = updateTaskState.error;
+            if (updateTaskState.fieldErrors?.title) errorMessage += ` Title: ${updateTaskState.fieldErrors.title.join(', ')}`;
+            if (updateTaskState.fieldErrors?.assigneeUuid) errorMessage += ` Assignee: ${updateTaskState.fieldErrors.assigneeUuid.join(', ')}`;
+            if (updateTaskState.fieldErrors?.todoListMarkdown) errorMessage += ` Sub-tasks: ${updateTaskState.fieldErrors.todoListMarkdown.join(', ')}`;
+            toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
         }
-        // If it's just an update from the MarkdownTaskListRenderer (direct click on checkbox)
-        // then no dialog needs to be closed or specifically managed here, loadTasks() handles UI.
-
-      } else if (updateTaskState.error) {
-         let errorMessage = updateTaskState.error;
-         if (updateTaskState.fieldErrors?.title) errorMessage += ` Title: ${updateTaskState.fieldErrors.title.join(', ')}`;
-         if (updateTaskState.fieldErrors?.assigneeUuid) errorMessage += ` Assignee: ${updateTaskState.fieldErrors.assigneeUuid.join(', ')}`;
-         if (updateTaskState.fieldErrors?.todoListMarkdown) errorMessage += ` Sub-tasks: ${updateTaskState.fieldErrors.todoListMarkdown.join(', ')}`;
-         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
-      }
     }
   }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm, taskToManageSubtasks, taskToEdit, isEditTaskDialogOpen, isManageSubtasksDialogOpen]);
 
 
-  // Effect to populate subtaskInput when the subtask dialog opens or the task data changes
   useEffect(() => {
     if (isManageSubtasksDialogOpen && taskToManageSubtasks) {
       setSubtaskInput(convertMarkdownToSubtaskInput(taskToManageSubtasks.todoListMarkdown));
@@ -500,7 +499,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole; 
+  const canEditTaskStatus = !!currentUserRole;
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -536,8 +535,7 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    // todoListMarkdown is not part of this form, handled separately
-    formData.append('todoListMarkdown', ''); // Send empty string to satisfy schema if needed, or adjust schema
+    formData.append('todoListMarkdown', '');
 
     ReactStartTransition(() => {
       createTaskFormAction(formData);
@@ -554,13 +552,12 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    // todoListMarkdown is managed in a separate dialog, so we pass the existing one from taskToEdit
-    // or ensure it's not part of this direct form submission if schema doesn't expect it.
-    formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || ''); 
+    // todoListMarkdown is managed separately via its own dialog
+    formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || '');
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    
+
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
     });
@@ -569,22 +566,25 @@ export default function ProjectDetailPage() {
 
   const openManageSubtasksDialog = (task: Task) => {
     setTaskToManageSubtasks(task);
+    // setSubtaskInput is handled by useEffect watching taskToManageSubtasks
     setIsManageSubtasksDialogOpen(true);
-    // setSubtaskInput will be populated by the useEffect watching taskToManageSubtasks
   };
 
   const handleSaveSubtasks = () => {
     if (!project || !taskToManageSubtasks) return;
     const newTodoListMarkdown = convertSubtaskInputToMarkdown(subtaskInput);
-    
+
     const formData = new FormData();
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
-    // Send only necessary fields for a partial update focused on todoListMarkdown
-    formData.append('title', taskToManageSubtasks.title); 
-    formData.append('status', taskToManageSubtasks.status); 
+    // To ensure the action knows this is a partial update, only send changed fields
+    // For a subtask-only update, this means only todoListMarkdown is essential to send.
+    // However, updateTaskAction requires title and status to pass validation if it tries to re-validate everything.
+    // We must send all "required" fields for the Zod schema in updateTaskAction.
+    formData.append('title', taskToManageSubtasks.title);
+    formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
     if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
     const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
@@ -593,7 +593,6 @@ export default function ProjectDetailPage() {
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
-      // The dialog will now close on successful save due to changes in useEffect for updateTaskState
     });
   };
 
@@ -603,9 +602,6 @@ export default function ProjectDetailPage() {
     const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
     if (!taskToUpdate) return;
 
-    // Optimistic UI update is handled by MarkdownTaskListRenderer's internal state
-
-    // Debounce the server call
     if (debounceTimers.current[taskUuid]) {
       clearTimeout(debounceTimers.current[taskUuid]);
     }
@@ -615,17 +611,17 @@ export default function ProjectDetailPage() {
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
-      formData.append('title', taskToUpdate.title);
-      formData.append('status', taskToUpdate.status);
+      formData.append('title', taskToUpdate.title); // Required by schema
+      formData.append('status', taskToUpdate.status); // Required by schema
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
       if (taskToUpdate.assigneeUuid) formData.append('assigneeUuid', taskToUpdate.assigneeUuid);
       const currentTagsString = taskToUpdate.tags.map(t => t.name).join(', ');
       if (currentTagsString) formData.append('tagsString', currentTagsString);
-      
+
       ReactStartTransition(() => {
-        updateTaskFormAction(formData); 
+        updateTaskFormAction(formData);
       });
-    }, 750); // 750ms debounce
+    }, 750);
   };
 
 
@@ -750,10 +746,8 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // Should not happen if status is always one of the defined TaskStatus
-        // Fallback to Archived or handle as an error
         console.warn(`Task with unknown status: ${task.status}`, task);
-        grouped['Archived'].push(task); 
+        grouped['Archived'].push(task);
       }
     });
     for (const status in grouped) {
@@ -765,7 +759,7 @@ export default function ProjectDetailPage() {
     }
     return grouped;
   };
-  
+
 
   const tasksByStatus = groupTasksByStatus();
 
@@ -813,8 +807,8 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const projectDocuments = mockDocuments; 
-  const projectAnnouncements = mockAnnouncements; 
+  const projectDocuments = mockDocuments;
+  const projectAnnouncements = mockAnnouncements;
 
 
   return (
@@ -1004,7 +998,7 @@ export default function ProjectDetailPage() {
                                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
                                     </div>
                                 )}
-                                
+
                                 <div className="mt-2 pt-2 border-t border-dashed">
                                   {task.todoListMarkdown && task.todoListMarkdown.trim() !== '' ? (
                                       <>
@@ -1018,7 +1012,7 @@ export default function ProjectDetailPage() {
                                     ) : (
                                       canCreateUpdateDeleteTasks && (
                                         <p className="text-xs text-muted-foreground">
-                                          No sub-tasks defined.
+                                          No sub-tasks defined. Click &quot;Manage Sub-tasks&quot; to add some.
                                         </p>
                                       )
                                     )}
@@ -1036,7 +1030,7 @@ export default function ProjectDetailPage() {
                               </div>
                               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
                                 <Select
-                                  value={task.status} 
+                                  value={task.status}
                                   disabled={!canEditTaskStatus || isUpdateTaskStatusPending}
                                   onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
                                 >
@@ -1106,7 +1100,7 @@ export default function ProjectDetailPage() {
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Edit Task: {taskToEdit.title}</DialogTitle>
-                        <DialogDescription>Update the main details for this task. Sub-tasks are managed separately.</DialogDescription>
+                        <DialogDescription>Update the main details for this task. Sub-tasks are managed separately using the &quot;Manage Sub-tasks&quot; button on the task card.</DialogDescription>
                     </DialogHeader>
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
@@ -1115,7 +1109,7 @@ export default function ProjectDetailPage() {
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
-                            
+
                             {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
                             {updateTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {updateTaskState.fieldErrors.title.join(', ')}</p>}
                             {updateTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {updateTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
@@ -1135,7 +1129,10 @@ export default function ProjectDetailPage() {
               <DialogHeader>
                 <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks.title}</DialogTitle>
                 <DialogDescription>
-                  Enter sub-tasks one per line. Use '*' for an open task and '**' (two asterisks) for a completed task.
+                  Enter sub-tasks one per line.
+                  Start with `* ` for an open task.
+                  Start with `** ` for a completed task.
+                  Other lines will be treated as open tasks.
                   Example: <br />
                   `* Design mockups` <br />
                   `** Create database schema` <br />
@@ -1466,5 +1463,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
-    
