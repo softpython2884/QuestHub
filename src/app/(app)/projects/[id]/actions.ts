@@ -230,7 +230,7 @@ const CreateTaskSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional().default(''), // Default to empty string
+  todoListMarkdown: z.string().optional().default(''),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
   assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
   tagsString: z.string().optional(),
@@ -249,15 +249,15 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
     console.error("[createTaskAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-   console.log("[createTaskAction] Authenticated user for permission check:", session.user.uuid);
+  console.log("[createTaskAction] Authenticated user:", session.user.uuid);
 
   const validatedFields = CreateTaskSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description') || '', // Ensure string if null
-    todoListMarkdown: formData.get('todoListMarkdown') || '', // Ensure string if null
+    description: formData.get('description') || '', 
+    todoListMarkdown: formData.get('todoListMarkdown') || '', 
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid') || '', // Handle empty string for "Everyone"
+    assigneeUuid: formData.get('assigneeUuid') || '', 
     tagsString: formData.get('tagsString'),
   });
 
@@ -270,12 +270,12 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
 
   let finalAssigneeUuid: string | null = null;
   if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
-    finalAssigneeUuid = rawAssigneeUuid; // Already validated as UUID or empty by Zod
+    finalAssigneeUuid = rawAssigneeUuid;
   }
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[createTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
+    console.log(`[createTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
       return { error: `You do not have permission to create tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
@@ -284,7 +284,7 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
       projectUuid,
       title,
       description: description || undefined,
-      todoListMarkdown: todoListMarkdown || undefined, // Send undefined if empty string
+      todoListMarkdown: todoListMarkdown || undefined,
       status,
       assigneeUuid: finalAssigneeUuid,
       tagsString: tagsString || undefined,
@@ -361,7 +361,7 @@ const UpdateTaskSchema = z.object({
   projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   description: z.string().optional(),
-  todoListMarkdown: z.string().optional().default(''), // Default to empty string
+  todoListMarkdown: z.string().optional().default(''),
   status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
   assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
   tagsString: z.string().optional(),
@@ -387,10 +387,10 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     taskUuid: formData.get('taskUuid'),
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description') || '', // Ensure string if null
-    todoListMarkdown: formData.get('todoListMarkdown') || '', // Ensure string if null
+    description: formData.get('description') || '', 
+    todoListMarkdown: formData.get('todoListMarkdown') || '',
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid') || '', // Handle empty string
+    assigneeUuid: formData.get('assigneeUuid') || '', 
     tagsString: formData.get('tagsString'),
   });
 
@@ -403,7 +403,7 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
   
   let finalAssigneeUuid: string | null = null;
     if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
-        finalAssigneeUuid = rawAssigneeUuid; // Already validated by Zod
+        finalAssigneeUuid = rawAssigneeUuid;
   }
 
   try {
@@ -414,12 +414,15 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     }
     
     const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
+    
+    // Check if each field was actually present in formData before adding to taskData
+    // This is important for partial updates, e.g., when only todoListMarkdown is changed.
     if (formData.has('title')) taskData.title = title;
-    if (formData.has('description')) taskData.description = description || undefined;
-    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined;
+    if (formData.has('description')) taskData.description = description || undefined; // Send undefined if empty
+    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined; // Send undefined if empty
     if (formData.has('status')) taskData.status = status;
     if (formData.has('assigneeUuid')) taskData.assigneeUuid = finalAssigneeUuid;
-    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined;
+    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined; // Send undefined if empty
     
 
     const updatedTask = await dbUpdateTask(taskUuid, taskData);
@@ -613,7 +616,7 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
 
 
   const taskUuid = formData.get('taskUuid') as string;
-  const projectUuid = formData.get('projectUuid') as string; // Needed for permission check
+  const projectUuid = formData.get('projectUuid') as string; 
   const isPinned = formData.get('isPinned') === 'true';
 
   if (!taskUuid || !projectUuid) {

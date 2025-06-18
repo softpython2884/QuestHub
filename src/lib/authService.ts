@@ -13,7 +13,6 @@ const AUTH_COOKIE_NAME = 'nqh_auth_token';
 
 if (!JWT_SECRET) {
   console.error("FATAL ERROR: JWT_SECRET is not defined in .env. Authentication will not work.");
-  // throw new Error("JWT_SECRET is not defined. Please set it in your .env file.");
 }
 
 const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
@@ -23,7 +22,7 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
   }
   const tokenPayload = {
     uuid: user.uuid,
-    role: user.role,
+    role: user.role, // Include role for potential direct use in JWT, but authEdge should re-verify from DB
     email: user.email,
     name: user.name
   };
@@ -31,12 +30,12 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
 
   cookies().set(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Use Secure in production
+    secure: process.env.NODE_ENV === 'production', // FALSE for local HTTP, TRUE for production HTTPS
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 days
-    sameSite: 'lax', // Or 'strict' if appropriate
+    sameSite: 'lax',
   });
-  console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}`);
+  console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}. Secure flag: ${process.env.NODE_ENV === 'production'}`);
 };
 
 export const login = async (email: string, password?: string): Promise<User | null> => {
@@ -58,11 +57,12 @@ export const login = async (email: string, password?: string): Promise<User | nu
     if (isValidPassword) {
       const { hashedPassword, ...userToReturn } = userFromDb;
       generateTokenAndSetCookie(userToReturn);
+      console.log('[authService.login] Login SUCCESSFUL for email:', email);
       return userToReturn;
     }
   }
   console.log('[authService.login] Login FAILED for email:', email);
-  return null;
+  throw new Error('Invalid email or password.');
 };
 
 export const signup = async (name: string, email: string, password?: string, role: UserRole = 'member'): Promise<User | null> => {
@@ -87,6 +87,7 @@ export const signup = async (name: string, email: string, password?: string, rol
     if (newUser) {
         const { hashedPassword, ...userToReturn } = newUser;
         generateTokenAndSetCookie(userToReturn);
+        console.log('[authService.signup] Signup SUCCESSFUL for email:', email);
         return userToReturn;
     }
     console.error('[authService.signup] dbCreateUser returned null.');
@@ -110,32 +111,34 @@ export const logout = async (): Promise<void> => {
 export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
   try {
     const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email, avatar);
-    // Note: If email/role changes, the JWT should ideally be re-issued.
-    // For simplicity, we are not re-issuing the token here on profile update.
-    // A full solution might require re-login or a token refresh mechanism if sensitive JWT payload data changes.
-    return updatedUserFromDb;
+    // If email or other critical JWT payload data changes, consider re-issuing the token.
+    // For now, we are not re-issuing on profile update for simplicity.
+    // A full solution might involve a token refresh mechanism.
+    if (updatedUserFromDb) {
+        // If user's name or email changed, re-issue token with new info
+        const { hashedPassword, ...userToReturn } = updatedUserFromDb;
+        const currentSession = await getCurrentUserSession();
+        if (currentSession?.email !== userToReturn.email || currentSession?.name !== userToReturn.name) {
+            console.log('[authService.updateUserProfile] User data changed, re-issuing token.');
+            generateTokenAndSetCookie(userToReturn);
+        }
+        return userToReturn;
+    }
+    return null;
   } catch (error: any) {
     console.error("[authService.updateUserProfile] Error updating profile in authService:", error);
     throw error; 
   }
 };
 
-// This function will be called by AuthContext to get current user state
-// It relies on authEdge.ts (which reads the cookie) to provide the session
 export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] Attempting to get current user session from cookie.');
-  const { auth } = await import('@/lib/authEdge'); // Dynamically import to avoid circular dependency issues at build time
-  const session = await auth();
-  if (session?.user?.uuid) {
+  const { auth } = await import('@/lib/authEdge'); 
+  const session = await auth(); // auth() now fetches from DB after JWT verification
+  
+  if (session?.user) {
     console.log('[authService.getCurrentUserSession] Session found for user UUID:', session.user.uuid);
-    // Fetch fresh user data from DB to ensure it's up-to-date
-    const userFromDb = await dbGetUserByUuid(session.user.uuid);
-    if (userFromDb) {
-      const { hashedPassword, ...userToReturn } = userFromDb;
-      return userToReturn;
-    }
-    console.warn('[authService.getCurrentUserSession] User from JWT not found in DB, UUID:', session.user.uuid);
-    return null;
+    return session.user as User; // Cast as User, as authEdge now returns full User object (minus password)
   }
   console.log('[authService.getCurrentUserSession] No active session found.');
   return null;
