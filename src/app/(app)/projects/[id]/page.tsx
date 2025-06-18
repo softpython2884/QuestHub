@@ -111,14 +111,14 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[2] !== undefined) { // Use group 2 for text
-      return `** ${matchChecked[2].trim()}`;
+    if (matchChecked && matchChecked[1] !== undefined) {
+      return `** ${matchChecked[1].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[2] !== undefined) { // Use group 2 for text
-      return `* ${matchUnchecked[2].trim()}`;
+    if (matchUnchecked && matchUnchecked[1] !== undefined) {
+      return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine; 
+    return trimmedLine;
   }).join('\n');
 };
 
@@ -126,15 +126,15 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
 const convertSubtaskInputToMarkdown = (input: string): string => {
   return input.split('\n').map(line => {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('** ')) { 
+    if (trimmedLine.startsWith('** ')) {
       return `* [x] ${trimmedLine.substring(3).trim()}`;
-    } else if (trimmedLine.startsWith('* ')) { 
+    } else if (trimmedLine.startsWith('* ')) {
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { 
+    } else if (trimmedLine.length > 0) {
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; 
-  }).filter(line => line.trim().length > 0).join('\n'); 
+    return '';
+  }).filter(line => line.trim().length > 0).join('\n');
 };
 
 
@@ -157,11 +157,11 @@ export default function ProjectDetailPage() {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
-  
+
   const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
-  
+
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const [taskToManageSubtasks, setTaskToManageSubtasks] = useState<Task | null>(null);
@@ -181,7 +181,9 @@ export default function ProjectDetailPage() {
   const [tagSuggestions, setTagSuggestions] = useState<TagType[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
-  const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null); // To identify which form's tag input is active
+  const [activeTagInputName, setActiveTagInputName] = useState<"tagsString" | null>(null);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
 
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
 
@@ -278,14 +280,14 @@ export default function ProjectDetailPage() {
 
                 if (projectData) {
                     const userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
-                    
+
                     if (projectData.isPrivate && !userRoleForProject) {
                         setAccessDenied(true);
-                        setProject(null); 
+                        setProject(null);
                         toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
                         setIsLoadingData(false);
-                        router.push('/projects'); 
-                        return; 
+                        router.push('/projects');
+                        return;
                     }
 
                     setProject(projectData);
@@ -301,7 +303,7 @@ export default function ProjectDetailPage() {
                     await loadProjectTagsData();
 
                 } else {
-                    setAccessDenied(true); 
+                    setAccessDenied(true);
                     setProject(null);
                     toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded or you don't have access."});
                 }
@@ -385,7 +387,7 @@ export default function ProjectDetailPage() {
 
 
   useEffect(() => {
-    if (isUpdateTaskPending || !updateTaskState) return; 
+    if (isUpdateTaskPending || !updateTaskState) return;
 
     if (updateTaskState.error && !isUpdateTaskPending) {
         let errorMessage = updateTaskState.error;
@@ -395,7 +397,7 @@ export default function ProjectDetailPage() {
             }
         });
         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
-        lastSubmitSourceRef.current = null; 
+        lastSubmitSourceRef.current = null;
         return;
     }
 
@@ -404,8 +406,7 @@ export default function ProjectDetailPage() {
         loadTasks();
 
         if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
-             setIsManageSubtasksDialogOpen(false); 
-             setTaskToManageSubtasks(null); 
+             setIsManageSubtasksDialogOpen(false);
         } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
             setIsEditTaskDialogOpen(false);
             setTaskToEdit(null);
@@ -413,7 +414,7 @@ export default function ProjectDetailPage() {
         lastSubmitSourceRef.current = null;
     }
 }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskToManageSubtasks, taskToEdit]);
-  
+
  useEffect(() => {
     if (isEditTaskDialogOpen && taskToEdit) {
       taskForm.reset({
@@ -504,7 +505,7 @@ export default function ProjectDetailPage() {
         toast({ title: "Success", description: createProjectTagState.message });
         setIsAddProjectTagDialogOpen(false);
         projectTagForm.reset({ tagName: '', tagColor: '#6B7280' });
-        loadProjectTagsData(); 
+        loadProjectTagsData();
       }
       if (createProjectTagState.error) {
         toast({ variant: "destructive", title: "Tag Creation Error", description: createProjectTagState.error });
@@ -545,7 +546,7 @@ export default function ProjectDetailPage() {
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canCreateUpdateDeleteTasks = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
-  const canEditTaskStatus = !!currentUserRole; 
+  const canEditTaskStatus = !!currentUserRole;
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -581,7 +582,7 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    formData.append('todoListMarkdown', ''); 
+    formData.append('todoListMarkdown', '');
 
     ReactStartTransition(() => {
       createTaskFormAction(formData);
@@ -598,7 +599,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || ''); 
+    formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || '');
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -623,8 +624,8 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
-    formData.append('title', taskToManageSubtasks.title); 
-    formData.append('status', taskToManageSubtasks.status); 
+    formData.append('title', taskToManageSubtasks.title);
+    formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
     if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
     const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
@@ -643,15 +644,15 @@ export default function ProjectDetailPage() {
     if (debounceTimers.current[taskUuid]) {
       clearTimeout(debounceTimers.current[taskUuid]);
     }
-    
+
     debounceTimers.current[taskUuid] = setTimeout(() => {
-      lastSubmitSourceRef.current = null; 
+      lastSubmitSourceRef.current = null;
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
-      formData.append('title', taskToUpdate.title); 
-      formData.append('status', taskToUpdate.status); 
+      formData.append('title', taskToUpdate.title);
+      formData.append('status', taskToUpdate.status);
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
       if (taskToUpdate.assigneeUuid) formData.append('assigneeUuid', taskToUpdate.assigneeUuid);
       const currentTagsString = taskToUpdate.tags.map(t => t.name).join(', ');
@@ -660,12 +661,12 @@ export default function ProjectDetailPage() {
       ReactStartTransition(() => {
         updateTaskFormAction(formData);
       });
-    }, 750); 
+    }, 750);
   };
 
 
   const openEditTaskDialog = (task: Task) => {
-    setTaskToEdit(task); 
+    setTaskToEdit(task);
     setIsEditTaskDialogOpen(true);
   };
 
@@ -778,12 +779,9 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // This case should ideally not happen if status is always one of the defined TaskStatus
-        // Defaulting to 'Archived' or another sensible default if status is unexpected
-        grouped['Archived'].push(task); 
+        grouped['Archived'].push(task);
       }
     });
-    // Sort tasks within each status group: pinned tasks first, then by update date
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -802,26 +800,26 @@ export default function ProjectDetailPage() {
   };
 
   const handleTagsStringInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-    fieldApi: any, 
-    formApi: any 
+    event: React.ChangeEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>,
+    fieldApi: any,
+    formApi: any
   ) => {
-    const inputValue = event.target.value;
-    fieldApi.onChange(inputValue); 
+    const inputValue = event.currentTarget.value;
+    fieldApi.onChange(inputValue);
 
     const fragment = getCurrentTagFragment(inputValue);
     setActiveTagInputName(fieldApi.name as "tagsString");
+    setActiveSuggestionIndex(-1); // Reset active suggestion on new input
 
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
-        // Exclude tags already fully present in the input string (except the current fragment)
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
-            .filter(tag => 
-                tag.name.toLowerCase().startsWith(lowerFragment) && 
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) // Check against all but the last (current) fragment
+            .filter(tag =>
+                tag.name.toLowerCase().startsWith(lowerFragment) &&
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())
             )
-            .slice(0, 5); // Limit to 5 suggestions
+            .slice(0, 5);
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
     } else {
@@ -832,23 +830,47 @@ export default function ProjectDetailPage() {
 
   const handleTagSuggestionClick = (
     suggestion: TagType,
-    fieldApi: any, 
-    formApi: any 
+    fieldApi: any,
+    formApi: any
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name; // Replace current fragment with selected tag
-    
+    parts[parts.length - 1] = suggestion.name;
+
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) { // Ensure there's a comma and space for next tag
+    if (!newValue.endsWith(', ')) {
          newValue += ', ';
     }
-    
-    fieldApi.onChange(newValue); // Update form field
-    setTagSuggestions([]); // Clear suggestions
-    setShowTagSuggestions(false); // Hide popover
-    setTimeout(() => tagInputRef.current?.focus(), 0); // Re-focus input
+
+    fieldApi.onChange(newValue);
+    setTagSuggestions([]);
+    setShowTagSuggestions(false);
+    setActiveSuggestionIndex(-1);
+    setTimeout(() => tagInputRef.current?.focus(), 0);
   };
+
+  const handleTagInputKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    fieldApi: any,
+    formApi: any
+  ) => {
+    if (!showTagSuggestions || tagSuggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSuggestionIndex(prev => Math.min(prev + 1, tagSuggestions.length - 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
+    } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex !== -1) {
+      event.preventDefault();
+      handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
+    } else if (event.key === 'Escape') {
+      setShowTagSuggestions(false);
+      setActiveSuggestionIndex(-1);
+    }
+  };
+
 
   const handleCreateProjectTagSubmit = async (values: ProjectTagFormValues) => {
     if (!project) return;
@@ -905,8 +927,8 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const projectDocuments = mockDocuments; 
-  const projectAnnouncements = mockAnnouncements; 
+  const projectDocuments = mockDocuments;
+  const projectAnnouncements = mockAnnouncements;
 
 
   return (
@@ -1044,7 +1066,7 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({tasks.length})</CardTitle>
-               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); } }}>
+               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1);} }}>
                 <DialogTrigger asChild>
                     <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
@@ -1067,7 +1089,7 @@ export default function ProjectDetailPage() {
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); }}}>
+                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); }}}>
                                       <PopoverAnchor>
                                         <FormControl>
                                         <Input
@@ -1077,26 +1099,28 @@ export default function ProjectDetailPage() {
                                             onFocus={() => {
                                                 setActiveTagInputName('tagsString');
                                                 const fragment = getCurrentTagFragment(field.value || "");
-                                                if (fragment) handleTagsStringInputChange({ target: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
+                                                if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
                                             }}
                                             onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) setShowTagSuggestions(false); }, 150)}
+                                            onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
+                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {setShowTagSuggestions(false); setActiveSuggestionIndex(-1);}; }, 150)}
                                         />
                                         </FormControl>
                                       </PopoverAnchor>
-                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        <Command>
+                                      {showTagSuggestions && tagSuggestions.length > 0 && (
+                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                        <Command shouldFilter={false}>
                                             <CommandList>
                                             <CommandEmpty>No matching tags found.</CommandEmpty>
                                             <CommandGroup>
-                                                {tagSuggestions.map((suggestion) => (
+                                                {tagSuggestions.map((suggestion, index) => (
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
                                                     onSelect={() => {
                                                         handleTagSuggestionClick(suggestion, field, taskForm);
                                                     }}
-                                                    className="cursor-pointer"
+                                                    className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
                                                 >
                                                     {suggestion.name}
                                                 </CommandItem>
@@ -1105,6 +1129,7 @@ export default function ProjectDetailPage() {
                                             </CommandList>
                                         </Command>
                                       </PopoverContent>
+                                      )}
                                     </Popover>
                                     <FormMessage />
                                 </FormItem>
@@ -1152,7 +1177,7 @@ export default function ProjectDetailPage() {
                                         <MarkdownTaskListRenderer
                                           content={task.todoListMarkdown}
                                           onContentChange={(newTodoListMarkdown) => handleTodoListChangeOnCard(task.uuid, newTodoListMarkdown)}
-                                          disabled={!canCreateUpdateDeleteTasks} 
+                                          disabled={!canCreateUpdateDeleteTasks}
                                         />
                                       </>
                                     ) : (
@@ -1243,7 +1268,7 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         {/* Main Edit Task Dialog */}
-        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); } }}>
+        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); } }}>
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
                     <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
@@ -1262,7 +1287,7 @@ export default function ProjectDetailPage() {
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); }}}>
+                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); }}}>
                                       <PopoverAnchor>
                                         <FormControl>
                                         <Input
@@ -1272,26 +1297,28 @@ export default function ProjectDetailPage() {
                                             onFocus={() => {
                                                 setActiveTagInputName('tagsString');
                                                 const fragment = getCurrentTagFragment(field.value || "");
-                                                if (fragment) handleTagsStringInputChange({ target: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
+                                                if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
                                             }}
                                             onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) setShowTagSuggestions(false); }, 150)}
+                                            onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
+                                            onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {setShowTagSuggestions(false); setActiveSuggestionIndex(-1);} }, 150)}
                                         />
                                         </FormControl>
                                       </PopoverAnchor>
-                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        <Command>
+                                      {showTagSuggestions && tagSuggestions.length > 0 && (
+                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                        <Command shouldFilter={false}>
                                             <CommandList>
                                             <CommandEmpty>No matching tags found.</CommandEmpty>
                                             <CommandGroup>
-                                                {tagSuggestions.map((suggestion) => (
+                                                {tagSuggestions.map((suggestion, index) => (
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
                                                     onSelect={() => {
                                                         handleTagSuggestionClick(suggestion, field, taskForm);
                                                     }}
-                                                    className="cursor-pointer"
+                                                     className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
                                                 >
                                                     {suggestion.name}
                                                 </CommandItem>
@@ -1300,6 +1327,7 @@ export default function ProjectDetailPage() {
                                             </CommandList>
                                         </Command>
                                       </PopoverContent>
+                                      )}
                                     </Popover>
                                     <FormMessage />
                                 </FormItem>
@@ -1620,7 +1648,7 @@ export default function ProjectDetailPage() {
                     </Label>
                     <Switch
                         id="project-visibility"
-                        checked={project?.isPrivate === undefined ? true : project.isPrivate} 
+                        checked={project?.isPrivate === undefined ? true : project.isPrivate}
                         onCheckedChange={handleToggleVisibility}
                         disabled={!isAdminOrOwner || isToggleVisibilityPending}
                     />
@@ -1662,7 +1690,7 @@ export default function ProjectDetailPage() {
                                                     <FormLabel>Tag Color</FormLabel>
                                                     <div className="flex items-center gap-2">
                                                         <FormControl><Input type="color" {...field} className="p-1 h-10 w-14 block" /></FormControl>
-                                                        <Input type="text" {...field} placeholder="#RRGGBB" className="max-w-[120px]" 
+                                                        <Input type="text" {...field} placeholder="#RRGGBB" className="max-w-[120px]"
                                                           onChange={(e) => {
                                                             field.onChange(e);
                                                             const colorInput = e.target.previousElementSibling as HTMLInputElement;
@@ -1694,9 +1722,8 @@ export default function ProjectDetailPage() {
                     {projectTags.length === 0 && <p className="text-muted-foreground text-center py-2">No custom tags defined for this project yet.</p>}
                     <div className="flex flex-wrap gap-2">
                         {projectTags.map(tag => (
-                            <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: '#fff' /* Assuming white text for colored badges */ }} className="text-sm px-3 py-1">
+                            <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: '#fff' }} className="text-sm px-3 py-1">
                                 {tag.name}
-                                {/* Add Edit/Delete buttons here later if needed, with permissions */}
                             </Badge>
                         ))}
                     </div>
@@ -1719,5 +1746,4 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
 
