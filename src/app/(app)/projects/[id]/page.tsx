@@ -90,7 +90,7 @@ const taskFormSchema = z.object({
   description: z.string().optional(),
   todoListMarkdown: z.string().optional(),
   status: z.enum(taskStatuses),
-  assigneeUuid: z.string().optional(), // Handles empty string for "UNASSIGNED_VALUE" and actual UUIDs
+  assigneeUuid: z.string().optional(), 
   tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -145,9 +145,7 @@ export default function ProjectDetailPage() {
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
   const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
-  
   const [updateTaskStatusState, performUpdateTaskStatusAction, isUpdateTaskStatusPending] = useActionState(updateTaskStatusAction, { message: "", error: "" });
-  
   const [updateTaskState, updateTaskFormAction, isUpdateTaskPending] = useActionState(updateTaskAction, { message: "", error: "" });
   const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
   const [saveReadmeState, saveReadmeFormAction, isSaveReadmePending] = useActionState(saveProjectReadmeAction, { message: "", error: "" });
@@ -294,7 +292,7 @@ export default function ProjectDetailPage() {
     if (!isUpdateTaskStatusPending && updateTaskStatusState) {
         if (updateTaskStatusState.message && !updateTaskStatusState.error) {
             toast({ title: "Success", description: updateTaskStatusState.message });
-            loadTasks();
+            loadTasks(); // Reload tasks to reflect status change
         }
         if (updateTaskStatusState.error) {
             toast({ variant: "destructive", title: "Status Update Error", description: updateTaskStatusState.error });
@@ -493,12 +491,11 @@ export default function ProjectDetailPage() {
     formData.append('todoListMarkdown', newTodoListMarkdown);
     // Send only necessary fields for partial update if action supports it
     // Or send all fields if action overwrites (current behavior)
-    formData.append('title', taskToUpdate.title);
-    formData.append('status', taskToUpdate.status);
-    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || '');
-    formData.append('description', taskToUpdate.description || '');
-    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || '');
-
+    formData.append('title', taskToUpdate.title); // Keep current title
+    formData.append('status', taskToUpdate.status); // Keep current status
+    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || ''); // Keep current assignee
+    formData.append('description', taskToUpdate.description || ''); // Keep current description
+    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || ''); // Keep current tags
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -628,9 +625,6 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // If status is somehow invalid, default to Archived or handle as an error
-        // For now, let's assume status is always one of the predefined TaskStatus values.
-        // If tasks can have an unknown status, add it to 'Archived' or a specific 'Unknown' category.
         console.warn(`Task ${task.uuid} has an unknown status: ${task.status}. Grouping under Archived.`);
         grouped['Archived'].push(task);
       }
@@ -682,7 +676,7 @@ export default function ProjectDetailPage() {
              <Button variant="outline" onClick={() => router.back()} className="mb-4 mr-auto block">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
             </Button>
-            <FolderKanban className="mx-auto h-16 w-16 text-muted-foreground mt-12" /> {/* Changed from FolderKanban */}
+            <FolderKanban className="mx-auto h-16 w-16 text-muted-foreground mt-12" />
             <h2 className="text-2xl font-semibold mt-4">Project Not Found</h2>
             <p className="text-muted-foreground">The project (ID: {projectUuid}) could not be found or you may not have permission to view it.</p>
         </div>
@@ -837,13 +831,12 @@ export default function ProjectDetailPage() {
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Create New Task</DialogTitle>
-                        <DialogDescription>Fill in the details for the new task.</DialogDescription>
+                        <DialogDescription>Fill in the details for the new task. Sub-tasks can be added after creation by editing the task.</DialogDescription>
                     </DialogHeader>
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
                             <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            {/* todoListMarkdown field removed from create task dialog */}
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="tagsString" render={({ field }) => ( <FormItem> <FormLabel>Tags (comma-separated)</FormLabel> <FormControl><Input {...field} placeholder="e.g. frontend, bug, urgent" /></FormControl> <FormMessage /> </FormItem> )}/>
@@ -881,7 +874,7 @@ export default function ProjectDetailPage() {
                                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
                                     </div>
                                 )}
-                                {task.todoListMarkdown && (
+                                {task.todoListMarkdown && task.todoListMarkdown.trim() !== '' && (
                                   <div className="mt-2 pt-2 border-t border-dashed">
                                     <h5 className="text-xs font-semibold text-muted-foreground mb-1">Sub-tasks:</h5>
                                     <MarkdownTaskListRenderer
@@ -1000,7 +993,7 @@ export default function ProjectDetailPage() {
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
                 </CardDescription>
               </div>
-               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canCreateUpdateDeleteTasks}>
+               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canManageProjectSettings}>
                 {isSaveReadmePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save README
               </Button>
             </CardHeader>
@@ -1016,7 +1009,7 @@ export default function ProjectDetailPage() {
                 onChange={(e) => setProjectReadmeContent(e.target.value)}
                 rows={15}
                 className="font-mono"
-                disabled={!canCreateUpdateDeleteTasks}
+                disabled={!canManageProjectSettings}
               />
               {saveReadmeState?.error && <p className="text-sm text-destructive mt-2">{saveReadmeState.error}</p>}
             </CardContent>

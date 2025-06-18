@@ -3,17 +3,12 @@
 
 import React from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 interface MarkdownTaskListRendererProps {
   content: string;
   onContentChange: (newContent: string) => void;
   disabled?: boolean;
-}
-
-interface TaskItem {
-  text: string;
-  checked: boolean;
-  originalIndex: number; // To map back to the original line in the content string
 }
 
 export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> = ({
@@ -23,17 +18,16 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
 }) => {
   const lines = content.split('\n');
 
-  const handleToggle = (itemIndex: number, lineOriginalIndex: number) => {
+  const handleToggle = (lineOriginalIndex: number) => {
     const newLines = [...lines];
     const currentLine = newLines[lineOriginalIndex];
 
-    if (currentLine.match(/^\s*\*\s*\[x\]\s*/i)) {
-      newLines[lineOriginalIndex] = currentLine.replace(/^\s*\*\s*\[x\]\s*/i, '* [ ] ');
-    } else if (currentLine.match(/^\s*\*\s*\[ \]\s*/i)) {
-      newLines[lineOriginalIndex] = currentLine.replace(/^\s*\*\s*\[ \]\s*/i, '* [x] ');
+    if (currentLine.match(/^(\s*)\*\s*\[x\]\s*/i)) { // Checked to unchecked
+      newLines[lineOriginalIndex] = currentLine.replace(/^(\s*)\*\s*\[x\]\s*/i, '$1* [ ] ');
+    } else if (currentLine.match(/^(\s*)\*\s*\[ \]\s*/i)) { // Unchecked to checked
+      newLines[lineOriginalIndex] = currentLine.replace(/^(\s*)\*\s*\[ \]\s*/i, '$1* [x] ');
     } else {
-      // Not a standard task list item, do nothing or handle as error
-      return;
+      return; // Not a task list item
     }
     onContentChange(newLines.join('\n'));
   };
@@ -49,49 +43,60 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
         if (matchChecked) {
           const indent = matchChecked[1];
           const text = matchChecked[2];
-          const currentItemIndex = taskItemCounter++;
+          taskItemCounter++;
           return (
-            <div key={index} className="flex items-start" style={{ paddingLeft: `${indent.length * 0.5}em` }}>
+            <div key={`${index}-${taskItemCounter}`} className="flex items-start" style={{ paddingLeft: `${indent.length * 0.5}em` }}>
               <Checkbox
-                id={`task-item-${index}`}
+                id={`task-item-${index}-${taskItemCounter}`}
                 checked={true}
-                onCheckedChange={() => handleToggle(currentItemIndex, index)}
+                onCheckedChange={() => handleToggle(index)}
                 className="mr-2 mt-1 shrink-0"
                 disabled={disabled}
                 aria-label={`Sub-task: ${text}, checked`}
               />
-              <label htmlFor={`task-item-${index}`} className="flex-grow text-sm text-muted-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-70 has-[button:disabled]:cursor-not-allowed">
-                <span className="line-through">{text}</span>
+              <label
+                htmlFor={`task-item-${index}-${taskItemCounter}`}
+                className={cn(
+                  "flex-grow text-sm text-muted-foreground has-[button:disabled]:cursor-not-allowed",
+                  !disabled && "cursor-pointer",
+                  "line-through" // Strikethrough for checked items
+                )}
+              >
+                {text}
               </label>
             </div>
           );
         } else if (matchUnchecked) {
           const indent = matchUnchecked[1];
           const text = matchUnchecked[2];
-          const currentItemIndex = taskItemCounter++;
+          taskItemCounter++;
           return (
-            <div key={index} className="flex items-start" style={{ paddingLeft: `${indent.length * 0.5}em` }}>
+            <div key={`${index}-${taskItemCounter}`} className="flex items-start" style={{ paddingLeft: `${indent.length * 0.5}em` }}>
               <Checkbox
-                id={`task-item-${index}`}
+                id={`task-item-${index}-${taskItemCounter}`}
                 checked={false}
-                onCheckedChange={() => handleToggle(currentItemIndex, index)}
+                onCheckedChange={() => handleToggle(index)}
                 className="mr-2 mt-1 shrink-0"
                 disabled={disabled}
                 aria-label={`Sub-task: ${text}, not checked`}
               />
-              <label htmlFor={`task-item-${index}`} className="flex-grow text-sm text-muted-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-70 has-[button:disabled]:cursor-not-allowed">
+              <label
+                htmlFor={`task-item-${index}-${taskItemCounter}`}
+                 className={cn(
+                  "flex-grow text-sm text-muted-foreground has-[button:disabled]:cursor-not-allowed",
+                  !disabled && "cursor-pointer"
+                )}
+              >
                 {text}
               </label>
             </div>
           );
         }
         // Render non-task lines as plain text
-        // We use a span to ensure whitespace-pre-wrap applies correctly even to non-task lines.
         return (
-          <span key={index} className="block text-sm text-muted-foreground">{line || ' '}</span>
+          <span key={`${index}-text`} className="block text-sm text-muted-foreground">{line || ' '}</span>
         );
       })}
     </div>
   );
 };
-
