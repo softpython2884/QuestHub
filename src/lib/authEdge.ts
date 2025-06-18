@@ -7,15 +7,8 @@
 import type { User } from '@/types';
 import { getUserByUuid } from './db';
 
-// A "global" variable to hold the UUID of the user logged in via the UI.
-// This is a HACK for mock purposes. authService.login/signup/logout/refreshUser would need to set/clear this.
-// This is NOT how real sessions work. It's also not robust across different server instances in a real deployment.
-if (typeof global !== 'undefined') {
-  if (!(global as any).MOCK_CURRENT_USER_UUID) {
-    (global as any).MOCK_CURRENT_USER_UUID = null;
-    console.log('[authEdge] Initialized global.MOCK_CURRENT_USER_UUID to null');
-  }
-}
+// (global as any).MOCK_CURRENT_USER_UUID is now expected to be set by authService.ts
+// and read here. We no longer initialize it to null in this file.
 
 interface Session {
   user?: {
@@ -29,7 +22,14 @@ interface Session {
 
 export async function auth(): Promise<Session | null> {
   const mockUserUuidFromGlobal = typeof global !== 'undefined' ? (global as any).MOCK_CURRENT_USER_UUID : null;
-  console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global:', mockUserUuidFromGlobal);
+  
+  // Log a bit differently now that we don't initialize here
+  if (mockUserUuidFromGlobal) {
+    console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global:', mockUserUuidFromGlobal);
+  } else {
+    console.log('[authEdge] Attempting to authenticate. MOCK_CURRENT_USER_UUID from global is null/undefined.');
+  }
+
 
   if (mockUserUuidFromGlobal) {
     try {
@@ -45,17 +45,14 @@ export async function auth(): Promise<Session | null> {
           },
         };
       } else {
-        console.log(`[authEdge] No user found in DB for UUID: ${mockUserUuidFromGlobal}. MOCK_CURRENT_USER_UUID might be stale or incorrect. Clearing it.`);
-        if (typeof global !== 'undefined') {
-            (global as any).MOCK_CURRENT_USER_UUID = null;
-        }
+        console.warn(`[authEdge] No user found in DB for UUID: ${mockUserUuidFromGlobal}. MOCK_CURRENT_USER_UUID might be stale, incorrect, or not yet set by login/refresh. Global state will not be cleared here.`);
       }
     } catch (e) {
       console.error("[authEdge] Error during mock auth (getUserByUuid failed):", e);
       return null;
     }
   } else {
-    console.log('[authEdge] No MOCK_CURRENT_USER_UUID found in global. User is not "logged in" for server actions.');
+    console.log('[authEdge] No MOCK_CURRENT_USER_UUID value found in global. User is not "logged in" for server actions.');
   }
   
   console.log('[authEdge] Returning null session.');
