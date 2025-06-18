@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -88,12 +89,39 @@ type InviteUserFormValues = z.infer<typeof inviteUserFormSchema>;
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title too long"),
   description: z.string().optional(),
-  // todoListMarkdown is managed in a separate dialog now
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
+
+// Helper to convert Markdown to simplified subtask input
+const convertMarkdownToSubtaskInput = (markdown?: string): string => {
+  if (!markdown) return '';
+  return markdown.split('\n').map(line => {
+    if (line.match(/^\s*\*\s*\[x\]\s*(.*)/i)) { // Checked item: * [x] text
+      return `** ${line.replace(/^\s*\*\s*\[x\]\s*/i, '$1').trim()}`;
+    } else if (line.match(/^\s*\*\s*\[ \]\s*(.*)/i)) { // Unchecked item: * [ ] text
+      return `* ${line.replace(/^\s*\*\s*\[ \]\s*/i, '$1').trim()}`;
+    }
+    return line.trim(); // Keep non-task lines as is (though ideally they shouldn't be in todoListMarkdown)
+  }).filter(line => line.length > 0).join('\n');
+};
+
+// Helper to convert simplified subtask input to Markdown
+const convertSubtaskInputToMarkdown = (input: string): string => {
+  return input.split('\n').map(line => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('** ')) { // Starts with ** (completed)
+      return `* [x] ${trimmedLine.substring(3).trim()}`;
+    } else if (trimmedLine.startsWith('* ')) { // Starts with * (to do)
+      return `* [ ] ${trimmedLine.substring(2).trim()}`;
+    } else if (trimmedLine.length > 0) { // No prefix, assume to do
+      return `* [ ] ${trimmedLine}`;
+    }
+    return ''; // Ignore empty lines
+  }).filter(line => line.length > 0).join('\n');
+};
 
 
 export default function ProjectDetailPage() {
@@ -262,7 +290,7 @@ export default function ProjectDetailPage() {
     };
       performLoadProjectData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectUuid, user, authLoading]); 
+  }, [projectUuid, user, authLoading, router]); // Added router to dependency array
 
 
   useEffect(() => {
@@ -332,12 +360,20 @@ export default function ProjectDetailPage() {
     if (!isUpdateTaskPending && updateTaskState) {
       if (updateTaskState.message && !updateTaskState.error) {
         toast({ title: "Success", description: updateTaskState.message });
-        if (isEditTaskDialogOpen) setIsEditTaskDialogOpen(false);
-        if (isManageSubtasksDialogOpen) setIsManageSubtasksDialogOpen(false);
-        setTaskToEdit(null);
-        setTaskToManageSubtasks(null);
+        
+        if (isEditTaskDialogOpen) setIsEditTaskDialogOpen(false); // Close main edit dialog if it was open
+        
+        // If the subtask dialog was the source, update its content
+        if (taskToManageSubtasks && updateTaskState.updatedTask && updateTaskState.updatedTask.uuid === taskToManageSubtasks.uuid) {
+          setTaskToManageSubtasks(updateTaskState.updatedTask); // Update the task for the subtask dialog
+          // The useEffect for `taskToManageSubtasks` will re-populate `subtaskInput`
+        } else if (!taskToManageSubtasks) { // Only reset form/close subtask dialog if NOT managing subtasks
+             setIsManageSubtasksDialogOpen(false);
+             setSubtaskInput('');
+        }
+        
+        setTaskToEdit(null); // Clear task being edited in main dialog
         taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
-        setSubtaskInput('');
         loadTasks();
       }
       if (updateTaskState.error) {
@@ -354,7 +390,15 @@ export default function ProjectDetailPage() {
          toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
       }
     }
-  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm, isEditTaskDialogOpen, isManageSubtasksDialogOpen]);
+  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskForm, isEditTaskDialogOpen, taskToManageSubtasks]);
+
+  // Effect to populate subtaskInput when the subtask dialog opens or the task data changes
+  useEffect(() => {
+    if (isManageSubtasksDialogOpen && taskToManageSubtasks) {
+      setSubtaskInput(convertMarkdownToSubtaskInput(taskToManageSubtasks.todoListMarkdown));
+    }
+  }, [isManageSubtasksDialogOpen, taskToManageSubtasks]);
+
 
   useEffect(() => {
     if (!isDeleteTaskPending && deleteTaskState) {
@@ -486,7 +530,6 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    formData.append('todoListMarkdown', ''); // Sub-tasks are defined after creation
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -516,37 +559,10 @@ export default function ProjectDetailPage() {
     });
   };
 
-  // Converts stored Markdown task list to user-friendly input format
-  const convertMarkdownToSubtaskInput = (markdown?: string): string => {
-    if (!markdown) return '';
-    return markdown.split('\n').map(line => {
-      if (line.match(/^\s*\*\s*\[x\]\s*(.*)/i)) {
-        return `** ${line.replace(/^\s*\*\s*\[x\]\s*/i, '$1').trim()}`;
-      } else if (line.match(/^\s*\*\s*\[ \]\s*(.*)/i)) {
-        return `* ${line.replace(/^\s*\*\s*\[ \]\s*/i, '$1').trim()}`;
-      }
-      return line.trim(); // Should ideally not happen if stored correctly
-    }).filter(line => line.length > 0).join('\n');
-  };
-
-  // Converts user-friendly subtask input to Markdown task list format
-  const convertSubtaskInputToMarkdown = (input: string): string => {
-    return input.split('\n').map(line => {
-      const trimmedLine = line.trim();
-      if (trimmedLine.startsWith('** ')) {
-        return `* [x] ${trimmedLine.substring(3).trim()}`;
-      } else if (trimmedLine.startsWith('* ')) {
-        return `* [ ] ${trimmedLine.substring(2).trim()}`;
-      } else if (trimmedLine.length > 0) {
-        return `* [ ] ${trimmedLine}`;
-      }
-      return ''; // Keep empty lines to preserve some structure if user wants, or filter them out
-    }).filter(line => line.length > 0).join('\n');
-  };
 
   const openManageSubtasksDialog = (task: Task) => {
     setTaskToManageSubtasks(task);
-    setSubtaskInput(convertMarkdownToSubtaskInput(task.todoListMarkdown));
+    // setSubtaskInput is handled by useEffect based on taskToManageSubtasks
     setIsManageSubtasksDialogOpen(true);
   };
 
@@ -559,12 +575,21 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
-    // Send other fields as they are to satisfy schema for partial updates
-    formData.append('title', taskToManageSubtasks.title);
-    formData.append('status', taskToManageSubtasks.status);
-    formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid || '');
-    formData.append('description', taskToManageSubtasks.description || '');
-    formData.append('tagsString', taskToManageSubtasks.tags.map(t => t.name).join(', ') || '');
+    // Send only necessary fields for a partial update focused on todoListMarkdown
+    // The backend action `updateTaskAction` is designed to handle partial updates.
+    // It will only update fields that are explicitly present in `formData`.
+    // However, to satisfy the Zod schema on the server, some fields might be required by the schema,
+    // even if not logically needed for *this specific* subtask update.
+    // For `updateTaskAction`, title and status are required by its Zod schema.
+    formData.append('title', taskToManageSubtasks.title); // Keep current title
+    formData.append('status', taskToManageSubtasks.status); // Keep current status
+    // Optional fields can be omitted if they are not being changed by this action
+    // and the Zod schema on the server handles their absence appropriately (e.g., .optional()).
+    if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
+    if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
+    const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
+    if (currentTagsString) formData.append('tagsString', currentTagsString);
+
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -572,25 +597,34 @@ export default function ProjectDetailPage() {
   };
 
 
-  const handleTodoListChangeOnCard = async (taskUuid: string, newTodoListMarkdown: string) => {
+  const handleTodoListChangeOnCard = (taskUuid: string, newTodoListMarkdown: string) => {
     if (!project) return;
     const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
     if (!taskToUpdate) return;
 
+    // Optimistically update local tasks state for immediate UI feedback
+    setTasks(prevTasks => prevTasks.map(t => 
+        t.uuid === taskUuid ? { ...t, todoListMarkdown: newTodoListMarkdown } : t
+    ));
+
     const formData = new FormData();
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
-    
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
+    // Send minimal fields required by server-side Zod schema for partial update
     formData.append('title', taskToUpdate.title);
     formData.append('status', taskToUpdate.status);
-    formData.append('assigneeUuid', taskToUpdate.assigneeUuid || '');
-    formData.append('description', taskToUpdate.description || '');
-    formData.append('tagsString', taskToUpdate.tags.map(t => t.name).join(', ') || '');
-
+    // Optional fields:
+    if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
+    if (taskToUpdate.assigneeUuid) formData.append('assigneeUuid', taskToUpdate.assigneeUuid);
+    const currentTagsString = taskToUpdate.tags.map(t => t.name).join(', ');
+    if (currentTagsString) formData.append('tagsString', currentTagsString);
+    
     ReactStartTransition(() => {
-      updateTaskFormAction(formData);
+      updateTaskFormAction(formData); 
+      // No toast here, success/error handled by global useEffect for updateTaskState
+      // loadTasks() will be called by that useEffect on success to ensure data consistency
     });
   };
 
@@ -716,8 +750,6 @@ export default function ProjectDetailPage() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        // Should not happen if status is always one of the defined TaskStatus
-        // Fallback to Archived or handle as an error
         grouped['Archived'].push(task); 
       }
     });
@@ -725,7 +757,6 @@ export default function ProjectDetailPage() {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
-            // Fallback to sorting by updatedAt if pinning status is the same or not present
             return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         });
     }
@@ -985,7 +1016,7 @@ export default function ProjectDetailPage() {
                                     <div className="mt-2 pt-2 border-t border-dashed text-xs text-muted-foreground">
                                       No sub-tasks defined. 
                                       <Button variant="link" size="xs" className="p-0 h-auto ml-1" onClick={() => openManageSubtasksDialog(task)}>
-                                        Add sub-tasks
+                                        Manage sub-tasks
                                       </Button>
                                     </div>
                                   )
@@ -1101,7 +1132,7 @@ export default function ProjectDetailPage() {
               <DialogHeader>
                 <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks.title}</DialogTitle>
                 <DialogDescription>
-                  Enter sub-tasks one per line. Use '*' for an open task and '**' for a completed task.
+                  Enter sub-tasks one per line. Use '*' for an open task and '**' (two asterisks) for a completed task.
                   Example: <br />
                   `* Design mockups` <br />
                   `** Create database schema`
