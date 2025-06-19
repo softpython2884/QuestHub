@@ -2,96 +2,114 @@
 'use server';
 
 import { App } from '@octokit/app';
-import { Octokit } from 'octokit';
+import { Octokit } from 'octokit'; // Ensure we are using the full Octokit
+import fs from 'fs';
+import path from 'path';
 
 function getGitHubAppCredentialsOrThrow() {
   const appId = process.env.GITHUB_APP_ID;
-  const privateKey = process.env.GITHUB_PRIVATE_KEY;
   const clientId = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+  const privateKeyPath = process.env.GITHUB_PRIVATE_KEY_PATH;
+  const privateKeyEnvVar = process.env.GITHUB_PRIVATE_KEY;
 
   if (!appId) throw new Error('GITHUB_APP_ID is not defined in environment variables.');
-  if (!privateKey) throw new Error('GITHUB_PRIVATE_KEY is not defined in environment variables.');
   if (!clientId) throw new Error('GITHUB_CLIENT_ID is not defined in environment variables.');
   if (!clientSecret) throw new Error('GITHUB_CLIENT_SECRET is not defined in environment variables.');
-  
+
+  let privateKey: string;
+  if (privateKeyPath) {
+    const absolutePath = path.resolve(process.cwd(), privateKeyPath);
+    if (fs.existsSync(absolutePath)) {
+      privateKey = fs.readFileSync(absolutePath, 'utf8');
+      console.log(`[GitHubAppClient] Loaded private key from path: ${absolutePath}`);
+    } else {
+      throw new Error(`GitHub private key file not found at path specified by GITHUB_PRIVATE_KEY_PATH: ${absolutePath}`);
+    }
+  } else if (privateKeyEnvVar) {
+    privateKey = privateKeyEnvVar.replace(/\\n/g, '\n');
+    console.log('[GitHubAppClient] Loaded private key from GITHUB_PRIVATE_KEY environment variable.');
+  } else {
+    throw new Error('Either GITHUB_PRIVATE_KEY_PATH or Github_PRIVATE_KEY must be defined in environment variables.');
+  }
+
   return {
     appId: Number(appId),
-    privateKey: privateKey.replace(/\\n/g, '\n'),
+    privateKey,
     clientId,
     clientSecret,
   };
 }
 
-export async function getOctokitApp(): Promise<App> {
+let appInstance: App | null = null;
+
+async function getAppInstance(): Promise<App> {
+  if (appInstance) {
+    return appInstance;
+  }
   const { appId, privateKey, clientId, clientSecret } = getGitHubAppCredentialsOrThrow();
-  // Ensure OAuth config is passed, though not directly used for installation tokens for repo actions yet
-  const app = new App({
+  console.log('[getAppInstance] Initializing GitHub App client instance.');
+  appInstance = new App({
     appId,
     privateKey,
     oauth: { clientId, clientSecret },
+    Octokit: Octokit, // Explicitly pass the Octokit class we imported
   });
-   if (!app || typeof app.getInstallationOctokit !== 'function') { 
-    console.error('[getOctokitApp] Failed to instantiate GitHub App properly.');
+  if (!appInstance || typeof appInstance.getInstallationOctokit !== 'function') {
+    console.error('[getAppInstance] Failed to instantiate GitHub App properly.');
     throw new Error('Failed to instantiate GitHub App client.');
   }
-  console.log('[getOctokitApp] GitHub App client instantiated.');
-  return app;
+  console.log('[getAppInstance] GitHub App client instance initialized.');
+  return appInstance;
 }
 
+
 export async function getInstallationOctokit(installationId: number): Promise<Octokit> {
-  const app: App = await getOctokitApp();
-  if (!installationId) {
-    console.error('[getInstallationOctokit] installationId is required.');
-    throw new Error('GitHub App installation ID is required to get an installation Octokit instance.');
-  }
+  const app = await getAppInstance();
   console.log(`[getInstallationOctokit] Attempting to get Octokit for installation ID: ${installationId}`);
   try {
-    const installationOctokit: Octokit = await app.getInstallationOctokit(installationId);
+    const installationOctokit = await app.getInstallationOctokit(installationId);
     console.log('[getInstallationOctokit] Successfully obtained installation Octokit instance from app.getInstallationOctokit.');
+    console.log('[getInstallationOctokit] typeof installationOctokit:', typeof installationOctokit);
     
-    // Enhanced Debugging:
+    if (installationOctokit && typeof installationOctokit === 'object') {
+        console.log('[getInstallationOctokit] installationOctokit (keys):', Object.keys(installationOctokit));
+        console.log('[getInstallationOctokit] typeof installationOctokit.request:', typeof (installationOctokit as any).request);
+        console.log('[getInstallationOctokit] typeof installationOctokit.graphql:', typeof (installationOctokit as any).graphql);
+        console.log('[getInstallationOctokit] typeof installationOctokit.log:', typeof (installationOctokit as any).log);
+        console.log('[getInstallationOctokit] typeof installationOctokit.hook:', typeof (installationOctokit as any).hook);
+        console.log('[getInstallationOctokit] typeof installationOctokit.auth:', typeof (installationOctokit as any).auth);
+        console.log('[getInstallationOctokit] typeof installationOctokit.rest:', typeof (installationOctokit as any).rest);
+    }
+
+
     if (!installationOctokit) {
         console.error('[getInstallationOctokit] app.getInstallationOctokit returned null or undefined!');
-        // This case should ideally be caught by an error from app.getInstallationOctokit if it fails,
-        // but this explicit check handles unexpected falsy returns.
         throw new Error('app.getInstallationOctokit returned a falsy value, cannot proceed.');
     }
-    console.log('[getInstallationOctokit] typeof installationOctokit:', typeof installationOctokit);
-    console.log('[getInstallationOctokit] installationOctokit (keys):', Object.keys(installationOctokit));
-    console.log('[getInstallationOctokit] typeof installationOctokit.request:', typeof installationOctokit.request);
-    console.log('[getInstallationOctokit] typeof installationOctokit.rest:', typeof installationOctokit.rest);
-
-    if (installationOctokit.rest) {
-        console.log('[getInstallationOctokit] installationOctokit.rest (keys):', Object.keys(installationOctokit.rest));
-        console.log('[getInstallationOctokit] typeof installationOctokit.rest.repos:', typeof installationOctokit.rest.repos);
-        if (installationOctokit.rest.repos) {
-            console.log('[getInstallationOctokit] typeof installationOctokit.rest.repos.createForAuthenticatedUser:', typeof installationOctokit.rest.repos.createForAuthenticatedUser);
-            console.log('[getInstallationOctokit] typeof installationOctokit.rest.repos.createInOrg:', typeof installationOctokit.rest.repos.createInOrg);
-        } else {
-            console.error('[getInstallationOctokit] CRITICAL: installationOctokit.rest.repos is undefined!');
-        }
-    } else {
-        console.error('[getInstallationOctokit] CRITICAL: installationOctokit.rest is undefined!');
+     if (!(installationOctokit as any).rest) {
+        console.error('[getInstallationOctokit] CRITICAL: installationOctokit.rest is undefined AFTER AWAIT and explicit Octokit class passing!');
+        console.error('[getInstallationOctokit] This suggests a deeper issue with Octokit plugin loading in this environment or with the @octokit/app library version.');
+         throw new Error('Octokit instance from GitHub App is missing .rest property.');
     }
-    
-    return installationOctokit;
+    return installationOctokit as Octokit;
   } catch (error: any) {
     console.error(`[getInstallationOctokit] Error during app.getInstallationOctokit or subsequent checks for installation ID ${installationId}:`, error.message, error.stack);
-    // Re-throw a more specific error or the original one
     throw new Error(`Failed to get a valid Octokit instance for installation ID ${installationId}. Original error: ${error.message}`);
   }
 }
 
-
 // For operations that the app performs on its own behalf (e.g., listing installations)
 export async function getAppAuthOctokit(): Promise<Octokit> {
-    const app = await getOctokitApp();
-    if (!app.octokit) { 
-        console.error('[getAppAuthOctokit] app.octokit is undefined after App instantiation.');
-        throw new Error('Failed to get app-authenticated Octokit instance: app.octokit is undefined.');
+    const app = await getAppInstance();
+    const octokit = await app.octokit() // app.octokit is now a method that returns a promise
+    if (!octokit) {
+        console.error('[getAppAuthOctokit] app.octokit() returned undefined after App instantiation.');
+        throw new Error('Failed to get app-authenticated Octokit instance: app.octokit() is undefined.');
     }
-    console.log('[getAppAuthOctokit] Returning app.octokit');
-    return app.octokit; 
+     if (!(octokit as any).rest) {
+        console.error('[getAppAuthOctokit] CRITICAL: App-authenticated Octokit instance is missing .rest property!');
+    }
+    console.log('[getAppAuthOctokit] Returning app.octokit()');
+    return octokit as Octokit;
 }
-
