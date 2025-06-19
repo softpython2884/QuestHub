@@ -127,7 +127,7 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
     if (matchUnchecked && matchUnchecked[1] !== undefined) {
       return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine; 
+    return trimmedLine;
   }).join('\n');
 };
 
@@ -139,10 +139,10 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
       return `* [x] ${trimmedLine.substring(3).trim()}`;
     } else if (trimmedLine.startsWith('* ')) {
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { 
+    } else if (trimmedLine.length > 0) {
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; 
+    return '';
   }).filter(line => line.trim().length > 0).join('\n');
 };
 
@@ -202,7 +202,7 @@ function ProjectDetailPageContent() {
 
   const [isCreateAnnouncementDialogOpen, setIsCreateAnnouncementDialogOpen] = useState(false);
   const [announcementToDelete, setAnnouncementToDelete] = useState<ProjectAnnouncementType | null>(null);
-  
+
   const [activeTab, setActiveTab] = useState('tasks');
 
   useEffect(() => {
@@ -341,14 +341,13 @@ function ProjectDetailPageContent() {
         setUserGithubAccess(accessDetails);
         if (accessDetails.error) {
             console.warn("Error fetching GitHub access details:", accessDetails.error);
-            // Don't toast here as it might be shown on every page load if there's a persistent issue
         }
       } catch (error) {
         console.error("Exception fetching GitHub access details:", error);
         setUserGithubAccess({ installationId: null, accountLogin: null, error: "Failed to fetch GitHub integration details." });
       }
     }
-  }, [user, toast]);
+  }, [user]);
 
 
  useEffect(() => {
@@ -518,7 +517,7 @@ function ProjectDetailPageContent() {
     if (isManageSubtasksDialogOpen && taskToManageSubtasks) {
       setSubtaskInput(convertMarkdownToSubtaskInput(taskToManageSubtasks.todoListMarkdown));
     } else {
-      setSubtaskInput(''); // Reset when dialog closes or no task
+      setSubtaskInput('');
     }
   }, [isManageSubtasksDialogOpen, taskToManageSubtasks]);
 
@@ -605,7 +604,7 @@ function ProjectDetailPageContent() {
     if (!isDeleteDocumentPending && deleteDocumentState) {
         if (deleteDocumentState.message && !deleteDocumentState.error) {
             toast({ title: "Success", description: deleteDocumentState.message });
-            setDocumentToDelete(null); 
+            setDocumentToDelete(null);
             loadProjectDocuments();
         }
         if (deleteDocumentState.error) {
@@ -640,14 +639,14 @@ function ProjectDetailPageContent() {
       }
     }
   }, [deleteAnnouncementState, isDeleteAnnouncementPending, toast, loadProjectAnnouncements]);
-  
+
   useEffect(() => {
     if (!isLinkGithubPending && linkGithubState) {
       if (linkGithubState.message && !linkGithubState.error) {
         toast({ title: "Success", description: linkGithubState.message });
         if (linkGithubState.project) {
-          setProject(linkGithubState.project); 
-          loadUserGithubAccess(); // Refresh GitHub access details after linking
+          setProject(linkGithubState.project);
+          loadUserGithubAccess();
         }
       }
       if (linkGithubState.error) {
@@ -749,8 +748,7 @@ function ProjectDetailPageContent() {
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
-    
-    // Preserve other task fields
+
     formData.append('title', taskToManageSubtasks.title);
     formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
@@ -779,8 +777,7 @@ function ProjectDetailPageContent() {
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
-      
-      // Preserve other task fields
+
       formData.append('title', taskToUpdate.title);
       formData.append('status', taskToUpdate.status);
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -917,10 +914,10 @@ function ProjectDetailPageContent() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        grouped['Archived'].push(task); 
+        grouped['Archived'].push(task);
       }
     });
-    
+
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -940,29 +937,29 @@ function ProjectDetailPageContent() {
 
   const handleTagsStringInputChange = (
     event: React.ChangeEvent<HTMLInputElement>,
-    fieldApi: any, 
-    formApi: any 
+    fieldApi: any,
+    formApi: any
   ) => {
     const inputValue = event.currentTarget.value;
-    fieldApi.onChange(inputValue); 
+    fieldApi.onChange(inputValue);
 
     const fragment = getCurrentTagFragment(inputValue);
     setActiveTagInputName(fieldApi.name as "tagsString");
-    
+
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
             .filter(tag =>
                 tag.name.toLowerCase().startsWith(lowerFragment) &&
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) 
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())
             )
-            .slice(0, 5); 
+            .slice(0, 5);
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
-        
+
         if (fragment !== lastTypedFragmentRef.current) {
-             setActiveSuggestionIndex(-1); 
+             setActiveSuggestionIndex(-1);
         }
         lastTypedFragmentRef.current = fragment;
 
@@ -982,10 +979,10 @@ function ProjectDetailPageContent() {
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name; 
+    parts[parts.length - 1] = suggestion.name;
 
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) { 
+    if (!newValue.endsWith(', ')) {
          newValue += ', ';
     }
 
@@ -993,14 +990,14 @@ function ProjectDetailPageContent() {
     setTagSuggestions([]);
     setShowTagSuggestions(false);
     setActiveSuggestionIndex(-1);
-    lastTypedFragmentRef.current = ""; 
-    setTimeout(() => tagInputRef.current?.focus(), 0); 
+    lastTypedFragmentRef.current = "";
+    setTimeout(() => tagInputRef.current?.focus(), 0);
   };
 
   const handleTagInputKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>,
-    fieldApi: any, 
-    formApi: any 
+    fieldApi: any,
+    formApi: any
   ) => {
     if (showTagSuggestions && tagSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -1010,21 +1007,21 @@ function ProjectDetailPageContent() {
         event.preventDefault();
         setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
       } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
-        event.preventDefault(); 
-        event.stopPropagation(); 
+        event.preventDefault();
+        event.stopPropagation();
         handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
-        return; 
+        return;
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
-        return; 
+        return;
       }
     } else {
       if (event.key === 'Escape') {
-        setShowTagSuggestions(false); 
+        setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
       }
@@ -1052,7 +1049,7 @@ function ProjectDetailPageContent() {
     if (!documentToDelete || !project) return;
     const formData = new FormData();
     formData.append('documentUuid', documentToDelete.uuid);
-    formData.append('projectUuid', project.uuid); 
+    formData.append('projectUuid', project.uuid);
     ReactStartTransition(() => {
       deleteDocumentFormAction(formData);
     });
@@ -1083,9 +1080,8 @@ function ProjectDetailPageContent() {
   const handleLinkOrInstallGithub = async () => {
     if (!project || !user) return;
 
-    // 1. Check if user has an installation linked to FlowUp
     const accessDetails = await fetchUserGithubAccessDetailsAction();
-    setUserGithubAccess(accessDetails); // Update state
+    setUserGithubAccess(accessDetails);
 
     if (accessDetails.error) {
       toast({ variant: "destructive", title: "GitHub Error", description: accessDetails.error });
@@ -1093,23 +1089,18 @@ function ProjectDetailPageContent() {
     }
 
     if (!accessDetails.installationId) {
-      // 2. If not, redirect to GitHub App installation page
-      const githubAppName = process.env.NEXT_PUBLIC_GITHUB_APP_NAME; // Ensure this is set in .env and exposed
+      const githubAppName = process.env.NEXT_PUBLIC_GITHUB_APP_NAME;
       if (!githubAppName) {
         toast({ variant: "destructive", title: "Configuration Error", description: "GitHub App name is not configured." });
         return;
       }
-      // Construct a state parameter to know where to redirect back after callback, e.g., to this project's codespace tab
       const stateParam = encodeURIComponent(`projectUuid=${projectUuid}&redirectTo=/projects/${projectUuid}?tab=codespace`);
       const installUrl = `https://github.com/apps/${githubAppName}/installations/new?state=${stateParam}`;
-      console.log("Redirecting to GitHub App installation:", installUrl);
       window.location.href = installUrl;
     } else {
-      // 3. If installation exists, proceed to link/create repository
       const formData = new FormData();
       formData.append('projectUuid', project.uuid);
       formData.append('projectName', project.name);
-      // The installationId will be fetched by the server action based on the logged-in user
       ReactStartTransition(() => {
         linkProjectToGithubFormAction(formData);
       });
@@ -1164,7 +1155,7 @@ function ProjectDetailPageContent() {
   return (
     <div className="space-y-6">
       <Button variant="outline" onClick={() => router.back()} className="mb-0">
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
+        <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
       <Card className={cn("shadow-lg", project.isUrgent && "border-2 border-destructive ring-2 ring-destructive/50")}>
@@ -1319,10 +1310,10 @@ function ProjectDetailPageContent() {
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
-                                             onOpenChange={(open) => { 
-                                                if(!open && document.activeElement !== tagInputRef.current) { 
-                                                    setShowTagSuggestions(false); 
+                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'}
+                                             onOpenChange={(open) => {
+                                                if(!open && document.activeElement !== tagInputRef.current) {
+                                                    setShowTagSuggestions(false);
                                                 }
                                             }}
                                     >
@@ -1339,9 +1330,9 @@ function ProjectDetailPageContent() {
                                             }}
                                             onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
                                             onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { 
+                                            onBlur={() => setTimeout(() => {
                                                 if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
-                                                    setShowTagSuggestions(false); 
+                                                    setShowTagSuggestions(false);
                                                 }
                                             }, 150)}
                                         />
@@ -1357,7 +1348,7 @@ function ProjectDetailPageContent() {
                                                 <CommandItem
                                                     key={suggestion.uuid}
                                                     value={suggestion.name}
-                                                    onSelect={() => { 
+                                                    onSelect={() => {
                                                         handleTagSuggestionClick(suggestion, field, taskForm);
                                                     }}
                                                     className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
@@ -1525,10 +1516,10 @@ function ProjectDetailPageContent() {
                                     render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Tags (comma-separated)</FormLabel>
-                                        <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
-                                                onOpenChange={(open) => { 
-                                                    if(!open && document.activeElement !== tagInputRef.current) { 
-                                                        setShowTagSuggestions(false); 
+                                        <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'}
+                                                onOpenChange={(open) => {
+                                                    if(!open && document.activeElement !== tagInputRef.current) {
+                                                        setShowTagSuggestions(false);
                                                     }
                                                 }}
                                         >
@@ -1545,9 +1536,9 @@ function ProjectDetailPageContent() {
                                                 }}
                                                 onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
                                                 onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                                onBlur={() => setTimeout(() => { 
+                                                onBlur={() => setTimeout(() => {
                                                     if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
-                                                        setShowTagSuggestions(false); 
+                                                        setShowTagSuggestions(false);
                                                     }
                                                 }, 150)}
                                             />
@@ -1555,7 +1546,7 @@ function ProjectDetailPageContent() {
                                         </PopoverAnchor>
                                         {showTagSuggestions && tagSuggestions.length > 0 && (
                                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                                            <Command shouldFilter={false}> 
+                                            <Command shouldFilter={false}>
                                                 <CommandList>
                                                 <CommandEmpty>No matching tags found.</CommandEmpty>
                                                 <CommandGroup>
@@ -1593,7 +1584,7 @@ function ProjectDetailPageContent() {
                     )}
                 </DialogContent>
             </Dialog>
-    
+
             <Dialog open={isManageSubtasksDialogOpen} onOpenChange={(isOpen) => { setIsManageSubtasksDialogOpen(isOpen); if(!isOpen) setTaskToManageSubtasks(null); }}>
                 <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
@@ -1674,7 +1665,7 @@ function ProjectDetailPageContent() {
                  <div className="text-center py-12 text-muted-foreground">
                     <FileText className="mx-auto h-12 w-12 mb-4" />
                     <p>No documents in this project yet.</p>
-                    {canManageDocuments && 
+                    {canManageDocuments &&
                         <Button size="sm" className="mt-4" asChild>
                            <Link href={`/projects/${projectUuid}/documents/new`}>
                             <PlusCircle className="mr-2 h-4 w-4"/> Add your first document
@@ -1755,20 +1746,20 @@ function ProjectDetailPageContent() {
                 <DialogHeader>
                     <DialogTitle>{documentToView?.title}</DialogTitle>
                      <DialogDescription asChild>
-                        <div className="text-sm text-muted-foreground pt-1 space-x-1.5">
+                       <div>
                           {documentToView?.createdByName && (
                                 <>
-                                <Avatar className="h-5 w-5 inline-block align-middle">
+                                <Avatar className="h-5 w-5 inline-block align-middle mr-1">
                                     <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar small" />
                                     <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
                                 </Avatar>
-                                <span>By: {documentToView?.createdByName}</span>
-                                <span className="mx-1.5">|</span>
+                                <span className="text-sm text-muted-foreground">By: {documentToView?.createdByName}</span>
+                                <span className="mx-1.5 text-muted-foreground">|</span>
                                 </>
                             )}
-                            <span>Type: </span><Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
-                            <span className="mx-1.5">|</span>
-                            <span>Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}</span>
+                            <span className="text-sm text-muted-foreground">Type: </span><Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
+                            <span className="mx-1.5 text-muted-foreground">|</span>
+                            <span className="text-sm text-muted-foreground">Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}</span>
                         </div>
                     </DialogDescription>
                 </DialogHeader>
@@ -1957,7 +1948,7 @@ function ProjectDetailPageContent() {
                         <h3 className="text-lg font-semibold">Project Linked to GitHub!</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      This project is linked to the following GitHub repository (Installation ID: {project.githubInstallationId || 'N/A'}):
+                      This project is linked to the following GitHub repository (Installation ID: {project.githubInstallationId || userGithubAccess?.installationId || 'N/A'}):
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                         <Github className="h-4 w-4" />
@@ -1973,7 +1964,7 @@ function ProjectDetailPageContent() {
                     </div>
                      <p className="text-sm text-muted-foreground mt-1">Repository Name: <span className="font-medium">{project.githubRepoName}</span></p>
                   </div>
-                  
+
                   <Button variant="outline" disabled>
                     <BookOpen className="mr-2 h-4 w-4" /> Synchronise README with GitHub (Soon)
                   </Button>
@@ -2237,4 +2228,3 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
-
