@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -58,14 +58,14 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
     const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
-    if (matchChecked && matchChecked[2] !== undefined) { // Use group 2 for text
-      return `** ${matchChecked[2].trim()}`;
+    if (matchChecked && matchChecked[1] !== undefined) {
+      return `** ${matchChecked[1].trim()}`;
     }
     const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
-    if (matchUnchecked && matchUnchecked[2] !== undefined) { // Use group 2 for text
-      return `* ${matchUnchecked[2].trim()}`;
+    if (matchUnchecked && matchUnchecked[1] !== undefined) {
+      return `* ${matchUnchecked[1].trim()}`;
     }
-    return trimmedLine; 
+    return trimmedLine;
   }).join('\n');
 };
 
@@ -76,24 +76,24 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
       return `* [x] ${trimmedLine.substring(3).trim()}`;
     } else if (trimmedLine.startsWith('* ')) {
       return `* [ ] ${trimmedLine.substring(2).trim()}`;
-    } else if (trimmedLine.length > 0) { 
+    } else if (trimmedLine.length > 0) {
       return `* [ ] ${trimmedLine}`;
     }
-    return ''; 
+    return '';
   }).filter(line => line.trim().length > 0).join('\n');
 };
 
 interface ProjectTasksPageProps {
-  project: Project; // Passed from layout
-  currentUserRole: ProjectMemberRole | null; // Passed from layout
-  projectUuid: string; // Passed from layout
-  user: User; // Passed from layout
+  project: Project;
+  currentUserRole: ProjectMemberRole | null;
+  projectUuid: string;
+  user: User;
 }
 
 export default function ProjectTasksPage({ project, currentUserRole, projectUuid, user }: ProjectTasksPageProps) {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectTags, setProjectTags] = useState<TagType[]>([]);
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
@@ -105,7 +105,7 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
   const [taskToManageSubtasks, setTaskToManageSubtasks] = useState<Task | null>(null);
   const [isManageSubtasksDialogOpen, setIsManageSubtasksDialogOpen] = useState(false);
   const [subtaskInput, setSubtaskInput] = useState('');
-  
+
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const lastSubmitSourceRef = useRef<'subtasks' | 'main' | null>(null);
 
@@ -396,16 +396,16 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
 
   const handleTagsStringInputChange = ( event: React.ChangeEvent<HTMLInputElement>, fieldApi: any ) => {
     const inputValue = event.currentTarget.value;
-    fieldApi.onChange(inputValue); 
+    fieldApi.onChange(inputValue);
     const fragment = getCurrentTagFragment(inputValue);
     setActiveTagInputName(fieldApi.name as "tagsString");
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-        const filtered = projectTags.filter(tag => tag.name.toLowerCase().startsWith(lowerFragment) && !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())).slice(0, 5); 
+        const filtered = projectTags.filter(tag => tag.name.toLowerCase().startsWith(lowerFragment) && !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())).slice(0, 5);
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
-        if (fragment !== lastTypedFragmentRef.current) setActiveSuggestionIndex(-1); 
+        if (fragment !== lastTypedFragmentRef.current) setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = fragment;
     } else {
         setTagSuggestions([]);
@@ -418,15 +418,15 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
   const handleTagSuggestionClick = ( suggestion: TagType, fieldApi: any ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name; 
+    parts[parts.length - 1] = suggestion.name;
     let newValue = parts.join(',');
     if (!newValue.endsWith(', ')) newValue += ', ';
     fieldApi.onChange(newValue);
     setTagSuggestions([]);
     setShowTagSuggestions(false);
     setActiveSuggestionIndex(-1);
-    lastTypedFragmentRef.current = ""; 
-    setTimeout(() => tagInputRef.current?.focus(), 0); 
+    lastTypedFragmentRef.current = "";
+    setTimeout(() => tagInputRef.current?.focus(), 0);
   };
 
   const handleTagInputKeyDown = ( event: React.KeyboardEvent<HTMLInputElement>, fieldApi: any ) => {
@@ -438,8 +438,8 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
         event.preventDefault();
         setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
       } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
-        event.preventDefault(); 
-        event.stopPropagation(); 
+        event.preventDefault();
+        event.stopPropagation();
         handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi);
       } else if (event.key === 'Escape') {
         event.preventDefault();
@@ -449,7 +449,7 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
         lastTypedFragmentRef.current = "";
       }
     } else if (event.key === 'Escape') {
-        setShowTagSuggestions(false); 
+        setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
     }
@@ -481,8 +481,8 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
                         <FormItem> <FormLabel>Tags</FormLabel>
                             <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); }}}>
                               <PopoverAnchor><FormControl>
-                                <Input {...field} ref={tagInputRef} placeholder="e.g. frontend, bug" 
-                                    onFocus={() => {setActiveTagInputName('tagsString'); if(getCurrentTagFragment(field.value || "")) handleTagsStringInputChange({currentTarget: {value: field.value}} as any, field);}}
+                                <Input {...field} ref={tagInputRef} placeholder="e.g. frontend, bug"
+                                    onFocus={() => {setActiveTagInputName('tagsString'); if(getCurrentTagFragment(field.value || "")) handleTagsStringInputChange({currentTarget: {value: field.value || ''}} as any, field);}}
                                     onChange={(e) => handleTagsStringInputChange(e, field)}
                                     onKeyDown={(e) => handleTagInputKeyDown(e, field)}
                                     onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) setShowTagSuggestions(false);}, 150)} />
@@ -561,8 +561,8 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
                                 <FormItem> <FormLabel>Tags</FormLabel>
                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) setShowTagSuggestions(false); }}>
                                       <PopoverAnchor><FormControl>
-                                        <Input {...field} ref={tagInputRef} placeholder="e.g. frontend, bug" 
-                                            onFocus={() => {setActiveTagInputName('tagsString'); if(getCurrentTagFragment(field.value || "")) handleTagsStringInputChange({currentTarget: {value: field.value}} as any, field);}}
+                                        <Input {...field} ref={tagInputRef} placeholder="e.g. frontend, bug"
+                                            onFocus={() => {setActiveTagInputName('tagsString'); if(getCurrentTagFragment(field.value || "")) handleTagsStringInputChange({currentTarget: {value: field.value || ''}} as any, field);}}
                                             onChange={(e) => handleTagsStringInputChange(e, field)}
                                             onKeyDown={(e) => handleTagInputKeyDown(e, field)}
                                             onBlur={() => setTimeout(() => { if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) setShowTagSuggestions(false);}, 150)} />

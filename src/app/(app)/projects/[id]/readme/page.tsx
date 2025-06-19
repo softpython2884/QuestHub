@@ -32,9 +32,8 @@ export default function ProjectReadmePage({ project: initialProject, currentUser
       setProjectReadmeContent(project.readmeContent || '');
     }
   }, [project]);
-  
+
   useEffect(() => {
-    // Sync if initialProject from layout changes (e.g. after project details edit in layout)
     setProject(initialProject);
   }, [initialProject]);
 
@@ -44,7 +43,7 @@ export default function ProjectReadmePage({ project: initialProject, currentUser
         if (saveReadmeState.message && !saveReadmeState.error) {
             toast({ title: "Success", description: saveReadmeState.message });
             if(saveReadmeState.project) {
-                setProject(saveReadmeState.project); // Update local project state
+                setProject(saveReadmeState.project);
                 setProjectReadmeContent(saveReadmeState.project.readmeContent || '');
             }
         }
@@ -63,7 +62,7 @@ export default function ProjectReadmePage({ project: initialProject, currentUser
       saveReadmeFormAction(formData);
     });
   };
-  
+
   const canEditReadme = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
 
   if (!project) {

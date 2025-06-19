@@ -8,8 +8,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, Mail, UserX, Tag as TagIcon, PlusCircle, Palette, Trash2, Loader2 } from 'lucide-react';
 import type { Project, ProjectMember, ProjectMemberRole, Tag as TagType, User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  fetchProjectMembersAction, 
+import {
+  fetchProjectMembersAction,
   removeUserFromProjectAction,
   inviteUserToProjectAction, type InviteUserFormState,
   fetchProjectTagsAction, createProjectTagAction, type CreateProjectTagFormState,
@@ -71,13 +71,12 @@ export default function ProjectSettingsPage({ project: initialProject, currentUs
     resolver: zodResolver(projectTagFormSchema),
     defaultValues: { tagName: '', tagColor: '#6B7280' },
   });
-  
+
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
   const [toggleUrgencyState, toggleUrgencyFormAction, isToggleUrgencyPending] = useActionState(toggleProjectUrgencyAction, { message: "", error: "" });
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
-  
-  // For syncing project data if it's updated in the layout (e.g., after project name/desc edit)
+
   useEffect(() => {
     setProject(initialProject);
   }, [initialProject]);
@@ -120,7 +119,7 @@ export default function ProjectSettingsPage({ project: initialProject, currentUs
             toast({ title: "Success", description: inviteFormState.message });
             setIsInviteUserDialogOpen(false);
             inviteForm.reset();
-            loadProjectMembersAndRole(); // Reload members
+            loadProjectMembersAndRole();
         }
         if (inviteFormState.error) {
             toast({ variant: "destructive", title: "Invitation Error", description: inviteFormState.error });
@@ -132,7 +131,7 @@ export default function ProjectSettingsPage({ project: initialProject, currentUs
     if (!isToggleUrgencyPending && toggleUrgencyState) {
         if (toggleUrgencyState.message && !toggleUrgencyState.error) {
             toast({ title: "Success", description: toggleUrgencyState.message });
-            if(toggleUrgencyState.project) setProject(toggleUrgencyState.project); // Update local project
+            if(toggleUrgencyState.project) setProject(toggleUrgencyState.project);
         }
         if (toggleUrgencyState.error) {
             toast({ variant: "destructive", title: "Urgency Error", description: toggleUrgencyState.error });
@@ -144,21 +143,21 @@ export default function ProjectSettingsPage({ project: initialProject, currentUs
     if (!isToggleVisibilityPending && toggleVisibilityState) {
         if (toggleVisibilityState.message && !toggleVisibilityState.error) {
             toast({ title: "Success", description: toggleVisibilityState.message });
-            if(toggleVisibilityState.project) setProject(toggleVisibilityState.project); // Update local project
+            if(toggleVisibilityState.project) setProject(toggleVisibilityState.project);
         }
         if (toggleVisibilityState.error) {
             toast({ variant: "destructive", title: "Visibility Error", description: toggleVisibilityState.error });
         }
     }
   }, [toggleVisibilityState, isToggleVisibilityPending, toast]);
-  
+
   useEffect(() => {
     if (!isCreateProjectTagPending && createProjectTagState) {
       if (createProjectTagState.message && !createProjectTagState.error) {
         toast({ title: "Success", description: createProjectTagState.message });
         setIsAddProjectTagDialogOpen(false);
         projectTagForm.reset({ tagName: '', tagColor: '#6B7280' });
-        loadProjectTagsData(); // Reload tags
+        loadProjectTagsData();
       }
       if (createProjectTagState.error) {
         toast({ variant: "destructive", title: "Tag Creation Error", description: createProjectTagState.error });
@@ -185,7 +184,7 @@ export default function ProjectSettingsPage({ project: initialProject, currentUs
       const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
       if (result.success) {
           toast({ title: "Success", description: result.message });
-          loadProjectMembersAndRole(); // Reload members
+          loadProjectMembersAndRole();
       } else {
           toast({ variant: "destructive", title: "Error", description: result.error });
       }

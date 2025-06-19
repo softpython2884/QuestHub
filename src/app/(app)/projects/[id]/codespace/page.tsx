@@ -6,10 +6,10 @@ import { FolderGit2, Code2, Loader2 } from "lucide-react";
 import type { Project, ProjectMemberRole, User } from '@/types';
 
 interface ProjectCodeSpacePageProps {
-  project: Project; // Passed from layout
-  currentUserRole: ProjectMemberRole | null; // Passed from layout
-  projectUuid: string; // Passed from layout
-  user: User; // Passed from layout
+  project: Project;
+  currentUserRole: ProjectMemberRole | null;
+  projectUuid: string;
+  user: User;
 }
 
 export default function ProjectCodeSpacePage({ project }: ProjectCodeSpacePageProps) {

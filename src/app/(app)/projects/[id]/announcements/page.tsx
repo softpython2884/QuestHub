@@ -9,14 +9,14 @@ import type { Project, ProjectMemberRole, User } from '@/types';
 const projectAnnouncements: any[] = [];
 
 interface ProjectAnnouncementsPageProps {
-  project: Project; // Passed from layout
-  currentUserRole: ProjectMemberRole | null; // Passed from layout
-  projectUuid: string; // Passed from layout
-  user: User; // Passed from layout
+  project: Project;
+  currentUserRole: ProjectMemberRole | null;
+  projectUuid: string;
+  user: User;
 }
 
 export default function ProjectAnnouncementsPage({ project, currentUserRole, projectUuid }: ProjectAnnouncementsPageProps) {
-  
+
   const canManageAnnouncements = currentUserRole === 'owner' || currentUserRole === 'co-owner';
 
   if (!project) {

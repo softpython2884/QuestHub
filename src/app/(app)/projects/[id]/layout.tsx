@@ -3,12 +3,12 @@
 
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, startTransition as ReactStartTransition } from 'react';
-import type { Project, ProjectMemberRole } from '@/types';
+import type { Project, ProjectMemberRole, User } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit3, Loader2, Flame, ShieldAlert, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Edit3, Loader2, Flame, ShieldAlert, AlertCircle, FolderKanban, BookOpen, Megaphone, FolderGit2, SettingsIcon as Settings } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -48,7 +48,7 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  
+
   const editProjectForm = useForm<EditProjectFormValues>({
     resolver: zodResolver(editProjectFormSchema),
     defaultValues: { name: '', description: '' },
@@ -67,7 +67,7 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
           const userRoleForProject = roleResult.role;
           setCurrentUserRole(userRoleForProject);
 
-          if (projectData.isPrivate && !userRoleForProject) {
+          if (projectData.isPrivate && !userRoleForProject && user.role !== 'admin') {
             setAccessDenied(true);
             setProject(null);
             toast({variant: "destructive", title: "Access Denied", description: "This project is private and you are not a member."});
@@ -114,13 +114,14 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
         if(updateProjectFormState.project) {
           setProject(updateProjectFormState.project); // Update project state in layout
         }
+        // No need to call loadProjectData() here, as the state 'project' is updated directly
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
       }
     }
   }, [updateProjectFormState, isUpdateProjectPending, toast]);
-  
+
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
     const formData = new FormData();
@@ -133,14 +134,15 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
   };
 
   const getActiveTab = () => {
-    if (pathname.endsWith('/readme')) return 'readme';
-    if (pathname.includes('/documents')) return 'documents'; // Includes /new and /edit
-    if (pathname.endsWith('/announcements')) return 'announcements';
-    if (pathname.endsWith('/codespace')) return 'codespace';
-    if (pathname.endsWith('/settings')) return 'settings';
-    return 'tasks'; // Default tab
+    if (pathname.endsWith(`/projects/${projectUuid}/readme`)) return 'readme';
+    if (pathname.startsWith(`/projects/${projectUuid}/documents`)) return 'documents';
+    if (pathname.endsWith(`/projects/${projectUuid}/announcements`)) return 'announcements';
+    if (pathname.endsWith(`/projects/${projectUuid}/codespace`)) return 'codespace';
+    if (pathname.endsWith(`/projects/${projectUuid}/settings`)) return 'settings';
+    if (pathname.endsWith(`/projects/${projectUuid}`)) return 'tasks'; // Default for /projects/[id]
+    return 'tasks'; // Fallback
   };
-  
+
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
 
   if (authLoading || isLoadingData) {
@@ -171,7 +173,7 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
         </div>
     );
   }
-  
+
   return (
     <div className="space-y-6">
       <Button variant="outline" onClick={() => router.push('/projects')} className="mb-0">
@@ -214,6 +216,8 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
                       <FormField control={editProjectForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Project Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
                       <FormField control={editProjectForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Project Description</FormLabel><FormControl><Textarea {...field} rows={5} /></FormControl><FormMessage /></FormItem>)}/>
                       {updateProjectFormState?.error && <p className="text-sm text-destructive">{updateProjectFormState.error}</p>}
+                      {updateProjectFormState?.errors?.name && <p className="text-sm text-destructive">{updateProjectFormState.errors.name[0]}</p>}
+                      {updateProjectFormState?.errors?.description && <p className="text-sm text-destructive">{updateProjectFormState.errors.description[0]}</p>}
                       <DialogFooter>
                         <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                         <Button type="submit" disabled={isUpdateProjectPending}>{isUpdateProjectPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button>
@@ -230,18 +234,19 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
                 <div><strong className="block text-muted-foreground">Owner:</strong> {projectOwnerName || project.ownerUuid}</div>
                 <div><strong className="block text-muted-foreground">Created:</strong> {new Date(project.createdAt).toLocaleDateString()}</div>
                 <div><strong className="block text-muted-foreground">Last Update:</strong> {new Date(project.updatedAt).toLocaleDateString()}</div>
+                 <div><strong className="block text-muted-foreground">Your Role:</strong> <span className="capitalize">{currentUserRole || 'N/A'}</span></div>
             </div>
         </CardContent>
       </Card>
 
       <Tabs value={getActiveTab()} className="w-full">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6">
-          <TabsTrigger value="tasks" asChild><Link href={`/projects/${projectUuid}`}>Tasks</Link></TabsTrigger>
-          <TabsTrigger value="readme" asChild><Link href={`/projects/${projectUuid}/readme`}>README</Link></TabsTrigger>
-          <TabsTrigger value="documents" asChild><Link href={`/projects/${projectUuid}/documents`}>Documents</Link></TabsTrigger>
-          <TabsTrigger value="announcements" asChild><Link href={`/projects/${projectUuid}/announcements`}>Announcements</Link></TabsTrigger>
-          <TabsTrigger value="codespace" asChild><Link href={`/projects/${projectUuid}/codespace`}>CodeSpace</Link></TabsTrigger>
-          <TabsTrigger value="settings" asChild><Link href={`/projects/${projectUuid}/settings`}>Settings & Team</Link></TabsTrigger>
+          <TabsTrigger value="tasks" asChild><Link href={`/projects/${projectUuid}`}><FolderKanban className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Tasks</Link></TabsTrigger>
+          <TabsTrigger value="readme" asChild><Link href={`/projects/${projectUuid}/readme`}><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>README</Link></TabsTrigger>
+          <TabsTrigger value="documents" asChild><Link href={`/projects/${projectUuid}/documents`}><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Documents</Link></TabsTrigger>
+          <TabsTrigger value="announcements" asChild><Link href={`/projects/${projectUuid}/announcements`}><Megaphone className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Announcements</Link></TabsTrigger>
+          <TabsTrigger value="codespace" asChild><Link href={`/projects/${projectUuid}/codespace`}><FolderGit2 className="mr-1 h-4 w-4 hidden sm:inline-flex"/>CodeSpace</Link></TabsTrigger>
+          <TabsTrigger value="settings" asChild><Link href={`/projects/${projectUuid}/settings`}><Settings className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Settings & Team</Link></TabsTrigger>
         </TabsList>
       </Tabs>
       <div className="mt-4">

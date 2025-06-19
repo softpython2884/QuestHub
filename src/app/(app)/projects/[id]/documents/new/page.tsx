@@ -5,7 +5,7 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { createDocumentAction, fetchProjectAction, fetchProjectMemberRoleAction } from '../../actions'; 
+import { fetchProjectAction, fetchProjectMemberRoleAction } from '../../actions';
 import { useEffect, useState } from 'react';
 import type { Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert } from 'lucide-react';
@@ -35,7 +35,7 @@ export default function NewDocumentPage() {
           router.push(`/projects/${projectUuid}`);
           return;
         }
-        
+
         const roleResult = await fetchProjectMemberRoleAction(projectUuid, user.uuid);
 
         if (roleResult.role && ['owner', 'co-owner', 'editor'].includes(roleResult.role)) {

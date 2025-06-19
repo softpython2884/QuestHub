@@ -17,17 +17,17 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 
 interface ProjectDocumentsPageProps {
-  project: Project; // Passed from layout
-  currentUserRole: ProjectMemberRole | null; // Passed from layout
-  projectUuid: string; // Passed from layout
-  user: User; // Passed from layout
+  project: Project;
+  currentUserRole: ProjectMemberRole | null;
+  projectUuid: string;
+  user: User;
 }
 
 export default function ProjectDocumentsPage({ project, currentUserRole, projectUuid }: ProjectDocumentsPageProps) {
   const { toast } = useToast();
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocumentType[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
-  
+
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
   const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
@@ -58,7 +58,7 @@ export default function ProjectDocumentsPage({ project, currentUserRole, project
     if (!isDeleteDocumentPending && deleteDocumentState) {
         if (deleteDocumentState.message && !deleteDocumentState.error) {
             toast({ title: "Success", description: deleteDocumentState.message });
-            setDocumentToDelete(null); 
+            setDocumentToDelete(null);
             loadProjectDocuments();
         }
         if (deleteDocumentState.error) {
@@ -76,18 +76,18 @@ export default function ProjectDocumentsPage({ project, currentUserRole, project
     if (!documentToDelete || !project) return;
     const formData = new FormData();
     formData.append('documentUuid', documentToDelete.uuid);
-    formData.append('projectUuid', project.uuid); 
+    formData.append('projectUuid', project.uuid);
     ReactStartTransition(() => {
       deleteDocumentFormAction(formData);
     });
   };
-  
+
   const canManageDocuments = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
 
   if (!project) {
     return <div className="flex items-center justify-center min-h-[300px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /> Loading project data...</div>;
   }
-  
+
   return (
     <>
       <Card>
@@ -108,7 +108,7 @@ export default function ProjectDocumentsPage({ project, currentUserRole, project
              <div className="text-center py-12 text-muted-foreground">
                 <FileText className="mx-auto h-12 w-12 mb-4" />
                 <p>No documents in this project yet.</p>
-                {canManageDocuments && 
+                {canManageDocuments &&
                     <Button size="sm" className="mt-4" asChild>
                        <Link href={`/projects/${projectUuid}/documents/new`}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add your first document

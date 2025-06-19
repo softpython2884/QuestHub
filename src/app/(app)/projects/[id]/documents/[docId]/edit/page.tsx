@@ -5,7 +5,7 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { fetchDocumentAction, updateDocumentAction, fetchProjectMemberRoleAction, fetchProjectAction } from '../../../actions'; 
+import { fetchDocumentAction, fetchProjectMemberRoleAction, fetchProjectAction } from '../../../actions';
 import { useEffect, useState } from 'react';
 import type { ProjectDocumentType, Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
@@ -92,7 +92,7 @@ export default function EditDocumentPage() {
       </div>
     );
   }
-  
+
   if (!canEdit && !isLoadingDocument) {
      return (
       <div className="container mx-auto p-4 py-8 space-y-6">
@@ -131,7 +131,7 @@ export default function EditDocumentPage() {
         </Button>
       <DocumentEditor
         projectUuid={projectUuid}
-        document={document} 
+        document={document}
         onSaveSuccess={(docUuid) => router.push(`/projects/${projectUuid}?tab=documents`)}
         onCancel={handleCancel}
       />
