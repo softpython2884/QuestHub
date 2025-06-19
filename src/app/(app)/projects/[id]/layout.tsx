@@ -1,14 +1,13 @@
 
 'use client';
 
-import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback, startTransition as ReactStartTransition } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useActionState } from 'react';
 import type { Project, ProjectMemberRole, User } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit3, Loader2, Flame, ShieldAlert, AlertCircle, FolderKanban, BookOpen, Megaphone, FolderGit2, SettingsIcon as Settings } from 'lucide-react';
+import { ArrowLeft, Edit3, Loader2, Flame, ShieldAlert, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -24,8 +23,6 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useActionState } from 'react';
-
 
 const editProjectFormSchema = z.object({
   name: z.string().min(3, { message: 'Project name must be at least 3 characters.' }).max(100),
@@ -33,10 +30,8 @@ const editProjectFormSchema = z.object({
 });
 type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
 
-
 export default function ProjectDetailLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
-  const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
   const projectUuid = params.id as string;
@@ -112,9 +107,8 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
         toast({ title: "Success", description: updateProjectFormState.message });
         setIsEditDialogOpen(false);
         if(updateProjectFormState.project) {
-          setProject(updateProjectFormState.project); // Update project state in layout
+          setProject(updateProjectFormState.project);
         }
-        // No need to call loadProjectData() here, as the state 'project' is updated directly
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
@@ -133,16 +127,6 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
     });
   };
 
-  const getActiveTab = () => {
-    if (pathname.endsWith(`/projects/${projectUuid}/readme`)) return 'readme';
-    if (pathname.startsWith(`/projects/${projectUuid}/documents`)) return 'documents';
-    if (pathname.endsWith(`/projects/${projectUuid}/announcements`)) return 'announcements';
-    if (pathname.endsWith(`/projects/${projectUuid}/codespace`)) return 'codespace';
-    if (pathname.endsWith(`/projects/${projectUuid}/settings`)) return 'settings';
-    if (pathname.endsWith(`/projects/${projectUuid}`)) return 'tasks'; // Default for /projects/[id]
-    return 'tasks'; // Fallback
-  };
-
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
 
   if (authLoading || isLoadingData) {
@@ -153,8 +137,8 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
           <CardHeader><Skeleton className="h-8 w-1/2" /><Skeleton className="h-5 w-3/4 mt-2" /></CardHeader>
           <CardContent><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2"><div><Skeleton className="h-4 w-16 mb-1" /><Skeleton className="h-5 w-24" /></div></div></CardContent>
         </Card>
-        <Skeleton className="h-10 w-full" />
-        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
+        <Skeleton className="h-10 w-full" /> {/* For TabsList */}
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card> {/* For Tab Content */}
       </div>
     );
   }
@@ -239,19 +223,8 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
         </CardContent>
       </Card>
 
-      <Tabs value={getActiveTab()} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6">
-          <TabsTrigger value="tasks" asChild><Link href={`/projects/${projectUuid}`}><FolderKanban className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Tasks</Link></TabsTrigger>
-          <TabsTrigger value="readme" asChild><Link href={`/projects/${projectUuid}/readme`}><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>README</Link></TabsTrigger>
-          <TabsTrigger value="documents" asChild><Link href={`/projects/${projectUuid}/documents`}><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Documents</Link></TabsTrigger>
-          <TabsTrigger value="announcements" asChild><Link href={`/projects/${projectUuid}/announcements`}><Megaphone className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Announcements</Link></TabsTrigger>
-          <TabsTrigger value="codespace" asChild><Link href={`/projects/${projectUuid}/codespace`}><FolderGit2 className="mr-1 h-4 w-4 hidden sm:inline-flex"/>CodeSpace</Link></TabsTrigger>
-          <TabsTrigger value="settings" asChild><Link href={`/projects/${projectUuid}/settings`}><Settings className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Settings & Team</Link></TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <div className="mt-4">
-        {React.cloneElement(children as React.ReactElement, { project, currentUserRole, projectUuid, user })}
-      </div>
+      {/* Pass project and user data to the children (page.tsx) */}
+      {React.cloneElement(children as React.ReactElement, { project, currentUserRole, user, projectUuid })}
     </div>
   );
 }

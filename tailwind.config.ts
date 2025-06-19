@@ -123,7 +123,7 @@ export default {
         },
         invert: { // Dark theme prose
           css: {
-            '--tw-prose-body': theme('colors.foreground / 1'), 
+            '--tw-prose-body': theme('colors.foreground / 1'),
             '--tw-prose-headings': theme('colors.foreground / 1'),
             '--tw-prose-lead': theme('colors.muted.foreground / 1'),
             '--tw-prose-links': theme('colors.primary.DEFAULT / 1'),
