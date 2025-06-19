@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2 } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -115,33 +115,33 @@ type ProjectAnnouncementFormValues = z.infer<typeof projectAnnouncementFormSchem
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
-  return markdown.split('\n').map(line => {
+  return markdown.split('\\n').map(line => {
     const trimmedLine = line.trim();
-    const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
+    const matchChecked = trimmedLine.match(/^\\s*\\*\\s*\\[x\\]\\s*(.*)/i);
     if (matchChecked && matchChecked[1] !== undefined) {
-      return `** ${matchChecked[1].trim()}`;
+      return \`** \${matchChecked[1].trim()}\`;
     }
-    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
+    const matchUnchecked = trimmedLine.match(/^\\s*\\*\\s*\\[ \\]\\s*(.*)/i);
     if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return `* ${matchUnchecked[1].trim()}`;
+      return \`* \${matchUnchecked[1].trim()}\`;
     }
     return trimmedLine; 
-  }).join('\n');
+  }).join('\\n');
 };
 
 
 const convertSubtaskInputToMarkdown = (input: string): string => {
-  return input.split('\n').map(line => {
+  return input.split('\\n').map(line => {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith('** ')) {
-      return `* [x] ${trimmedLine.substring(3).trim()}`;
+      return \`* [x] \${trimmedLine.substring(3).trim()}\`;
     } else if (trimmedLine.startsWith('* ')) {
-      return `* [ ] ${trimmedLine.substring(2).trim()}`;
+      return \`* [ ] \${trimmedLine.substring(2).trim()}\`;
     } else if (trimmedLine.length > 0) { 
-      return `* [ ] ${trimmedLine}`;
+      return \`* [ ] \${trimmedLine}\`;
     }
     return ''; 
-  }).filter(line => line.trim().length > 0).join('\n');
+  }).filter(line => line.trim().length > 0).join('\\n');
 };
 
 function ProjectDetailPageContent() {
@@ -210,7 +210,7 @@ function ProjectDetailPageContent() {
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
-    router.push(`/projects/${projectUuid}?tab=${newTab}`, { scroll: false });
+    router.push(\`/projects/\${projectUuid}?tab=\${newTab}\`, { scroll: false });
   };
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -426,10 +426,10 @@ function ProjectDetailPageContent() {
       if (createTaskState.error) {
         let errorMessage = createTaskState.error;
         if (createTaskState.fieldErrors?.assigneeUuid) {
-            errorMessage += ` Assignee: ${createTaskState.fieldErrors.assigneeUuid.join(', ')}`;
+            errorMessage += \` Assignee: \${createTaskState.fieldErrors.assigneeUuid.join(', ')}\`;
         }
         if (createTaskState.fieldErrors?.title) {
-             errorMessage += ` Title: ${createTaskState.fieldErrors.title.join(', ')}`;
+             errorMessage += \` Title: \${createTaskState.fieldErrors.title.join(', ')}\`;
         }
         toast({ variant: "destructive", title: "Task Creation Error", description: errorMessage });
       }
@@ -456,7 +456,7 @@ function ProjectDetailPageContent() {
         let errorMessage = updateTaskState.error;
         Object.entries(updateTaskState.fieldErrors || {}).forEach(([key, value]) => {
             if (value) {
-                errorMessage += ` ${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`;
+                errorMessage += \` \${key.charAt(0).toUpperCase() + key.slice(1)}: \${value.join(', ')}\`;
             }
         });
         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
@@ -1106,7 +1106,7 @@ function ProjectDetailPageContent() {
             <AlertCircle className="mx-auto h-16 w-16 text-destructive mt-12" />
             <h2 className="text-2xl font-semibold mt-4">Access Denied or Project Not Found</h2>
             <p className="text-muted-foreground">
-              {accessDenied ? "You do not have permission to view this private project, or the project does not exist." : `Project (ID: ${projectUuid}) not found or access is restricted.`}
+              {accessDenied ? "You do not have permission to view this private project, or the project does not exist." : \`Project (ID: \${projectUuid}) not found or access is restricted.\`}
             </p>
         </div>
     );
@@ -1537,7 +1537,7 @@ function ProjectDetailPageContent() {
                             />
                              <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
-                            {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`}</p>)}
+                            {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{\`\${key.charAt(0).toUpperCase() + key.slice(1)}: \${value.join(', ')}\`}</p>)}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
@@ -1554,8 +1554,8 @@ function ProjectDetailPageContent() {
                 <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks?.title}</DialogTitle>
                 <DialogDescription>
                   Enter sub-tasks one per line.
-                  Start with `* ` for an open task (e.g., `* Design mockups`).
-                  Start with `** ` for a completed task (e.g., `** Create schema`).
+                  Start with \`* \` for an open task (e.g., \`* Design mockups\`).
+                  Start with \`** \` for a completed task (e.g., \`** Create schema\`).
                   Other lines will be treated as new open tasks.
                 </DialogDescription>
               </DialogHeader>
@@ -1617,7 +1617,7 @@ function ProjectDetailPageContent() {
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
                {canManageDocuments && (
                 <Button size="sm" asChild>
-                  <Link href={`/projects/${projectUuid}/documents/new`}>
+                  <Link href={\`/projects/\${projectUuid}/documents/new\`}>
                     <PlusCircle className="mr-2 h-4 w-4"/> Add Document
                   </Link>
                 </Button>
@@ -1630,7 +1630,7 @@ function ProjectDetailPageContent() {
                     <p>No documents in this project yet.</p>
                     {canManageDocuments && 
                         <Button size="sm" className="mt-4" asChild>
-                           <Link href={`/projects/${projectUuid}/documents/new`}>
+                           <Link href={\`/projects/\${projectUuid}/documents/new\`}>
                             <PlusCircle className="mr-2 h-4 w-4"/> Add your first document
                           </Link>
                         </Button>
@@ -1663,7 +1663,7 @@ function ProjectDetailPageContent() {
                         <div className="flex gap-1.5 flex-shrink-0 self-end sm:self-center">
                            {canManageDocuments && (doc.fileType === 'markdown') && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Document" asChild>
-                              <Link href={`/projects/${projectUuid}/documents/${doc.uuid}/edit`}>
+                              <Link href={\`/projects/\${projectUuid}/documents/\${doc.uuid}/edit\`}>
                                 <Edit3 className="h-4 w-4" />
                               </Link>
                             </Button>
@@ -1716,13 +1716,13 @@ function ProjectDetailPageContent() {
                                     <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar small" />
                                     <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
                                 </Avatar>
-                                By: {documentToView?.createdByName}
+                                <span>By: {documentToView?.createdByName}</span>
                                 <span className="mx-1.5">|</span>
                                 </>
                             )}
-                            Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
+                            <span>Type: </span><Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
                             <span className="mx-1.5">|</span>
-                            Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}
+                            <span>Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}</span>
                         </div>
                     </DialogDescription>
                 </DialogHeader>
@@ -1878,7 +1878,7 @@ function ProjectDetailPageContent() {
                     <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                     <h3 className="text-lg font-semibold mb-1">Link this project to GitHub</h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Create a new GitHub repository for this project or link an existing one (feature coming soon).
+                      Create a new GitHub repository for this project.
                       This will enable code browsing, README sync, and more, directly within FlowUp.
                     </p>
                     <form action={linkProjectToGithubFormAction}>
@@ -1892,8 +1892,8 @@ function ProjectDetailPageContent() {
                     {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
                   </div>
                   <p className="text-xs text-center text-muted-foreground">
-                    Note: For now, this will simulate linking and set up a placeholder repository URL.
-                    Actual GitHub API integration will be implemented later.
+                    Note: This will simulate linking and set up a placeholder repository URL.
+                    Actual GitHub App integration for full API access will be implemented progressively.
                   </p>
                 </>
               ) : (

@@ -12,60 +12,60 @@ import fs from 'fs';
 let db: Database | null = null;
 
 const DB_DIR = path.join(process.cwd(), 'db');
-const DB_PATH = path.join(DB_DIR, 'flowup_hub.db'); // Renamed database file
+const DB_PATH = path.join(DB_DIR, 'flowup_hub.db');
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
-  { name: 'Bug', color: '#EF4444' }, 
-  { name: 'Feature', color: '#3B82F6' }, 
-  { name: 'Task', color: '#6B7280' }, 
-  { name: 'Enhancement', color: '#22C55E' }, 
-  { name: 'Documentation', color: '#10B981' }, 
-  { name: 'Question', color: '#F97316' }, 
-  { name: 'Idea', color: '#A855F7' }, 
-  { name: 'Spike', color: '#F43F5E'}, 
-  { name: 'User Story', color: '#93C5FD'}, 
-  { name: 'Epic', color: '#7E22CE' }, 
-  { name: 'Urgent', color: '#DC2626' }, 
-  { name: 'High Priority', color: '#F59E0B' }, 
-  { name: 'Medium Priority', color: '#84CC16' }, 
-  { name: 'Low Priority', color: '#60A5FA' }, 
-  { name: 'Frontend', color: '#EC4899' }, 
-  { name: 'Backend', color: '#D946EF' }, 
-  { name: 'UI/UX', color: '#8B5CF6' }, 
-  { name: 'API', color: '#0EA5E9' }, 
-  { name: 'Database', color: '#F472B6' }, 
-  { name: 'DevOps', color: '#FDE047' }, 
-  { name: 'Testing', color: '#4ADE80' }, 
-  { name: 'QA', color: '#34D399' }, 
-  { name: 'Mobile', color: '#2DD4BF' }, 
-  { name: 'Web', color: '#38BDF8' }, 
-  { name: 'Infrastructure', color: '#7DD3FC' }, 
-  { name: 'Design', color: '#C084FC' }, 
-  { name: 'Marketing', color: '#2563EB' }, 
-  { name: 'Research', color: '#059669' }, 
-  { name: 'Support', color: '#F9A8D4' }, 
-  { name: 'Sales', color: '#FB923C' }, 
-  { name: 'Needs Review', color: '#EAB308' }, 
-  { name: 'In Review', color: '#FCD34D' }, 
-  { name: 'Approved', color: '#A3E635' }, 
-  { name: 'Rejected', color: '#F87171' }, 
-  { name: 'Blocked', color: '#78716C' }, 
-  { name: 'Wont Fix', color: '#4B5563' }, 
-  { name: 'Duplicate', color: '#A1A1AA' }, 
-  { name: 'On Hold', color: '#FDBA74' }, 
-  { name: 'Deferred', color: '#9CA3AF' }, 
-  { name: 'Refactor', color: '#FACC15' }, 
-  { name: 'Optimization', color: '#FB923C' }, 
-  { name: 'Performance', color: '#F5A623'}, 
-  { name: 'Security', color: '#B91C1C' }, 
-  { name: 'Accessibility', color: '#A78BFA'}, 
-  { name: 'Technical Debt', color: '#FCA5A5'}, 
-  { name: 'Feedback', color: '#EA580C' }, 
-  { name: 'Client Request', color: '#6366F1' }, 
-  { name: 'Release', color: '#06B6D4' }, 
-  { name: 'Hotfix', color: '#BE123C' }, 
-  { name: 'Sprint Goal', color: '#1D4ED8' }, 
-  { name: 'Milestone', color: '#5B21B6' }, 
+  { name: 'Bug', color: '#EF4444' },
+  { name: 'Feature', color: '#3B82F6' },
+  { name: 'Task', color: '#6B7280' },
+  { name: 'Enhancement', color: '#22C55E' },
+  { name: 'Documentation', color: '#10B981' },
+  { name: 'Question', color: '#F97316' },
+  { name: 'Idea', color: '#A855F7' },
+  { name: 'Spike', color: '#F43F5E'},
+  { name: 'User Story', color: '#93C5FD'},
+  { name: 'Epic', color: '#7E22CE' },
+  { name: 'Urgent', color: '#DC2626' },
+  { name: 'High Priority', color: '#F59E0B' },
+  { name: 'Medium Priority', color: '#84CC16' },
+  { name: 'Low Priority', color: '#60A5FA' },
+  { name: 'Frontend', color: '#EC4899' },
+  { name: 'Backend', color: '#D946EF' },
+  { name: 'UI/UX', color: '#8B5CF6' },
+  { name: 'API', color: '#0EA5E9' },
+  { name: 'Database', color: '#F472B6' },
+  { name: 'DevOps', color: '#FDE047' },
+  { name: 'Testing', color: '#4ADE80' },
+  { name: 'QA', color: '#34D399' },
+  { name: 'Mobile', color: '#2DD4BF' },
+  { name: 'Web', color: '#38BDF8' },
+  { name: 'Infrastructure', color: '#7DD3FC' },
+  { name: 'Design', color: '#C084FC' },
+  { name: 'Marketing', color: '#2563EB' },
+  { name: 'Research', color: '#059669' },
+  { name: 'Support', color: '#F9A8D4' },
+  { name: 'Sales', color: '#FB923C' },
+  { name: 'Needs Review', color: '#EAB308' },
+  { name: 'In Review', color: '#FCD34D' },
+  { name: 'Approved', color: '#A3E635' },
+  { name: 'Rejected', color: '#F87171' },
+  { name: 'Blocked', color: '#78716C' },
+  { name: 'Wont Fix', color: '#4B5563' },
+  { name: 'Duplicate', color: '#A1A1AA' },
+  { name: 'On Hold', color: '#FDBA74' },
+  { name: 'Deferred', color: '#9CA3AF' },
+  { name: 'Refactor', color: '#FACC15' },
+  { name: 'Optimization', color: '#FB923C' },
+  { name: 'Performance', color: '#F5A623'},
+  { name: 'Security', color: '#B91C1C' },
+  { name: 'Accessibility', color: '#A78BFA'},
+  { name: 'Technical Debt', color: '#FCA5A5'},
+  { name: 'Feedback', color: '#EA580C' },
+  { name: 'Client Request', color: '#6366F1' },
+  { name: 'Release', color: '#06B6D4' },
+  { name: 'Hotfix', color: '#BE123C' },
+  { name: 'Sprint Goal', color: '#1D4ED8' },
+  { name: 'Milestone', color: '#5B21B6' },
 ];
 
 
@@ -87,8 +87,8 @@ Utilisez \`#\` pour structurer votre document :
 
 Exemple :
 
-# Titre H1  
-## Titre H2  
+# Titre H1
+## Titre H2
 ### Titre H3
 
 ---
@@ -99,7 +99,7 @@ Exemple :
 Texte en **gras**, *italique*, ~~barré~~.
 \`\`\`
 
-Exemple :  
+Exemple :
 Texte en **gras**, *italique*, ~~barré~~.
 
 ---
@@ -127,8 +127,8 @@ Texte en **gras**, *italique*, ~~barré~~.
 
 Utilisez des accents graves (\`\`\`) pour insérer du code :
 
-\`\`\`js  
-console.log('Hello FlowUp')  
+\`\`\`js
+console.log('Hello FlowUp')
 \`\`\`
 
 \`\`\`js
@@ -143,7 +143,7 @@ console.log('Hello FlowUp')
 [Nom du lien](https://www.exemple.com)
 \`\`\`
 
-Exemple :  
+Exemple :
 [Visitez FlowUp](https://example.com)
 
 ---
@@ -177,7 +177,7 @@ Exemple :
 - [ ] Étape à faire
 \`\`\`
 
-- [x] Étape terminée  
+- [x] Étape terminée
 - [ ] Étape à faire
 
 ---
@@ -276,7 +276,7 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_members (
       projectUuid TEXT NOT NULL,
       userUuid TEXT NOT NULL,
-      roleInProject TEXT NOT NULL, 
+      roleInProject TEXT NOT NULL,
       PRIMARY KEY (projectUuid, userUuid),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
       FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -288,15 +288,15 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      todoListMarkdown TEXT, 
-      status TEXT NOT NULL, 
-      assigneeUuid TEXT,      
+      todoListMarkdown TEXT,
+      status TEXT NOT NULL,
+      assigneeUuid TEXT,
       dueDate TEXT,
       isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
-      FOREIGN KEY (assigneeUuid) REFERENCES users (uuid) ON DELETE SET NULL 
+      FOREIGN KEY (assigneeUuid) REFERENCES users (uuid) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS project_documents (
@@ -304,10 +304,12 @@ export async function getDbConnection() {
       uuid TEXT UNIQUE NOT NULL,
       projectUuid TEXT NOT NULL,
       title TEXT NOT NULL,
-      content TEXT, 
-      fileType TEXT NOT NULL, 
-      filePath TEXT, 
+      content TEXT,
+      fileType TEXT NOT NULL,
+      filePath TEXT,
       createdByUuid TEXT NOT NULL,
+      createdByName TEXT,
+      creatorAvatar TEXT,
       isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
@@ -318,11 +320,13 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
-      projectUuid TEXT NOT NULL, 
+      projectUuid TEXT NOT NULL,
       authorUuid TEXT NOT NULL,
+      authorName TEXT,
+      authorAvatar TEXT,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
-      isGlobal BOOLEAN NOT NULL DEFAULT FALSE, 
+      isGlobal BOOLEAN NOT NULL DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
@@ -334,7 +338,7 @@ export async function getDbConnection() {
       uuid TEXT UNIQUE NOT NULL,
       projectUuid TEXT NOT NULL,
       name TEXT NOT NULL,
-      color TEXT NOT NULL, 
+      color TEXT NOT NULL,
       UNIQUE (projectUuid, name),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE
     );
@@ -350,16 +354,16 @@ export async function getDbConnection() {
 
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@flowup.com');
   if (!adminUser) {
-    const defaultAdminUUID = '00000000-0000-0000-0000-000000000001'; 
+    const defaultAdminUUID = '00000000-0000-0000-0000-000000000001';
     const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultAdminUUID,
-      'Admin FlowUp', // Renamed
+      'Admin FlowUp',
       'admin@flowup.com',
       defaultAdminPassword,
       'admin',
-      `https://placehold.co/100x100.png?text=AF` // AF for Admin FlowUp
+      `https://placehold.co/100x100.png?text=AF`
     );
   }
 
@@ -370,11 +374,11 @@ export async function getDbConnection() {
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultMemberUUID,
-      'Member FlowUp', // Renamed
+      'Member FlowUp',
       'member@flowup.com',
       defaultMemberPassword,
       'member',
-      `https://placehold.co/100x100.png?text=MF` // MF for Member FlowUp
+      `https://placehold.co/100x100.png?text=MF`
     );
   }
   return db;
@@ -452,13 +456,13 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   let finalAvatar = avatar;
   const currentUser = await getUserByUuid(uuid);
 
-  if (avatar === '') { 
+  if (avatar === '') {
     const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined && currentUser) { 
+  } else if (avatar === undefined && currentUser) {
     finalAvatar = currentUser.avatar;
   }
-  
+
 
   await connection.run(
     'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
@@ -511,13 +515,13 @@ export async function createProject(name: string, description: string | undefine
       isPrivate: true,
       readmeContent: DEFAULT_PROJECT_README_CONTENT,
       isUrgent: false,
-      githubRepoUrl: undefined, // or null
-      githubRepoName: undefined, // or null
+      githubRepoUrl: undefined,
+      githubRepoName: undefined,
     };
   } catch (err) {
     await connection.run('ROLLBACK');
     console.error("Error creating project:", err);
-    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && (err.message.includes('projects.name') || err.message.includes('projects.uuid'))) { 
+    if (err instanceof Error && (err as any).code === 'SQLITE_CONSTRAINT_UNIQUE' && (err.message.includes('projects.name') || err.message.includes('projects.uuid'))) {
         throw new Error('A project with this name or UUID already exists.');
     }
     throw err;
@@ -533,7 +537,7 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   if (!projectRow) return null;
   return {
     ...projectRow,
-    isUrgent: !!projectRow.isUrgent, 
+    isUrgent: !!projectRow.isUrgent,
     isPrivate: !!projectRow.isPrivate,
   };
 }
@@ -572,7 +576,7 @@ export async function updateProjectUrgency(projectUuid: string, isUrgent: boolea
   const now = new Date().toISOString();
   const result = await connection.run(
     'UPDATE projects SET isUrgent = ?, updatedAt = ? WHERE uuid = ?',
-    isUrgent ? 1 : 0, now, projectUuid 
+    isUrgent ? 1 : 0, now, projectUuid
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -589,7 +593,7 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   return getProjectByUuid(projectUuid);
 }
 
-export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string, repoName: string): Promise<Project | null> {
+export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string | null, repoName: string | null): Promise<Project | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
   const result = await connection.run(
@@ -762,7 +766,7 @@ export async function createTask(data: {
   projectUuid: string;
   title: string;
   description?: string;
-  todoListMarkdown?: string; 
+  todoListMarkdown?: string;
   status: TaskStatus;
   assigneeUuid?: string | null;
   tagsString?: string;
@@ -785,7 +789,7 @@ export async function createTask(data: {
         let tag = await getProjectTagByName(data.projectUuid, tagName);
         if (!tag) {
           const defaultTagInfo = DEFAULT_PROJECT_TAGS.find(dt => dt.name.toLowerCase() === tagName.toLowerCase());
-          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280'; 
+          const color = defaultTagInfo ? defaultTagInfo.color : '#6B7280';
           tag = await createProjectTag(data.projectUuid, tagName, color);
         }
         await linkTagToTask(taskUuid, tag.uuid);
@@ -805,8 +809,8 @@ export async function createTask(data: {
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
   const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>(
-    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned 
-     FROM tasks 
+    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
+     FROM tasks
      WHERE uuid = ?`,
     taskUuid
   );
@@ -828,7 +832,7 @@ export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
     `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
      FROM tasks
      WHERE projectUuid = ?
-     ORDER BY isPinned DESC, updatedAt DESC`, 
+     ORDER BY isPinned DESC, updatedAt DESC`,
     projectUuid
   );
 
@@ -854,26 +858,26 @@ export async function updateTask(
     status?: TaskStatus;
     assigneeUuid?: string | null;
     tagsString?: string;
-    isPinned?: boolean; 
+    isPinned?: boolean;
   }
 ): Promise<Task | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
-  
+
   const currentTask = await getTaskByUuid(taskUuid);
   if (!currentTask) return null;
 
   const updates: string[] = [];
-  const values: (string | number | null | undefined )[] = []; 
+  const values: (string | number | null | undefined )[] = [];
 
   if (data.title !== undefined) { updates.push('title = ?'); values.push(data.title); }
-  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description || null); } 
-  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown || ''); } 
+  if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description || null); }
+  if (data.todoListMarkdown !== undefined) { updates.push('todoListMarkdown = ?'); values.push(data.todoListMarkdown || ''); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
-  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); } 
-  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); } 
-  
-  if (updates.length === 0 && data.tagsString === undefined) return currentTask; 
+  if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
+  if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); }
+
+  if (updates.length === 0 && data.tagsString === undefined) return currentTask;
 
   await connection.run('BEGIN TRANSACTION');
   try {
@@ -903,7 +907,7 @@ export async function updateTask(
     await connection.run('ROLLBACK');
     throw error;
   }
-  
+
   return getTaskByUuid(taskUuid);
 }
 
@@ -936,7 +940,7 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   await connection.run('BEGIN TRANSACTION');
   try {
-    await clearTagsForTask(taskUuid); 
+    await clearTagsForTask(taskUuid);
     const result = await connection.run('DELETE FROM tasks WHERE uuid = ?', taskUuid);
     await connection.run('COMMIT');
     return result.changes ? result.changes > 0 : false;
@@ -962,8 +966,8 @@ export async function createDocument(data: {
   const creator = await getUserByUuid(data.createdByUuid);
 
   const result = await connection.run(
-    'INSERT INTO project_documents (uuid, projectUuid, title, content, fileType, filePath, createdByUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    docUuid, data.projectUuid, data.title, data.content, data.fileType, data.filePath, data.createdByUuid, now, now, false
+    'INSERT INTO project_documents (uuid, projectUuid, title, content, fileType, filePath, createdByUuid, createdByName, creatorAvatar, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    docUuid, data.projectUuid, data.title, data.content, data.fileType, data.filePath, data.createdByUuid, creator?.name, creator?.avatar, now, now, false
   );
   if (!result.lastID) throw new Error('Document creation failed.');
 
@@ -987,7 +991,7 @@ export async function createDocument(data: {
 export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocumentType[]> {
   const connection = await getDbConnection();
   const docs = await connection.all<Array<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>>(
-    `SELECT pd.*, u.name as createdByName, u.avatar as creatorAvatar
+    `SELECT pd.uuid, pd.projectUuid, pd.title, pd.content, pd.fileType, pd.filePath, pd.createdByUuid, u.name as createdByName, u.avatar as creatorAvatar, pd.isPinned, pd.createdAt, pd.updatedAt, pd.id
      FROM project_documents pd
      JOIN users u ON pd.createdByUuid = u.uuid
      WHERE pd.projectUuid = ? ORDER BY pd.updatedAt DESC`,
@@ -999,7 +1003,7 @@ export async function getDocumentsForProject(projectUuid: string): Promise<Proje
 export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentType | null> {
   const connection = await getDbConnection();
   const doc = await connection.get<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>(
-    `SELECT pd.*, u.name as createdByName, u.avatar as creatorAvatar
+    `SELECT pd.uuid, pd.projectUuid, pd.title, pd.content, pd.fileType, pd.filePath, pd.createdByUuid, u.name as createdByName, u.avatar as creatorAvatar, pd.isPinned, pd.createdAt, pd.updatedAt, pd.id
      FROM project_documents pd
      JOIN users u ON pd.createdByUuid = u.uuid
      WHERE pd.uuid = ?`,
@@ -1012,7 +1016,7 @@ export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentTy
 export async function updateDocumentContent(docUuid: string, title: string, content?: string): Promise<ProjectDocumentType | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
-  
+
   const currentDoc = await getDocumentByUuid(docUuid);
   if (!currentDoc) return null;
 
@@ -1023,13 +1027,13 @@ export async function updateDocumentContent(docUuid: string, title: string, cont
     query += ', content = ?';
     params.push(content);
   }
-  
+
   query += ' WHERE uuid = ?';
   params.push(docUuid);
 
   const result = await connection.run(query, ...params);
-  if (result.changes === 0) return null; 
-  
+  if (result.changes === 0) return null;
+
   return getDocumentByUuid(docUuid);
 }
 
@@ -1049,14 +1053,15 @@ export async function createProjectAnnouncement(data: {
   const connection = await getDbConnection();
   const announcementUuid = uuidv4();
   const now = new Date().toISOString();
+  const authorDetails = await getUserByUuid(data.authorUuid);
+
 
   const result = await connection.run(
-    'INSERT INTO project_announcements (uuid, projectUuid, authorUuid, title, content, isGlobal, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    announcementUuid, data.projectUuid, data.authorUuid, data.title, data.content, false, now, now
+    'INSERT INTO project_announcements (uuid, projectUuid, authorUuid, authorName, authorAvatar, title, content, isGlobal, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    announcementUuid, data.projectUuid, data.authorUuid, authorDetails?.name, authorDetails?.avatar, data.title, data.content, false, now, now
   );
   if (!result.lastID) throw new Error('Project announcement creation failed.');
 
-  const authorDetails = await getUserByUuid(data.authorUuid);
 
   return {
     id: result.lastID!.toString(),
@@ -1076,7 +1081,7 @@ export async function createProjectAnnouncement(data: {
 export async function getProjectAnnouncements(projectUuid: string): Promise<ProjectAnnouncement[]> {
   const connection = await getDbConnection();
   const announcements = await connection.all<Array<ProjectAnnouncement & {authorName: string, authorAvatar?: string}>>(
-    `SELECT pa.*, u.name as authorName, u.avatar as authorAvatar
+    `SELECT pa.uuid, pa.projectUuid, pa.authorUuid, u.name as authorName, u.avatar as authorAvatar, pa.title, pa.content, pa.isGlobal, pa.createdAt, pa.updatedAt, pa.id
      FROM project_announcements pa
      JOIN users u ON pa.authorUuid = u.uuid
      WHERE pa.projectUuid = ? AND pa.isGlobal = FALSE
