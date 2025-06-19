@@ -7,19 +7,13 @@ import { Octokit } from 'octokit';
 function getGitHubAppCredentialsOrThrow() {
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = process.env.GITHUB_PRIVATE_KEY;
-  // const clientId = process.env.GITHUB_CLIENT_ID; // Not directly used by App auth for server-to-server
-  // const clientSecret = process.env.GITHUB_CLIENT_SECRET; // Not directly used by App auth for server-to-server
 
   if (!appId) throw new Error('GITHUB_APP_ID is not defined in environment variables.');
   if (!privateKey) throw new Error('GITHUB_PRIVATE_KEY is not defined in environment variables.');
-  // if (!clientId) throw new Error('GITHUB_CLIENT_ID is not defined in environment variables.'); // Optional for now
-  // if (!clientSecret) throw new Error('GITHUB_CLIENT_SECRET is not defined in environment variables.'); // Optional for now
-
+  
   return {
     appId: Number(appId),
-    privateKey: privateKey.replace(/\\n/g, '\n'), // Ensure newlines are correctly formatted if passed via env
-    // clientId,
-    // clientSecret,
+    privateKey: privateKey.replace(/\\n/g, '\n'),
   };
 }
 
@@ -39,7 +33,10 @@ export async function getInstallationOctokit(installationId: number): Promise<Oc
   }
   console.log(`[getInstallationOctokit] Getting Octokit for installation ID: ${installationId}`);
   try {
-    return app.getInstallationOctokit(installationId);
+    // Correction: app.getInstallationOctokit est aussi async et doit être attendue
+    const installationOctokit = await app.getInstallationOctokit(installationId);
+    console.log('[getInstallationOctokit] Successfully obtained installation Octokit.');
+    return installationOctokit;
   } catch (error) {
     console.error(`[getInstallationOctokit] Error getting Octokit for installation ID ${installationId}:`, error);
     throw new Error(`Failed to get Octokit instance for installation ID ${installationId}.`);
@@ -56,4 +53,3 @@ export async function getAppAuthOctokit(): Promise<Octokit> {
     });
     return app.octokit; // This is an Octokit instance authenticated as the app itself using its JWT
 }
-

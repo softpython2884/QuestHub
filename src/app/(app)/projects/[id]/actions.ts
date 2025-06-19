@@ -1025,9 +1025,9 @@ function slugify(text: string): string {
     .toString()
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w-]+/g, '') // Remove all non-word chars
-    .replace(/--+/g, '-'); // Replace multiple - with single -
+    .replace(/\s+/g, '-') 
+    .replace(/[^\w-]+/g, '') 
+    .replace(/--+/g, '-'); 
 }
 
 export async function linkProjectToGithubAction(
@@ -1057,36 +1057,23 @@ export async function linkProjectToGithubAction(
       return { error: "GitHub App not installed or authorized for your account. Please install it first via the CodeSpace tab." };
     }
     const installationId = userGithubInstallation.github_installation_id;
-    const ownerLogin = userGithubInstallation.github_account_login; // This might be the user or org login
+    
+    const octokit = await getInstallationOctokit(installationId);
+    console.log('[linkProjectToGithubAction] Octokit instance:', octokit ? 'obtained' : 'NOT obtained');
 
-    if (!ownerLogin) {
-        // This case might happen if the callback didn't correctly capture the account login
-        // Or if the GitHub App API for installations doesn't always return it easily.
-        // We might need to fetch it if it's critical for repo creation in org context.
-        console.warn(`[linkProjectToGithubAction] Owner/Organization login not found for installation ID ${installationId}. Proceeding with repo creation which might default to user's personal account if it's a user installation.`);
-    }
 
     const repoSlug = slugify(projectName);
-    const octokit = await getInstallationOctokit(installationId);
-
+    
     let createdRepo;
     try {
       console.log(`Attempting to create repository '${repoSlug}' for installation ID: ${installationId}`);
       
-      // Determine if creating for an organization or user based on stored accountLogin
-      // GitHub API for creating repo via installation token doesn't directly take `ownerLogin` in the same way as PAT.
-      // It acts on behalf of the installation. If the installation is on an org, it can create repo in that org.
-      // If it's on a user account, it creates on that user's account.
-      // The `org` parameter in `octokit.rest.repos.createInOrg` is only needed if the App itself has org-level permissions AND is creating in a specific org.
-      // For an *installation* token, it's simpler: just call `createForAuthenticatedUser` (which works for user or org installations).
-      
-      // Check if the installation target is an organization
       const app = await getOctokitApp();
       const installationDetails = await app.octokit.request('GET /app/installations/{installation_id}', {
         installation_id: installationId,
       });
       
-      const accountType = installationDetails.data.account?.type; // "User" or "Organization"
+      const accountType = installationDetails.data.account?.type; 
       const accountLogin = installationDetails.data.account?.login;
 
       if (!accountLogin) {
@@ -1101,7 +1088,7 @@ export async function linkProjectToGithubAction(
           private: true, 
           description: `Repository for FlowUp project: ${projectName}`,
         });
-      } else { // Default to user account
+      } else { 
         console.log(`Creating repository for user: ${accountLogin}`);
         createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
           name: repoSlug,
@@ -1112,13 +1099,17 @@ export async function linkProjectToGithubAction(
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
     } catch (apiError: any) {
       console.error("GitHub API error creating repository:", apiError.status, apiError.message, apiError.response?.data);
-      if (apiError.status === 422) { // Unprocessable Entity - often means repo exists
+      if (apiError.status === 422) { 
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${apiError.message}` };
       }
        if (apiError.status === 404 && apiError.message?.includes("Resource not accessible by integration")) {
-        return { error: `The FlowUp GitHub App does not have permission to create repositories for the selected account/organization (${ownerLogin || 'unknown'}). Please check the app's repository permissions or re-install it with the correct access.`};
+        return { error: `The FlowUp GitHub App does not have permission to create repositories for the selected account/organization (${userGithubInstallation.github_account_login || 'unknown'}). Please check the app's repository permissions or re-install it with the correct access.`};
       }
-      return { error: `GitHub API Error (${apiError.status}): ${apiError.message}` };
+      // Handle TypeError specifically if octokit.rest.repos was undefined
+      if (apiError instanceof TypeError && apiError.message.includes("Cannot read properties of undefined (reading 'repos')")) {
+        return { error: `GitHub API client error: Failed to access repository functions. Please ensure the GitHub App is configured correctly. Details: ${apiError.message}`};
+      }
+      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message}` };
     }
     
     const repoUrl = createdRepo.data.html_url;
@@ -1137,4 +1128,3 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
-
