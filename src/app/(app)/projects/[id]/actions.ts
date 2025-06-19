@@ -35,7 +35,7 @@ import {
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
-import { getOctokitApp, getInstallationOctokit } from '@/lib/githubAppClient';
+import { getAppAuthOctokit, getInstallationOctokit } from '@/lib/githubAppClient';
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
   if (!uuid) return null;
@@ -1068,8 +1068,8 @@ export async function linkProjectToGithubAction(
     try {
       console.log(`Attempting to create repository '${repoSlug}' for installation ID: ${installationId}`);
       
-      const app = await getOctokitApp();
-      const installationDetails = await app.octokit.request('GET /app/installations/{installation_id}', {
+      const appOctokit = await getAppAuthOctokit();
+      const installationDetails = await appOctokit.request('GET /app/installations/{installation_id}', {
         installation_id: installationId,
       });
       
@@ -1128,3 +1128,5 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
+
+    
