@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit3, Trash2, ListChecks, Pin, PinOff, Loader2, FolderKanban, BookOpen, Megaphone, FolderGit2, Settings as SettingsIcon, Users, Mail, UserX, Tag as TagIcon, Palette, FileText, ExternalLink, AlertTriangle as AlertTriangleIcon } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, ListChecks, Pin, PinOff, Loader2, FolderKanban, BookOpen, Megaphone, FolderGit2, Settings as SettingsIcon, Users, Mail, UserX, Tag as TagIcon, Palette, FileText, ExternalLink, AlertTriangle as AlertTriangleIcon, Code2 } from 'lucide-react';
 import type { Project, Task, Tag as TagType, ProjectMember, TaskStatus, ProjectMemberRole, User, Document as ProjectDocumentType } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,7 +29,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, useFormField } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -44,11 +44,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 
-// Mock data - replace with actual data fetching and state management
-const projectAnnouncements: any[] = [];
+const projectAnnouncementsMock: any[] = [];
 
 
-// Props passed from ProjectDetailLayout
 interface ProjectPageProps {
   project: Project;
   currentUserRole: ProjectMemberRole | null;
@@ -123,8 +121,8 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
 
   // States for Tasks Tab
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projectTagsForTasks, setProjectTagsForTasks] = useState<TagType[]>([]); // Renamed to avoid conflict
-  const [projectMembersForTasks, setProjectMembersForTasks] = useState<ProjectMember[]>([]); // Renamed
+  const [projectTagsForTasks, setProjectTagsForTasks] = useState<TagType[]>([]);
+  const [projectMembersForTasks, setProjectMembersForTasks] = useState<ProjectMember[]>([]);
   const [isCreateTaskDialogOpen, setIsCreateTaskDialogOpen] = useState(false);
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
@@ -152,7 +150,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
   const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
 
-
   // States for README Tab
   const [projectReadmeContent, setProjectReadmeContent] = useState('');
   const [saveReadmeState, saveReadmeFormAction, isSaveReadmePending] = useActionState(saveProjectReadmeAction, { message: "", error: "" });
@@ -165,10 +162,9 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
   const [deleteDocumentState, deleteDocumentFormAction, isDeleteDocumentPending] = useActionState(deleteDbDocumentAction, { message: "", error: "" });
 
-
   // States for Settings & Team Tab
-  const [projectMembersForSettings, setProjectMembersForSettings] = useState<ProjectMember[]>([]); // Renamed
-  const [projectTagsForSettings, setProjectTagsForSettings] = useState<TagType[]>([]); // Renamed
+  const [projectMembersForSettings, setProjectMembersForSettings] = useState<ProjectMember[]>([]);
+  const [projectTagsForSettings, setProjectTagsForSettings] = useState<TagType[]>([]);
   const [isInviteUserDialogOpen, setIsInviteUserDialogOpen] = useState(false);
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(user?.role === 'admin');
@@ -187,8 +183,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
 
-
-  // --- EFFECT to update project state when initialProject prop changes ---
   useEffect(() => {
     setProject(initialProject);
     if (initialProject) {
@@ -196,8 +190,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     }
   }, [initialProject]);
 
-
-  // --- EFFECTS & CALLBACKS for TASKS ---
   const loadTasks = useCallback(async () => {
     if (projectUuid) {
       try {
@@ -242,7 +234,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     }
   }, [activeTab, projectUuid, loadTasks, loadProjectTagsDataForTasks, loadProjectMembersForTasks]);
 
-  // Task action state effects (create, update, delete, pin)
   useEffect(() => {
     if (!isCreateTaskPending && createTaskState) {
       if (createTaskState.message && !createTaskState.error) {
@@ -441,7 +432,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-        const sourceTags = activeTab === 'tasks' ? projectTagsForTasks : projectTagsForSettings;
+        const sourceTags = activeTab === 'tasks' || activeTab === 'settings' ? (activeTab === 'tasks' ? projectTagsForTasks : projectTagsForSettings) : [];
         const filtered = sourceTags.filter(tag => tag.name.toLowerCase().startsWith(lowerFragment) && !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())).slice(0, 5);
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
@@ -471,13 +462,12 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setShowTagSuggestions(false); setActiveSuggestionIndex(-1); lastTypedFragmentRef.current = ""; }
   };
 
-  // --- EFFECTS & CALLBACKS for README ---
   useEffect(() => {
     if (!isSaveReadmePending && saveReadmeState) {
         if (saveReadmeState.message && !saveReadmeState.error) {
             toast({ title: "Success", description: saveReadmeState.message });
             if(saveReadmeState.project) {
-                setProject(saveReadmeState.project); // Update local project state
+                setProject(saveReadmeState.project); 
                 setProjectReadmeContent(saveReadmeState.project.readmeContent || '');
             }
         }
@@ -493,8 +483,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
   };
   const canEditReadme = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
 
-
-  // --- EFFECTS & CALLBACKS for DOCUMENTS ---
   const loadProjectDocuments = useCallback(async () => {
     if (projectUuid && activeTab === 'documents') {
       setIsLoadingDocuments(true);
@@ -532,8 +520,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
   };
   const canManageDocuments = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
 
-
-  // --- EFFECTS & CALLBACKS for SETTINGS & TEAM ---
   const loadProjectMembersForSettings = useCallback(async () => {
     if (projectUuid && activeTab === 'settings') {
       try {
@@ -593,11 +579,11 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     if (!isCreateProjectTagPending && createProjectTagState) {
       if (createProjectTagState.message && !createProjectTagState.error) {
         toast({ title: "Success", description: createProjectTagState.message });
-        setIsAddProjectTagDialogOpen(false); projectTagForm.reset({ tagName: '', tagColor: '#6B7280' }); loadProjectTagsDataForSettings();
+        setIsAddProjectTagDialogOpen(false); projectTagForm.reset({ tagName: '', tagColor: '#6B7280' }); loadProjectTagsDataForSettings(); loadProjectTagsDataForTasks();
       }
       if (createProjectTagState.error) toast({ variant: "destructive", title: "Tag Creation Error", description: createProjectTagState.error });
     }
-  }, [createProjectTagState, isCreateProjectTagPending, toast, projectTagForm, loadProjectTagsDataForSettings]);
+  }, [createProjectTagState, isCreateProjectTagPending, toast, projectTagForm, loadProjectTagsDataForSettings, loadProjectTagsDataForTasks]);
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const isProjectOwner = currentUserRole === 'owner';
@@ -648,7 +634,6 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
     return initials;
   };
 
-
   const onTabChange = (newTab: string) => {
     setActiveTab(newTab);
     router.push(`/projects/${projectUuid}?tab=${newTab}`, { scroll: false });
@@ -664,7 +649,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6">
           <TabsTrigger value="tasks"><FolderKanban className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Tasks</TabsTrigger>
           <TabsTrigger value="readme"><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>README</TabsTrigger>
-          <TabsTrigger value="documents"><BookOpen className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Documents</TabsTrigger>
+          <TabsTrigger value="documents"><FileText className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Documents</TabsTrigger>
           <TabsTrigger value="announcements"><Megaphone className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Announcements</TabsTrigger>
           <TabsTrigger value="codespace"><FolderGit2 className="mr-1 h-4 w-4 hidden sm:inline-flex"/>CodeSpace</TabsTrigger>
           <TabsTrigger value="settings"><SettingsIcon className="mr-1 h-4 w-4 hidden sm:inline-flex"/>Settings & Team</TabsTrigger>
@@ -688,7 +673,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                             <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                             <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem> {projectMembersForTasks.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <Controller control={taskForm.control} name="tagsString" render={({ field }) => (
+                            <Controller control={taskForm.control} name="tagsString" render={({ field, fieldState }) => (
                               <FormItem> <FormLabel>Tags</FormLabel>
                                   <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) { setShowTagSuggestions(false); }}}>
                                     <PopoverAnchor><FormControl>
@@ -734,7 +719,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                                     ) : ( <p className="text-xs text-muted-foreground"> No sub-tasks. {canCreateUpdateDeleteTasks && <Button variant="link" size="sm" className="h-auto p-0 ml-1 text-xs" onClick={() => openManageSubtasksDialog(task)}>Add</Button>} </p> )}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">Assigned: {task.assigneeName || (task.assigneeUuid ? 'Unknown' : 'Everyone')}</p>
-                                <div className="mt-2 flex flex-wrap gap-1"> {task.tags.map(tag => (<Badge key={tag.uuid} style={{ backgroundColor: tag.color}} className="text-white text-xs">{tag.name}</Badge>))} </div>
+                                <div className="mt-2 flex flex-wrap gap-1"> {task.tags.map(tag => (<Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: tag.color && (parseInt(tag.color.substring(1,3),16)*0.299 + parseInt(tag.color.substring(3,5),16)*0.587 + parseInt(tag.color.substring(5,7),16)*0.114) > 186 ? '#000000' : '#FFFFFF' }} className="text-xs">{tag.name}</Badge>))} </div>
                               </div>
                               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 shrink-0">
                                 <Select value={task.status} disabled={!canEditTaskStatus || isUpdateTaskStatusPending} onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}>
@@ -757,7 +742,8 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                         ))}
                       </div>
                     </div>
-                  ))
+                  )
+                ))
               )}
             </CardContent>
             <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' });} }}>
@@ -768,7 +754,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                                   <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
                                   <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                                   <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem> {projectMembersForTasks.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                                  <Controller control={taskForm.control} name="tagsString" render={({ field }) => (
+                                  <Controller control={taskForm.control} name="tagsString" render={({ field, fieldState }) => (
                                       <FormItem> <FormLabel>Tags</FormLabel>
                                           <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} onOpenChange={(open) => { if(!open && document.activeElement !== tagInputRef.current) setShowTagSuggestions(false); }}>
                                             <PopoverAnchor><FormControl>
@@ -810,10 +796,17 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
               <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canEditReadme}>{isSaveReadmePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save README</Button>
             </CardHeader>
             <CardContent>
-              <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px] bg-background/30">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{projectReadmeContent || ''}</ReactMarkdown>
+              {canEditReadme ? (
+                <Textarea placeholder="Write your project README here using Markdown..." value={projectReadmeContent} onChange={(e) => setProjectReadmeContent(e.target.value)} rows={20} className="font-mono mb-4"/>
+              ) : (
+                <div className="prose dark:prose-invert max-w-none p-4 border rounded-md mb-4 min-h-[100px] bg-background/30">
+                  <p className="italic text-muted-foreground">README content is not editable with your current role.</p>
+                </div>
+              )}
+              <Label className="text-lg block mb-2 font-semibold">Preview</Label>
+              <div className="prose dark:prose-invert max-w-none p-4 border rounded-md min-h-[200px] bg-muted/30">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{projectReadmeContent || '*Nothing to preview yet.*'}</ReactMarkdown>
               </div>
-              <Textarea placeholder="Write your project README here using Markdown..." value={projectReadmeContent} onChange={(e) => setProjectReadmeContent(e.target.value)} rows={20} className="font-mono" disabled={!canEditReadme}/>
               {saveReadmeState?.error && <p className="text-sm text-destructive mt-2">{saveReadmeState.error}</p>}
             </CardContent>
           </Card>
@@ -892,11 +885,11 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
         <TabsContent value="announcements" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
-              <CardTitle>Project Announcements ({projectAnnouncements.length})</CardTitle>
-              {(currentUserRole === 'owner' || currentUserRole === 'co-owner') && ( <Button size="sm" onClick={() => { /* TODO: Open create announcement dialog */ }}><PlusCircle className="mr-2 h-4 w-4"/> New Project Announcement</Button>)}
+              <CardTitle>Project Announcements ({projectAnnouncementsMock.length})</CardTitle>
+              {(currentUserRole === 'owner' || currentUserRole === 'co-owner') && ( <Button size="sm" onClick={() => { toast({title: "Coming Soon!", description: "Creating project-specific announcements will be available in a future update."}) }}><PlusCircle className="mr-2 h-4 w-4"/> New Project Announcement</Button>)}
             </CardHeader>
             <CardContent>
-              {projectAnnouncements.length > 0 ? projectAnnouncements.map((ann: any) => (
+              {projectAnnouncementsMock.length > 0 ? projectAnnouncementsMock.map((ann: any) => (
                 <Card key={ann.uuid} className="p-3 mb-3">
                   <h4 className="font-semibold">{ann.title}</h4> <p className="text-sm text-muted-foreground">{ann.content}</p>
                   <p className="text-xs text-muted-foreground mt-1">By: {ann.authorUuid} on {new Date(ann.createdAt).toLocaleDateString()}</p>
@@ -918,7 +911,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
             <CardHeader className="flex flex-row justify-between items-center">
                 <CardTitle>Team & Project Settings for {project?.name}</CardTitle>
                 {canManageProjectSettings && (
-                    <Dialog open={isInviteUserDialogOpen} onOpenChange={setIsInviteUserDialogOpen}>
+                    <Dialog open={isInviteUserDialogOpen} onOpenChange={(isOpen) => {setIsInviteUserDialogOpen(isOpen); if (!isOpen) inviteForm.reset();}}>
                         <DialogTrigger asChild><Button size="sm" onClick={() => inviteForm.reset()}><Users className="mr-2 h-4 w-4"/>Invite Members</Button></DialogTrigger>
                         <DialogContent className="sm:max-w-[425px]">
                             <DialogHeader><DialogTitle>Invite New Member</DialogTitle><DialogDescription>Enter email and assign a role.</DialogDescription></DialogHeader>
@@ -943,7 +936,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                             <Card key={member.userUuid} className="p-3">
                                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                                     <div className="flex items-center gap-3">
-                                        <Avatar className="h-10 w-10"><AvatarImage src={member.user?.avatar} alt={member.user?.name} data-ai-hint="user avatar"/><AvatarFallback>{getInitials(member.user?.name)}</AvatarFallback></Avatar>
+                                        <Avatar className="h-10 w-10"><AvatarImage src={member.user?.avatar || `https://placehold.co/40x40.png?text=${getInitials(member.user?.name)}`} alt={member.user?.name} data-ai-hint="user avatar"/><AvatarFallback>{getInitials(member.user?.name)}</AvatarFallback></Avatar>
                                         <div><p className="font-medium">{member.user?.name || 'Unknown'}</p><p className="text-xs text-muted-foreground">{member.user?.email || 'No email'}</p></div>
                                     </div>
                                     <div className="flex items-center gap-2 mt-2 sm:mt-0">
@@ -977,7 +970,7 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                 <div className="flex justify-between items-center mb-3">
                     <h4 className="font-semibold text-lg">Project Tags Management</h4>
                     {canManageProjectSettings && (
-                        <Dialog open={isAddProjectTagDialogOpen} onOpenChange={setIsAddProjectTagDialogOpen}>
+                        <Dialog open={isAddProjectTagDialogOpen} onOpenChange={(isOpen) => {setIsAddProjectTagDialogOpen(isOpen); if(!isOpen) projectTagForm.reset({ tagName: '', tagColor: '#6B7280' });}}>
                             <DialogTrigger asChild><Button size="sm" onClick={() => projectTagForm.reset({ tagName: '', tagColor: '#6B7280' })}><TagIcon className="mr-2 h-4 w-4"/>Add Project Tag</Button></DialogTrigger>
                             <DialogContent>
                                 <DialogHeader><DialogTitle>Add New Project Tag</DialogTitle><DialogDescription>Create a custom tag for this project.</DialogDescription></DialogHeader>
@@ -996,14 +989,14 @@ export default function ProjectDetailPage({ project: initialProject, currentUser
                 <Card className="border p-4 rounded-md">
                     {projectTagsForSettings.length === 0 && <p className="text-muted-foreground text-center py-2">No custom tags defined.</p>}
                     <div className="flex flex-wrap gap-2">
-                        {projectTagsForSettings.map(tag => ( <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: '#fff' }} className="text-sm px-3 py-1">{tag.name}</Badge> ))}
+                        {projectTagsForSettings.map(tag => ( <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: tag.color && (parseInt(tag.color.substring(1,3),16)*0.299 + parseInt(tag.color.substring(3,5),16)*0.587 + parseInt(tag.color.substring(5,7),16)*0.114) > 186 ? '#000000' : '#FFFFFF' }} className="text-sm px-3 py-1">{tag.name}</Badge> ))}
                     </div>
                 </Card>
               </div>
               {isProjectOwner && (
                 <div>
                     <h4 className="font-semibold mb-2 text-lg text-destructive">Danger Zone</h4>
-                    <div className="border border-destructive p-4 rounded-md "><p className="text-destructive">Deleting a project is permanent.</p><Button variant="destructive" className="mt-3" size="sm" disabled><Trash2 className="mr-2 h-4 w-4"/>Delete Project</Button></div>
+                    <div className="border border-destructive p-4 rounded-md "><p className="text-destructive">Deleting a project is permanent.</p><Button variant="destructive" className="mt-3" size="sm" disabled onClick={() => toast({title: "Feature Not Implemented", description: "Project deletion is not yet available."})}><Trash2 className="mr-2 h-4 w-4"/>Delete Project</Button></div>
                 </div>
               )}
             </CardContent>
