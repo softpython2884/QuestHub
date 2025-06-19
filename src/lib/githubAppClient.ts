@@ -31,30 +31,19 @@ export async function getOctokitApp(): Promise<App> {
   });
 }
 
-export async function getInstallationOctokit(installationIdProvided?: number): Promise<Octokit> {
+export async function getInstallationOctokit(installationId: number): Promise<Octokit> {
   const app = await getOctokitApp();
-  let installationIdToUse = installationIdProvided;
-
-  if (!installationIdToUse) {
-    console.log('[getInstallationOctokit] No installationId provided, attempting to find the first available one for the app.');
-    try {
-      const installations = await app.octokit.request('GET /app/installations');
-      if (installations.data.length > 0) {
-        installationIdToUse = installations.data[0].id;
-        console.log(`[getInstallationOctokit] Found and using installation ID: ${installationIdToUse} for account: ${installations.data[0].account?.login}`);
-      } else {
-        console.error('[getInstallationOctokit] GitHub App is not installed on any account.');
-        throw new Error('FlowUp GitHub App does not seem to be installed on any account.');
-      }
-    } catch (error) {
-      console.error('[getInstallationOctokit] Error fetching installations:', error);
-      throw new Error('Failed to fetch GitHub App installations.');
-    }
+   if (!installationId) {
+    console.error('[getInstallationOctokit] installationId is required.');
+    throw new Error('GitHub App installation ID is required to get an installation Octokit instance.');
   }
-  if (!installationIdToUse) {
-    throw new Error('Could not determine a GitHub App installation ID to use.');
+  console.log(`[getInstallationOctokit] Getting Octokit for installation ID: ${installationId}`);
+  try {
+    return app.getInstallationOctokit(installationId);
+  } catch (error) {
+    console.error(`[getInstallationOctokit] Error getting Octokit for installation ID ${installationId}:`, error);
+    throw new Error(`Failed to get Octokit instance for installation ID ${installationId}.`);
   }
-  return app.getInstallationOctokit(installationIdToUse);
 }
 
 
@@ -67,3 +56,4 @@ export async function getAppAuthOctokit(): Promise<Octokit> {
     });
     return app.octokit; // This is an Octokit instance authenticated as the app itself using its JWT
 }
+

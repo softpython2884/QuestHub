@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles, Settings2 } from 'lucide-react';
 import Link from 'next/link';
-import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType } from '@/types';
+import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubInstallation } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
@@ -57,6 +57,8 @@ import {
   type DeleteProjectAnnouncementFormState,
   linkProjectToGithubAction,
   type LinkProjectToGithubFormState,
+  fetchUserGithubAccessDetailsAction,
+  type UserGithubAccessDetails,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -160,6 +162,8 @@ function ProjectDetailPageContent() {
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocumentType[]>([]);
   const [projectAnnouncements, setProjectAnnouncements] = useState<ProjectAnnouncementType[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
+  const [userGithubAccess, setUserGithubAccess] = useState<UserGithubAccessDetails | null>(null);
+
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -330,6 +334,22 @@ function ProjectDetailPageContent() {
     }
   }, [projectUuid, toast]);
 
+  const loadUserGithubAccess = useCallback(async () => {
+    if (user) {
+      try {
+        const accessDetails = await fetchUserGithubAccessDetailsAction();
+        setUserGithubAccess(accessDetails);
+        if (accessDetails.error) {
+            console.warn("Error fetching GitHub access details:", accessDetails.error);
+            // Don't toast here as it might be shown on every page load if there's a persistent issue
+        }
+      } catch (error) {
+        console.error("Exception fetching GitHub access details:", error);
+        setUserGithubAccess({ installationId: null, accountLogin: null, error: "Failed to fetch GitHub integration details." });
+      }
+    }
+  }, [user, toast]);
+
 
  useEffect(() => {
     const performLoadProjectData = async () => {
@@ -364,6 +384,7 @@ function ProjectDetailPageContent() {
                     await loadProjectTagsData();
                     await loadProjectDocuments();
                     await loadProjectAnnouncements();
+                    await loadUserGithubAccess();
 
                 } else {
                     setAccessDenied(true);
@@ -383,7 +404,7 @@ function ProjectDetailPageContent() {
         }
     };
       performLoadProjectData();
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubAccess]);
 
 
   useEffect(() => {
@@ -625,14 +646,15 @@ function ProjectDetailPageContent() {
       if (linkGithubState.message && !linkGithubState.error) {
         toast({ title: "Success", description: linkGithubState.message });
         if (linkGithubState.project) {
-          setProject(linkGithubState.project); // Update project state with new GitHub URL
+          setProject(linkGithubState.project); 
+          loadUserGithubAccess(); // Refresh GitHub access details after linking
         }
       }
       if (linkGithubState.error) {
         toast({ variant: "destructive", title: "GitHub Link Error", description: linkGithubState.error });
       }
     }
-  }, [linkGithubState, isLinkGithubPending, toast]);
+  }, [linkGithubState, isLinkGithubPending, toast, loadUserGithubAccess]);
 
 
   useEffect(() => {
@@ -1058,14 +1080,40 @@ function ProjectDetailPageContent() {
     });
   };
 
-  const handleLinkToGithub = () => {
-    if (!project) return;
-    const formData = new FormData();
-    formData.append('projectUuid', project.uuid);
-    formData.append('projectName', project.name);
-    ReactStartTransition(() => {
-      linkProjectToGithubFormAction(formData);
-    });
+  const handleLinkOrInstallGithub = async () => {
+    if (!project || !user) return;
+
+    // 1. Check if user has an installation linked to FlowUp
+    const accessDetails = await fetchUserGithubAccessDetailsAction();
+    setUserGithubAccess(accessDetails); // Update state
+
+    if (accessDetails.error) {
+      toast({ variant: "destructive", title: "GitHub Error", description: accessDetails.error });
+      return;
+    }
+
+    if (!accessDetails.installationId) {
+      // 2. If not, redirect to GitHub App installation page
+      const githubAppName = process.env.NEXT_PUBLIC_GITHUB_APP_NAME; // Ensure this is set in .env and exposed
+      if (!githubAppName) {
+        toast({ variant: "destructive", title: "Configuration Error", description: "GitHub App name is not configured." });
+        return;
+      }
+      // Construct a state parameter to know where to redirect back after callback, e.g., to this project's codespace tab
+      const stateParam = encodeURIComponent(`projectUuid=${projectUuid}&redirectTo=/projects/${projectUuid}?tab=codespace`);
+      const installUrl = `https://github.com/apps/${githubAppName}/installations/new?state=${stateParam}`;
+      console.log("Redirecting to GitHub App installation:", installUrl);
+      window.location.href = installUrl;
+    } else {
+      // 3. If installation exists, proceed to link/create repository
+      const formData = new FormData();
+      formData.append('projectUuid', project.uuid);
+      formData.append('projectName', project.name);
+      // The installationId will be fetched by the server action based on the logged-in user
+      ReactStartTransition(() => {
+        linkProjectToGithubFormAction(formData);
+      });
+    }
   };
 
 
@@ -1708,7 +1756,7 @@ function ProjectDetailPageContent() {
                     <DialogTitle>{documentToView?.title}</DialogTitle>
                      <DialogDescription asChild>
                         <div className="text-sm text-muted-foreground pt-1 space-x-1.5">
-                            {documentToView?.createdByName && (
+                          {documentToView?.createdByName && (
                                 <>
                                 <Avatar className="h-5 w-5 inline-block align-middle">
                                     <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar small" />
@@ -1867,7 +1915,7 @@ function ProjectDetailPageContent() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace & GitHub</CardTitle>
-              <CardDescription>Manage your project's code by linking it to a GitHub repository.</CardDescription>
+              <CardDescription>Manage your project's code by linking it to a GitHub repository via the FlowUp GitHub App.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!project.githubRepoUrl ? (
@@ -1875,24 +1923,31 @@ function ProjectDetailPageContent() {
                   <div className="p-4 border-dashed border-2 rounded-md text-center">
                     <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                     <h3 className="text-lg font-semibold mb-1">Link this project to GitHub</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Create a new GitHub repository for this project.
-                      This will enable code browsing, README sync, and more, directly within FlowUp.
-                    </p>
-                    <form action={linkProjectToGithubFormAction}>
-                        <input type="hidden" name="projectUuid" value={project.uuid} />
-                        <input type="hidden" name="projectName" value={project.name} />
-                        <Button type="submit" disabled={!canManageCodeSpace || isLinkGithubPending}>
-                          {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          <Github className="mr-2 h-4 w-4" /> Create and Link Repository (Simulated)
+                     {!userGithubAccess?.installationId ? (
+                        <>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            To link this project, you first need to install and authorize the FlowUp GitHub App on your GitHub account or organization.
+                        </p>
+                         <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
+                            {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Settings2 className="mr-2 h-4 w-4" /> Install/Authorize FlowUp GitHub App
                         </Button>
-                    </form>
+                        </>
+                     ) : (
+                        <>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            The FlowUp GitHub App is installed on {userGithubAccess.accountLogin ? `the '${userGithubAccess.accountLogin}' account/org` : 'your account'}.
+                            Click below to create a new GitHub repository for this FlowUp project and link them.
+                        </p>
+                        <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
+                            {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Github className="mr-2 h-4 w-4" /> Create and Link Repository
+                        </Button>
+                        </>
+                     )}
                     {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
+                     {userGithubAccess?.error && !userGithubAccess.installationId && <p className="text-sm text-destructive mt-2">{userGithubAccess.error}</p>}
                   </div>
-                  <p className="text-xs text-center text-muted-foreground">
-                    Note: This will simulate linking and set up a placeholder repository URL.
-                    Actual GitHub App integration for full API access will be implemented progressively.
-                  </p>
                 </>
               ) : (
                 <div className="space-y-4">
@@ -1902,7 +1957,7 @@ function ProjectDetailPageContent() {
                         <h3 className="text-lg font-semibold">Project Linked to GitHub!</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      This project is linked to the following GitHub repository:
+                      This project is linked to the following GitHub repository (Installation ID: {project.githubInstallationId || 'N/A'}):
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                         <Github className="h-4 w-4" />
@@ -2182,3 +2237,4 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
+

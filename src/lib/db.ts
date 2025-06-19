@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -257,6 +257,15 @@ export async function getDbConnection() {
       avatar TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS user_github_installations (
+      user_uuid TEXT PRIMARY KEY,
+      github_installation_id INTEGER NOT NULL,
+      github_account_login TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_uuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
@@ -268,9 +277,11 @@ export async function getDbConnection() {
       isUrgent BOOLEAN DEFAULT FALSE,
       githubRepoUrl TEXT,
       githubRepoName TEXT,
+      github_installation_id INTEGER, -- Can be null if project not linked or linked by an older mechanism
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
-      FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
+      FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE,
+      FOREIGN KEY (github_installation_id) REFERENCES user_github_installations (github_installation_id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS project_members (
@@ -478,6 +489,30 @@ export async function updateUserProfile(uuid: string, name: string, email: strin
   return userToReturn;
 }
 
+export async function storeUserGithubInstallation(userUuid: string, installationId: number, accountLogin?: string): Promise<void> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    await connection.run(
+        `INSERT INTO user_github_installations (user_uuid, github_installation_id, github_account_login, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_uuid) DO UPDATE SET
+           github_installation_id = excluded.github_installation_id,
+           github_account_login = excluded.github_account_login,
+           updated_at = excluded.updated_at`,
+        userUuid, installationId, accountLogin, now, now
+    );
+}
+
+export async function getUserGithubInstallation(userUuid: string): Promise<UserGithubInstallation | null> {
+    const connection = await getDbConnection();
+    const row = await connection.get<UserGithubInstallation>(
+        'SELECT user_uuid, github_installation_id, github_account_login, created_at, updated_at FROM user_github_installations WHERE user_uuid = ?',
+        userUuid
+    );
+    return row || null;
+}
+
+
 export async function createProject(name: string, description: string | undefined, ownerUuid: string): Promise<Project> {
   const connection = await getDbConnection();
   const projectUuid = uuidv4();
@@ -486,8 +521,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null
     );
 
     if (!result.lastID) {
@@ -517,6 +552,7 @@ export async function createProject(name: string, description: string | undefine
       isUrgent: false,
       githubRepoUrl: undefined,
       githubRepoName: undefined,
+      githubInstallationId: undefined,
     };
   } catch (err) {
     await connection.run('ROLLBACK');
@@ -531,7 +567,7 @@ export async function createProject(name: string, description: string | undefine
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
   const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
-    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, createdAt, updatedAt FROM projects WHERE uuid = ?',
+    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
   if (!projectRow) return null;
@@ -593,12 +629,12 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   return getProjectByUuid(projectUuid);
 }
 
-export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string | null, repoName: string | null): Promise<Project | null> {
+export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string | null, repoName: string | null, installationId?: number | null): Promise<Project | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
   const result = await connection.run(
-    'UPDATE projects SET githubRepoUrl = ?, githubRepoName = ?, updatedAt = ? WHERE uuid = ?',
-    repoUrl, repoName, now, projectUuid
+    'UPDATE projects SET githubRepoUrl = ?, githubRepoName = ?, github_installation_id = ?, updatedAt = ? WHERE uuid = ?',
+    repoUrl, repoName, installationId, now, projectUuid
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
@@ -608,7 +644,7 @@ export async function updateProjectGithubRepo(projectUuid: string, repoUrl: stri
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
   const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.githubRepoUrl, p.githubRepoName, p.createdAt, p.updatedAt
+    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.githubRepoUrl, p.githubRepoName, p.github_installation_id as githubInstallationId, p.createdAt, p.updatedAt
      FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
      WHERE pm.userUuid = ?
@@ -625,7 +661,7 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
     const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
+      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
     );
     return projectsData.map(p => ({
       ...p,
@@ -1096,3 +1132,4 @@ export async function deleteProjectAnnouncement(announcementUuid: string): Promi
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
+

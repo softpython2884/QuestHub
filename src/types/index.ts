@@ -10,6 +10,14 @@ export interface User {
   avatar?: string;
 }
 
+export interface UserGithubInstallation {
+    user_uuid: string;
+    github_installation_id: number;
+    github_account_login?: string | null; // Username or org name where app is installed
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Tag {
   uuid: string;
   name: string;
@@ -71,6 +79,7 @@ export interface Project {
   isUrgent?: boolean;
   githubRepoUrl?: string;
   githubRepoName?: string;
+  githubInstallationId?: number; 
 }
 
 export interface Announcement {
@@ -86,3 +95,4 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
+
