@@ -2,7 +2,7 @@
 'use server';
 
 import { App } from '@octokit/app';
-import { Octokit } from 'octokit'; // Ensure we are using the full Octokit
+import { Octokit } from 'octokit';
 import fs from 'fs';
 import path from 'path';
 
@@ -17,20 +17,38 @@ function getGitHubAppCredentialsOrThrow() {
   if (!clientId) throw new Error('GITHUB_CLIENT_ID is not defined in environment variables.');
   if (!clientSecret) throw new Error('GITHUB_CLIENT_SECRET is not defined in environment variables.');
 
-  let privateKey: string;
+  let privateKey: string | undefined;
+
   if (privateKeyPath) {
     const absolutePath = path.resolve(process.cwd(), privateKeyPath);
     if (fs.existsSync(absolutePath)) {
-      privateKey = fs.readFileSync(absolutePath, 'utf8');
-      console.log(`[GitHubAppClient] Loaded private key from path: ${absolutePath}`);
+      try {
+        privateKey = fs.readFileSync(absolutePath, 'utf8');
+        console.log(`[GitHubAppClient] Loaded private key from path: ${absolutePath}`);
+      } catch (err: any) {
+        throw new Error(`Error reading GitHub private key from file ${absolutePath}: ${err.message}`);
+      }
     } else {
-      throw new Error(`GitHub private key file not found at path specified by GITHUB_PRIVATE_KEY_PATH: ${absolutePath}`);
+      // Path is defined, but file not found. Try GITHUB_PRIVATE_KEY env var as a fallback.
+      console.warn(`[GitHubAppClient] Private key file not found at specified GITHUB_PRIVATE_KEY_PATH: ${absolutePath}. Attempting to use GITHUB_PRIVATE_KEY env var.`);
     }
-  } else if (privateKeyEnvVar) {
+  }
+
+  // If privateKey is still not set (either path wasn't provided, or file not found at path)
+  if (!privateKey && privateKeyEnvVar) {
     privateKey = privateKeyEnvVar.replace(/\\n/g, '\n');
     console.log('[GitHubAppClient] Loaded private key from GITHUB_PRIVATE_KEY environment variable.');
-  } else {
-    throw new Error('Either GITHUB_PRIVATE_KEY_PATH or Github_PRIVATE_KEY must be defined in environment variables.');
+  }
+
+  // Final check if privateKey was successfully loaded either way
+  if (!privateKey) {
+    let errorMessage = 'Failed to load GitHub private key. ';
+    if (privateKeyPath) {
+      errorMessage += `Checked GITHUB_PRIVATE_KEY_PATH (${privateKeyPath}) but file was not found or was unreadable, and GITHUB_PRIVATE_KEY environment variable was not set as a fallback.`;
+    } else {
+      errorMessage += 'Neither GITHUB_PRIVATE_KEY_PATH nor GITHUB_PRIVATE_KEY environment variable was set.';
+    }
+    throw new Error(errorMessage);
   }
 
   return {
@@ -43,29 +61,28 @@ function getGitHubAppCredentialsOrThrow() {
 
 let appInstance: App | null = null;
 
-async function getAppInstance(): Promise<App> {
+async function getOctokitApp(): Promise<App> {
   if (appInstance) {
     return appInstance;
   }
   const { appId, privateKey, clientId, clientSecret } = getGitHubAppCredentialsOrThrow();
-  console.log('[getAppInstance] Initializing GitHub App client instance.');
+  console.log('[getOctokitApp] Initializing GitHub App client instance.');
   appInstance = new App({
     appId,
     privateKey,
     oauth: { clientId, clientSecret },
-    Octokit: Octokit, // Explicitly pass the Octokit class we imported
+    Octokit: Octokit, // Explicitly pass the Octokit class
   });
   if (!appInstance || typeof appInstance.getInstallationOctokit !== 'function') {
-    console.error('[getAppInstance] Failed to instantiate GitHub App properly.');
+    console.error('[getOctokitApp] Failed to instantiate GitHub App properly.');
     throw new Error('Failed to instantiate GitHub App client.');
   }
-  console.log('[getAppInstance] GitHub App client instance initialized.');
+  console.log('[getOctokitApp] GitHub App client instantiated.');
   return appInstance;
 }
 
-
 export async function getInstallationOctokit(installationId: number): Promise<Octokit> {
-  const app = await getAppInstance();
+  const app = await getOctokitApp();
   console.log(`[getInstallationOctokit] Attempting to get Octokit for installation ID: ${installationId}`);
   try {
     const installationOctokit = await app.getInstallationOctokit(installationId);
@@ -81,7 +98,6 @@ export async function getInstallationOctokit(installationId: number): Promise<Oc
         console.log('[getInstallationOctokit] typeof installationOctokit.auth:', typeof (installationOctokit as any).auth);
         console.log('[getInstallationOctokit] typeof installationOctokit.rest:', typeof (installationOctokit as any).rest);
     }
-
 
     if (!installationOctokit) {
         console.error('[getInstallationOctokit] app.getInstallationOctokit returned null or undefined!');
@@ -101,8 +117,8 @@ export async function getInstallationOctokit(installationId: number): Promise<Oc
 
 // For operations that the app performs on its own behalf (e.g., listing installations)
 export async function getAppAuthOctokit(): Promise<Octokit> {
-    const app = await getAppInstance();
-    const octokit = await app.octokit() // app.octokit is now a method that returns a promise
+    const app = await getOctokitApp();
+    const octokit = await app.octokit() 
     if (!octokit) {
         console.error('[getAppAuthOctokit] app.octokit() returned undefined after App instantiation.');
         throw new Error('Failed to get app-authenticated Octokit instance: app.octokit() is undefined.');
