@@ -449,6 +449,8 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
         lastTypedFragmentRef.current = "";
       }
     } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
         lastTypedFragmentRef.current = "";
