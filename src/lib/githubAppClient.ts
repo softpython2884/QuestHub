@@ -23,7 +23,7 @@ function getGitHubAppCredentialsOrThrow() {
   };
 }
 
-export function getOctokitApp() {
+export async function getOctokitApp(): Promise<App> {
   const { appId, privateKey } = getGitHubAppCredentialsOrThrow();
   return new App({
     appId,
@@ -32,7 +32,7 @@ export function getOctokitApp() {
 }
 
 export async function getInstallationOctokit(installationIdProvided?: number): Promise<Octokit> {
-  const app = getOctokitApp();
+  const app = await getOctokitApp();
   let installationIdToUse = installationIdProvided;
 
   if (!installationIdToUse) {
@@ -59,7 +59,7 @@ export async function getInstallationOctokit(installationIdProvided?: number): P
 
 
 // For operations that the app performs on its own behalf (e.g., listing installations)
-export function getAppAuthOctokit(): Octokit {
+export async function getAppAuthOctokit(): Promise<Octokit> {
     const { appId, privateKey } = getGitHubAppCredentialsOrThrow();
     const app = new App({
         appId,
