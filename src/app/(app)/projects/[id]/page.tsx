@@ -183,6 +183,13 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
       if (createTaskState.error) {
         toast({ variant: "destructive", title: "Task Creation Error", description: createTaskState.error });
       }
+      if(createTaskState.fieldErrors) {
+        Object.entries(createTaskState.fieldErrors).forEach(([field, errors]) => {
+          if (errors && errors.length > 0) {
+            taskForm.setError(field as keyof TaskFormValues, { type: 'server', message: errors[0] });
+          }
+        });
+      }
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
 
@@ -203,6 +210,13 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
     if (updateTaskState.error && !isUpdateTaskPending) {
         toast({ variant: "destructive", title: "Task Update Error", description: updateTaskState.error });
         lastSubmitSourceRef.current = null;
+        if(updateTaskState.fieldErrors) {
+            Object.entries(updateTaskState.fieldErrors).forEach(([field, errors]) => {
+              if (errors && errors.length > 0) {
+                taskForm.setError(field as keyof TaskFormValues, { type: 'server', message: errors[0] });
+              }
+            });
+        }
         return;
     }
     if (updateTaskState.message && !updateTaskState.error && updateTaskState.updatedTask) {
@@ -216,7 +230,7 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
         }
         lastSubmitSourceRef.current = null;
     }
-  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskToManageSubtasks, taskToEdit]);
+  }, [updateTaskState, isUpdateTaskPending, toast, loadTasks, taskToManageSubtasks, taskToEdit, taskForm]);
 
  useEffect(() => {
     if (isEditTaskDialogOpen && taskToEdit) {
@@ -227,6 +241,8 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
         assigneeUuid: taskToEdit.assigneeUuid || UNASSIGNED_VALUE,
         tagsString: taskToEdit.tags.map(t => t.name).join(', ') || '',
       });
+    } else {
+      taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
     }
   }, [isEditTaskDialogOpen, taskToEdit, taskForm]);
 
@@ -339,6 +355,7 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
 
   const openEditTaskDialog = (task: Task) => {
     setTaskToEdit(task);
+    taskForm.clearErrors();
     setIsEditTaskDialogOpen(true);
   };
 
@@ -465,9 +482,9 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
     <Card>
       <CardHeader className="flex flex-row justify-between items-center">
         <CardTitle>Tasks ({tasks.length})</CardTitle>
-         <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1);} }}>
+         <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' });} }}>
           <DialogTrigger asChild>
-              <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
+              <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => { taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' }); }}>
                   <PlusCircle className="mr-2 h-4 w-4"/> Add Task
               </Button>
           </DialogTrigger>
@@ -551,7 +568,7 @@ export default function ProjectTasksPage({ project, currentUserRole, projectUuid
             ))
         )}
       </CardContent>
-      <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); } }}>
+      <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' });} }}>
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader><DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle><DialogDescription>Update task details.</DialogDescription></DialogHeader>
                 {taskToEdit && ( <Form {...taskForm}> <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
