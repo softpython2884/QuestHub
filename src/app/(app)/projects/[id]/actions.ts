@@ -34,6 +34,7 @@ import {
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
+import { getOctokitApp, getInstallationOctokit } from '@/lib/githubAppClient'; // New import for GitHub App
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
   if (!uuid) return null;
@@ -264,10 +265,10 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
   const validatedFields = CreateTaskSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description') || '', 
-    todoListMarkdown: formData.get('todoListMarkdown') || '', 
+    description: formData.get('description') || '',
+    todoListMarkdown: formData.get('todoListMarkdown') || '',
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid') || '', 
+    assigneeUuid: formData.get('assigneeUuid') || '',
     tagsString: formData.get('tagsString'),
   });
 
@@ -351,7 +352,7 @@ export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormStat
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
     console.log(`[updateTaskStatusAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
-    if (!userRole) { 
+    if (!userRole) {
       return { error: `You are not a member of this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
@@ -397,10 +398,10 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     taskUuid: formData.get('taskUuid'),
     projectUuid: formData.get('projectUuid'),
     title: formData.get('title'),
-    description: formData.get('description') || '', 
+    description: formData.get('description') || '',
     todoListMarkdown: formData.get('todoListMarkdown') || '',
     status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid') || '', 
+    assigneeUuid: formData.get('assigneeUuid') || '',
     tagsString: formData.get('tagsString'),
   });
 
@@ -410,7 +411,7 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
   }
 
   const { taskUuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid: rawAssigneeUuid, tagsString } = validatedFields.data;
-  
+
   let finalAssigneeUuid: string | null = null;
     if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
         finalAssigneeUuid = rawAssigneeUuid;
@@ -422,16 +423,16 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
       return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
-    
+
     const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
-    
+
     if (formData.has('title')) taskData.title = title;
-    if (formData.has('description')) taskData.description = description || undefined; 
-    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined; 
+    if (formData.has('description')) taskData.description = description || undefined;
+    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined;
     if (formData.has('status')) taskData.status = status;
     if (formData.has('assigneeUuid')) taskData.assigneeUuid = finalAssigneeUuid;
-    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined; 
-    
+    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined;
+
 
     const updatedTask = await dbUpdateTask(taskUuid, taskData);
     if (!updatedTask) {
@@ -463,7 +464,7 @@ export async function deleteTaskAction(prevState: DeleteTaskFormState, formData:
     if (!taskUuid || !projectUuid) {
         return { error: "Task UUID and Project UUID are required."};
     }
-    
+
     try {
         const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
         console.log(`[deleteTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
@@ -643,10 +644,10 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
   }
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    const globalUser = await dbGetUserByUuid(session.user.uuid); 
+    const globalUser = await dbGetUserByUuid(session.user.uuid);
     console.log(`[toggleProjectVisibilityAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}, Global role: ${globalUser?.role}`);
 
-    if (userRole !== 'owner' && globalUser?.role !== 'admin') { 
+    if (userRole !== 'owner' && globalUser?.role !== 'admin') {
       return { error: `Only project owners or admins can change project visibility. Your project role: ${userRole || 'not a member'}, global role: ${globalUser?.role || 'unknown'}. UUID: ${session.user.uuid}` };
     }
     const updatedProject = await dbUpdateProjectVisibility(projectUuid, isPrivate);
@@ -676,7 +677,7 @@ export async function toggleTaskPinAction(prevState: ToggleTaskPinState, formDat
 
 
   const taskUuid = formData.get('taskUuid') as string;
-  const projectUuid = formData.get('projectUuid') as string; 
+  const projectUuid = formData.get('projectUuid') as string;
   const isPinned = formData.get('isPinned') === 'true';
 
   if (!taskUuid || !projectUuid) {
@@ -763,12 +764,12 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
       return { error: "You do not have permission to create documents in this project." };
     }
-    
+
     const createdDocument = await dbCreateDocument({
       projectUuid,
       title,
-      content: content, 
-      fileType: 'markdown', 
+      content: content,
+      fileType: 'markdown',
       createdByUuid: session.user.uuid,
     });
     return { message: "Document created successfully!", createdDocument };
@@ -798,7 +799,7 @@ export interface UpdateDocumentFormState {
 
 const UpdateDocumentSchema = z.object({
   documentUuid: z.string().uuid("Invalid document UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."), 
+  projectUuid: z.string().uuid("Invalid project UUID."),
   title: z.string().min(1, "Title is required.").max(255),
   content: z.string().optional(),
 });
@@ -825,7 +826,7 @@ export async function updateDocumentAction(prevState: UpdateDocumentFormState, f
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
       return { error: "You do not have permission to update documents in this project." };
     }
-    
+
     const docToUpdate = await dbGetDocumentByUuid(documentUuid);
     if (!docToUpdate) {
         return { error: "Document not found." };
@@ -856,12 +857,12 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
     if (!session?.user?.uuid) return { error: "Authentication required." };
 
     const documentUuid = formData.get('documentUuid') as string;
-    const projectUuid = formData.get('projectUuid') as string; 
+    const projectUuid = formData.get('projectUuid') as string;
 
     if (!documentUuid) return { error: "Document UUID is required."};
-    
+
     try {
-        if (projectUuid) { 
+        if (projectUuid) {
             const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
             if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
                 return { error: "You do not have permission to delete documents in this project." };
@@ -920,7 +921,7 @@ export async function createProjectAnnouncementAction(
     if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
       return { error: "You do not have permission to create announcements for this project." };
     }
-    
+
     const createdAnnouncement = await dbCreateProjectAnnouncement({
       projectUuid,
       title,
@@ -970,7 +971,7 @@ export async function deleteProjectAnnouncementAction(
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
     const canDelete = userRole === 'owner' || userRole === 'co-owner' || session.user.uuid === authorUuid;
-    
+
     if (!canDelete) {
       return { error: "You do not have permission to delete this announcement." };
     }
@@ -1025,37 +1026,66 @@ export async function linkProjectToGithubAction(
       return { error: "You do not have permission to link this project to GitHub." };
     }
 
-    // Simulate GitHub API call for now
-    // In a real scenario, you'd use Octokit here to create a repository
-    // const githubPat = process.env.GITHUB_PAT;
-    // if (!githubPat) return { error: "GitHub PAT not configured on server."};
-    // const octokit = new Octokit({ auth: githubPat });
-    // const repoName = slugify(projectName);
-    // try {
-    //   const response = await octokit.rest.repos.createForAuthenticatedUser({ name: repoName, private: true });
-    //   const repoUrl = response.data.html_url;
-    //   const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, repoName);
-    //   if (!updatedProject) return { error: "Failed to save GitHub repository details to project."};
-    //   return { message: `Successfully created and linked GitHub repository: ${repoName}`, project: updatedProject };
-    // } catch (apiError: any) {
-    //   console.error("GitHub API error:", apiError);
-    //   return { error: `GitHub API Error: ${apiError.message}`};
-    // }
-    
-    // Simulated part:
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call delay
-    const repoName = slugify(projectName);
-    const repoUrl = `https://github.com/flowup-simulated-bot/${repoName}`;
-    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, repoName);
-    
-    if (!updatedProject) {
-        return { error: "Failed to save GitHub repository details to the project after simulated creation." };
+    const repoSlug = slugify(projectName);
+    let ownerLogin: string | undefined;
+
+    const app = getOctokitApp();
+    const installations = await app.octokit.request('GET /app/installations');
+
+    if (installations.data.length === 0) {
+      return { error: "FlowUp GitHub App is not installed on any account. Please install it first from GitHub." };
     }
     
-    return { message: `GitHub repository '${repoName}' linked (simulated).`, project: updatedProject };
+    const installation = installations.data[0]; // Using the first installation for now
+    const installationId = installation.id;
+    ownerLogin = installation.account?.login;
+
+    if (!ownerLogin) {
+      return { error: "Could not determine the owner account for the GitHub App installation." };
+    }
+
+    const octokit = await app.getInstallationOctokit(installationId);
+
+    let createdRepo;
+    try {
+      console.log(`Attempting to create repository '${repoSlug}' for owner '${ownerLogin}' (Installation ID: ${installationId})`);
+      if (installation.account?.type === "Organization") {
+        createdRepo = await octokit.rest.repos.createInOrg({
+          org: ownerLogin,
+          name: repoSlug,
+          private: true,
+          description: `Repository for FlowUp project: ${projectName}`,
+        });
+      } else {
+        createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
+          name: repoSlug,
+          private: true,
+          description: `Repository for FlowUp project: ${projectName}`,
+        });
+      }
+      console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
+    } catch (apiError: any) {
+      console.error("GitHub API error creating repository:", apiError.status, apiError.message);
+      if (apiError.status === 422) {
+        return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist under '${ownerLogin}' or there's a naming conflict. GitHub's message: ${apiError.message}` };
+      }
+      return { error: `GitHub API Error (${apiError.status}): ${apiError.message}` };
+    }
+    
+    const repoUrl = createdRepo.data.html_url;
+    const actualRepoName = createdRepo.data.name;
+
+    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName);
+    
+    if (!updatedProject) {
+        // Consider logic to delete the GitHub repo if DB link fails
+        return { error: "Failed to save GitHub repository details to FlowUp project after creation on GitHub." };
+    }
+    
+    return { message: `GitHub repository '${actualRepoName}' created and linked successfully!`, project: updatedProject };
 
   } catch (error: any) {
     console.error("Error in linkProjectToGithubAction:", error);
-    return { error: error.message || "An unexpected error occurred." };
+    return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
