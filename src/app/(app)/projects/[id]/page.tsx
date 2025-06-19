@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -115,33 +115,33 @@ type ProjectAnnouncementFormValues = z.infer<typeof projectAnnouncementFormSchem
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
-  return markdown.split('\\n').map(line => {
+  return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
-    const matchChecked = trimmedLine.match(/^\\s*\\*\\s*\\[x\\]\\s*(.*)/i);
+    const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
     if (matchChecked && matchChecked[1] !== undefined) {
-      return \`** \${matchChecked[1].trim()}\`;
+      return `** ${matchChecked[1].trim()}`;
     }
-    const matchUnchecked = trimmedLine.match(/^\\s*\\*\\s*\\[ \\]\\s*(.*)/i);
+    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
     if (matchUnchecked && matchUnchecked[1] !== undefined) {
-      return \`* \${matchUnchecked[1].trim()}\`;
+      return `* ${matchUnchecked[1].trim()}`;
     }
     return trimmedLine; 
-  }).join('\\n');
+  }).join('\n');
 };
 
 
 const convertSubtaskInputToMarkdown = (input: string): string => {
-  return input.split('\\n').map(line => {
+  return input.split('\n').map(line => {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith('** ')) {
-      return \`* [x] \${trimmedLine.substring(3).trim()}\`;
+      return `* [x] ${trimmedLine.substring(3).trim()}`;
     } else if (trimmedLine.startsWith('* ')) {
-      return \`* [ ] \${trimmedLine.substring(2).trim()}\`;
+      return `* [ ] ${trimmedLine.substring(2).trim()}`;
     } else if (trimmedLine.length > 0) { 
-      return \`* [ ] \${trimmedLine}\`;
+      return `* [ ] ${trimmedLine}`;
     }
     return ''; 
-  }).filter(line => line.trim().length > 0).join('\\n');
+  }).filter(line => line.trim().length > 0).join('\n');
 };
 
 function ProjectDetailPageContent() {
@@ -210,7 +210,7 @@ function ProjectDetailPageContent() {
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
-    router.push(\`/projects/\${projectUuid}?tab=\${newTab}\`, { scroll: false });
+    router.push(`/projects/${projectUuid}?tab=${newTab}`, { scroll: false });
   };
 
   const editProjectForm = useForm<EditProjectFormValues>({
@@ -426,10 +426,10 @@ function ProjectDetailPageContent() {
       if (createTaskState.error) {
         let errorMessage = createTaskState.error;
         if (createTaskState.fieldErrors?.assigneeUuid) {
-            errorMessage += \` Assignee: \${createTaskState.fieldErrors.assigneeUuid.join(', ')}\`;
+            errorMessage += ` Assignee: ${createTaskState.fieldErrors.assigneeUuid.join(', ')}`;
         }
         if (createTaskState.fieldErrors?.title) {
-             errorMessage += \` Title: \${createTaskState.fieldErrors.title.join(', ')}\`;
+             errorMessage += ` Title: ${createTaskState.fieldErrors.title.join(', ')}`;
         }
         toast({ variant: "destructive", title: "Task Creation Error", description: errorMessage });
       }
@@ -456,7 +456,7 @@ function ProjectDetailPageContent() {
         let errorMessage = updateTaskState.error;
         Object.entries(updateTaskState.fieldErrors || {}).forEach(([key, value]) => {
             if (value) {
-                errorMessage += \` \${key.charAt(0).toUpperCase() + key.slice(1)}: \${value.join(', ')}\`;
+                errorMessage += ` ${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`;
             }
         });
         toast({ variant: "destructive", title: "Task Update Error", description: errorMessage });
@@ -1106,7 +1106,7 @@ function ProjectDetailPageContent() {
             <AlertCircle className="mx-auto h-16 w-16 text-destructive mt-12" />
             <h2 className="text-2xl font-semibold mt-4">Access Denied or Project Not Found</h2>
             <p className="text-muted-foreground">
-              {accessDenied ? "You do not have permission to view this private project, or the project does not exist." : \`Project (ID: \${projectUuid}) not found or access is restricted.\`}
+              {accessDenied ? "You do not have permission to view this private project, or the project does not exist." : `Project (ID: ${projectUuid}) not found or access is restricted.`}
             </p>
         </div>
     );
@@ -1457,126 +1457,124 @@ function ProjectDetailPageContent() {
                 ))
               )}
             </CardContent>
-          </Card>
-        </TabsContent>
-
-        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
-            <DialogContent className="sm:max-w-[525px]">
+            </Card>
+            <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
+                <DialogContent className="sm:max-w-[525px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
+                        <DialogDescription>Update the main details for this task.</DialogDescription>
+                    </DialogHeader>
+                    {taskToEdit && (
+                        <Form {...taskForm}>
+                            <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
+                                <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                                <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                                <Controller
+                                    control={taskForm.control}
+                                    name="tagsString"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Tags (comma-separated)</FormLabel>
+                                        <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
+                                                onOpenChange={(open) => { 
+                                                    if(!open && document.activeElement !== tagInputRef.current) { 
+                                                        setShowTagSuggestions(false); 
+                                                    }
+                                                }}
+                                        >
+                                        <PopoverAnchor>
+                                            <FormControl>
+                                            <Input
+                                                {...field}
+                                                ref={tagInputRef}
+                                                placeholder="e.g. frontend, bug, urgent"
+                                                onFocus={() => {
+                                                    setActiveTagInputName('tagsString');
+                                                    const fragment = getCurrentTagFragment(field.value || "");
+                                                    if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
+                                                }}
+                                                onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
+                                                onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
+                                                onBlur={() => setTimeout(() => { 
+                                                    if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
+                                                        setShowTagSuggestions(false); 
+                                                    }
+                                                }, 150)}
+                                            />
+                                            </FormControl>
+                                        </PopoverAnchor>
+                                        {showTagSuggestions && tagSuggestions.length > 0 && (
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                            <Command shouldFilter={false}> 
+                                                <CommandList>
+                                                <CommandEmpty>No matching tags found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {tagSuggestions.map((suggestion, index) => (
+                                                    <CommandItem
+                                                        key={suggestion.uuid}
+                                                        value={suggestion.name}
+                                                        onSelect={() => {
+                                                            handleTagSuggestionClick(suggestion, field, taskForm);
+                                                        }}
+                                                        className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
+                                                    >
+                                                        {suggestion.name}
+                                                    </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                        )}
+                                        </Popover>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
+                                {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`}</p>)}
+                                <DialogFooter>
+                                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                                    <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    )}
+                </DialogContent>
+            </Dialog>
+    
+            <Dialog open={isManageSubtasksDialogOpen} onOpenChange={(isOpen) => { setIsManageSubtasksDialogOpen(isOpen); if(!isOpen) setTaskToManageSubtasks(null); }}>
+                <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
-                    <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
-                    <DialogDescription>Update the main details for this task.</DialogDescription>
+                    <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks?.title}</DialogTitle>
+                    <DialogDescription>
+                    Enter sub-tasks one per line.
+                    Start with `* ` for an open task (e.g., `* Design mockups`).
+                    Start with `** ` for a completed task (e.g., `** Create schema`).
+                    Other lines will be treated as new open tasks.
+                    </DialogDescription>
                 </DialogHeader>
-                {taskToEdit && (
-                    <Form {...taskForm}>
-                        <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
-                            <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <Controller
-                                control={taskForm.control}
-                                name="tagsString"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Tags (comma-separated)</FormLabel>
-                                     <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'} 
-                                              onOpenChange={(open) => { 
-                                                if(!open && document.activeElement !== tagInputRef.current) { 
-                                                    setShowTagSuggestions(false); 
-                                                }
-                                            }}
-                                     >
-                                      <PopoverAnchor>
-                                        <FormControl>
-                                        <Input
-                                            {...field}
-                                            ref={tagInputRef}
-                                            placeholder="e.g. frontend, bug, urgent"
-                                            onFocus={() => {
-                                                setActiveTagInputName('tagsString');
-                                                const fragment = getCurrentTagFragment(field.value || "");
-                                                if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
-                                            }}
-                                            onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
-                                            onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => { 
-                                                if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
-                                                    setShowTagSuggestions(false); 
-                                                }
-                                            }, 150)}
-                                        />
-                                        </FormControl>
-                                      </PopoverAnchor>
-                                      {showTagSuggestions && tagSuggestions.length > 0 && (
-                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                                        <Command shouldFilter={false}> 
-                                            <CommandList>
-                                            <CommandEmpty>No matching tags found.</CommandEmpty>
-                                            <CommandGroup>
-                                                {tagSuggestions.map((suggestion, index) => (
-                                                <CommandItem
-                                                    key={suggestion.uuid}
-                                                    value={suggestion.name}
-                                                    onSelect={() => {
-                                                        handleTagSuggestionClick(suggestion, field, taskForm);
-                                                    }}
-                                                     className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
-                                                >
-                                                    {suggestion.name}
-                                                </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                      </PopoverContent>
-                                      )}
-                                    </Popover>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                             <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
-                            {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{\`\${key.charAt(0).toUpperCase() + key.slice(1)}: \${value.join(', ')}\`}</p>)}
-                            <DialogFooter>
-                                <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                                <Button type="submit" disabled={isUpdateTaskPending}> {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Changes </Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                )}
-            </DialogContent>
-        </Dialog>
-
-        <Dialog open={isManageSubtasksDialogOpen} onOpenChange={(isOpen) => { setIsManageSubtasksDialogOpen(isOpen); if(!isOpen) setTaskToManageSubtasks(null); }}>
-            <DialogContent className="sm:max-w-[525px]">
-              <DialogHeader>
-                <DialogTitle>Manage Sub-tasks for: {taskToManageSubtasks?.title}</DialogTitle>
-                <DialogDescription>
-                  Enter sub-tasks one per line.
-                  Start with \`* \` for an open task (e.g., \`* Design mockups\`).
-                  Start with \`** \` for a completed task (e.g., \`** Create schema\`).
-                  Other lines will be treated as new open tasks.
-                </DialogDescription>
-              </DialogHeader>
-              <Textarea
-                placeholder="* Sub-task 1&#x0a;** Sub-task 2 (completed)&#x0a;Another sub-task"
-                value={subtaskInput}
-                onChange={(e) => setSubtaskInput(e.target.value)}
-                rows={8}
-                className="font-mono text-sm"
-              />
-              {updateTaskState?.fieldErrors?.todoListMarkdown && <p className="text-sm text-destructive">Sub-tasks: {updateTaskState.fieldErrors.todoListMarkdown.join(', ')}</p>}
-              <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                <Button type="button" onClick={handleSaveSubtasks} disabled={isUpdateTaskPending}>
-                  {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Sub-tasks
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
+                <Textarea
+                    placeholder="* Sub-task 1&#x0a;** Sub-task 2 (completed)&#x0a;Another sub-task"
+                    value={subtaskInput}
+                    onChange={(e) => setSubtaskInput(e.target.value)}
+                    rows={8}
+                    className="font-mono text-sm"
+                />
+                {updateTaskState?.fieldErrors?.todoListMarkdown && <p className="text-sm text-destructive">Sub-tasks: {updateTaskState.fieldErrors.todoListMarkdown.join(', ')}</p>}
+                <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                    <Button type="button" onClick={handleSaveSubtasks} disabled={isUpdateTaskPending}>
+                    {isUpdateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Sub-tasks
+                    </Button>
+                </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </TabsContent>
 
         <TabsContent value="readme" className="mt-4">
           <Card>
@@ -1617,7 +1615,7 @@ function ProjectDetailPageContent() {
               <CardTitle>Documents ({projectDocuments.length})</CardTitle>
                {canManageDocuments && (
                 <Button size="sm" asChild>
-                  <Link href={\`/projects/\${projectUuid}/documents/new\`}>
+                  <Link href={`/projects/${projectUuid}/documents/new`}>
                     <PlusCircle className="mr-2 h-4 w-4"/> Add Document
                   </Link>
                 </Button>
@@ -1630,7 +1628,7 @@ function ProjectDetailPageContent() {
                     <p>No documents in this project yet.</p>
                     {canManageDocuments && 
                         <Button size="sm" className="mt-4" asChild>
-                           <Link href={\`/projects/\${projectUuid}/documents/new\`}>
+                           <Link href={`/projects/${projectUuid}/documents/new`}>
                             <PlusCircle className="mr-2 h-4 w-4"/> Add your first document
                           </Link>
                         </Button>
@@ -1663,7 +1661,7 @@ function ProjectDetailPageContent() {
                         <div className="flex gap-1.5 flex-shrink-0 self-end sm:self-center">
                            {canManageDocuments && (doc.fileType === 'markdown') && (
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Document" asChild>
-                              <Link href={\`/projects/\${projectUuid}/documents/\${doc.uuid}/edit\`}>
+                              <Link href={`/projects/${projectUuid}/documents/${doc.uuid}/edit`}>
                                 <Edit3 className="h-4 w-4" />
                               </Link>
                             </Button>
@@ -1708,11 +1706,11 @@ function ProjectDetailPageContent() {
             <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{documentToView?.title}</DialogTitle>
-                    <DialogDescription asChild>
-                        <div className="text-sm text-muted-foreground pt-1">
+                     <DialogDescription asChild>
+                        <div className="text-sm text-muted-foreground pt-1 space-x-1.5">
                             {documentToView?.createdByName && (
                                 <>
-                                <Avatar className="h-5 w-5 inline-block mr-1.5 align-middle">
+                                <Avatar className="h-5 w-5 inline-block align-middle">
                                     <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar small" />
                                     <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
                                 </Avatar>
