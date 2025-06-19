@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2 } from 'lucide-react';
 import Link from 'next/link';
-import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus } from '@/types';
+import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
@@ -50,6 +50,11 @@ import {
   fetchDocumentsAction,
   deleteDocumentAction,
   type DeleteDocumentFormState,
+  createProjectAnnouncementAction,
+  type CreateProjectAnnouncementFormState,
+  fetchProjectAnnouncementsAction,
+  deleteProjectAnnouncementAction,
+  type DeleteProjectAnnouncementFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -65,7 +70,6 @@ import remarkGfm from 'remark-gfm';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 
-const projectAnnouncements: any[] = [];
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
 const memberRoles: Exclude<ProjectMemberRole, 'owner'>[] = ['co-owner', 'editor', 'viewer'];
@@ -99,6 +103,12 @@ const projectTagFormSchema = z.object({
   tagColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid color format. Must be #RRGGBB."),
 });
 type ProjectTagFormValues = z.infer<typeof projectTagFormSchema>;
+
+const projectAnnouncementFormSchema = z.object({
+  title: z.string().min(1, "Title is required.").max(255),
+  content: z.string().min(1, "Content is required."),
+});
+type ProjectAnnouncementFormValues = z.infer<typeof projectAnnouncementFormSchema>;
 
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
@@ -146,6 +156,7 @@ function ProjectDetailPageContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectTags, setProjectTags] = useState<TagType[]>([]);
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocumentType[]>([]);
+  const [projectAnnouncements, setProjectAnnouncements] = useState<ProjectAnnouncementType[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
 
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -182,6 +193,9 @@ function ProjectDetailPageContent() {
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
   const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
+
+  const [isCreateAnnouncementDialogOpen, setIsCreateAnnouncementDialogOpen] = useState(false);
+  const [announcementToDelete, setAnnouncementToDelete] = useState<ProjectAnnouncementType | null>(null);
   
   const [activeTab, setActiveTab] = useState('tasks');
 
@@ -217,6 +231,11 @@ function ProjectDetailPageContent() {
     defaultValues: { tagName: '', tagColor: '#6B7280' },
   });
 
+  const projectAnnouncementForm = useForm<ProjectAnnouncementFormValues>({
+    resolver: zodResolver(projectAnnouncementFormSchema),
+    defaultValues: { title: '', content: '' },
+  });
+
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
   const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
@@ -229,6 +248,8 @@ function ProjectDetailPageContent() {
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
   const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
   const [deleteDocumentState, deleteDocumentFormAction, isDeleteDocumentPending] = useActionState(deleteDocumentAction, { message: "", error: "" });
+  const [createAnnouncementState, createProjectAnnouncementFormAction, isCreateAnnouncementPending] = useActionState(createProjectAnnouncementAction, { message: "", error: "" });
+  const [deleteAnnouncementState, deleteProjectAnnouncementFormAction, isDeleteAnnouncementPending] = useActionState(deleteProjectAnnouncementAction, { message: "", error: ""});
 
 
   const loadTasks = useCallback(async () => {
@@ -293,6 +314,19 @@ function ProjectDetailPageContent() {
     }
   }, [projectUuid, toast]);
 
+  const loadProjectAnnouncements = useCallback(async () => {
+    if (projectUuid) {
+      try {
+        const announcements = await fetchProjectAnnouncementsAction(projectUuid);
+        setProjectAnnouncements(announcements || []);
+      } catch (error) {
+        console.error("Failed to load project announcements:", error);
+        setProjectAnnouncements([]);
+        toast({ variant: "destructive", title: "Error", description: "Could not load project announcements." });
+      }
+    }
+  }, [projectUuid, toast]);
+
 
  useEffect(() => {
     const performLoadProjectData = async () => {
@@ -326,6 +360,7 @@ function ProjectDetailPageContent() {
                     await loadTasks();
                     await loadProjectTagsData();
                     await loadProjectDocuments();
+                    await loadProjectAnnouncements();
 
                 } else {
                     setAccessDenied(true);
@@ -345,7 +380,7 @@ function ProjectDetailPageContent() {
         }
     };
       performLoadProjectData();
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements]);
 
 
   useEffect(() => {
@@ -555,6 +590,33 @@ function ProjectDetailPageContent() {
     }
   }, [deleteDocumentState, isDeleteDocumentPending, toast, loadProjectDocuments]);
 
+  useEffect(() => {
+    if (!isCreateAnnouncementPending && createAnnouncementState) {
+      if (createAnnouncementState.message && !createAnnouncementState.error) {
+        toast({ title: "Success", description: createAnnouncementState.message });
+        setIsCreateAnnouncementDialogOpen(false);
+        projectAnnouncementForm.reset({ title: '', content: ''});
+        loadProjectAnnouncements();
+      }
+      if (createAnnouncementState.error) {
+        toast({ variant: "destructive", title: "Announcement Error", description: createAnnouncementState.error });
+      }
+    }
+  }, [createAnnouncementState, isCreateAnnouncementPending, toast, projectAnnouncementForm, loadProjectAnnouncements]);
+
+  useEffect(() => {
+    if (!isDeleteAnnouncementPending && deleteAnnouncementState) {
+      if (deleteAnnouncementState.message && !deleteAnnouncementState.error) {
+        toast({ title: "Success", description: deleteAnnouncementState.message });
+        setAnnouncementToDelete(null);
+        loadProjectAnnouncements();
+      }
+      if (deleteAnnouncementState.error) {
+        toast({ variant: "destructive", title: "Delete Error", description: deleteAnnouncementState.error });
+      }
+    }
+  }, [deleteAnnouncementState, isDeleteAnnouncementPending, toast, loadProjectAnnouncements]);
+
 
   useEffect(() => {
     if (project) {
@@ -569,6 +631,7 @@ function ProjectDetailPageContent() {
   const canEditTaskStatus = !!currentUserRole;
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
   const canManageDocuments = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
+  const canManageAnnouncements = currentUserRole === 'owner' || currentUserRole === 'co-owner';
 
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -952,6 +1015,28 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid); 
     ReactStartTransition(() => {
       deleteDocumentFormAction(formData);
+    });
+  };
+
+  const handleCreateProjectAnnouncementSubmit = async (values: ProjectAnnouncementFormValues) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('title', values.title);
+    formData.append('content', values.content);
+    ReactStartTransition(() => {
+      createProjectAnnouncementFormAction(formData);
+    });
+  };
+
+  const handleDeleteAnnouncementConfirm = () => {
+    if (!announcementToDelete || !project) return;
+    const formData = new FormData();
+    formData.append('announcementUuid', announcementToDelete.uuid);
+    formData.append('projectUuid', project.uuid);
+    formData.append('authorUuid', announcementToDelete.authorUuid);
+    ReactStartTransition(() => {
+      deleteProjectAnnouncementFormAction(formData);
     });
   };
 
@@ -1536,9 +1621,17 @@ function ProjectDetailPageContent() {
                             </h4>
                             <Badge variant="outline" className="text-xs capitalize">{doc.fileType}</Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Created: {new Date(doc.createdAt).toLocaleDateString()} | Updated: {new Date(doc.updatedAt).toLocaleDateString()}
-                          </p>
+                          <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                            <Avatar className="h-4 w-4">
+                                <AvatarImage src={doc.creatorAvatar} alt={doc.createdByName} data-ai-hint="user avatar" />
+                                <AvatarFallback className="text-xs">{getInitials(doc.createdByName)}</AvatarFallback>
+                            </Avatar>
+                            <span>{doc.createdByName || 'Unknown User'}</span>
+                            <span>•</span>
+                            <span>Created: {new Date(doc.createdAt).toLocaleDateString()}</span>
+                            <span>•</span>
+                            <span>Updated: {new Date(doc.updatedAt).toLocaleDateString()}</span>
+                          </div>
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0 self-end sm:self-center">
                            {canManageDocuments && (doc.fileType === 'markdown') && (
@@ -1588,7 +1681,17 @@ function ProjectDetailPageContent() {
             <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{documentToView?.title}</DialogTitle>
-                    <div className="text-sm text-muted-foreground pt-1"> {/* Replaced DialogDescription */}
+                    <div className="text-sm text-muted-foreground pt-1">
+                        {documentToView?.createdByName && (
+                            <>
+                            <Avatar className="h-5 w-5 inline-block mr-1.5 align-middle">
+                                <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar" />
+                                <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
+                            </Avatar>
+                            By: {documentToView?.createdByName}
+                            <span className="mx-1.5">|</span>
+                            </>
+                        )}
                         Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
                         <span className="mx-1.5">|</span>
                         Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}
@@ -1625,24 +1728,113 @@ function ProjectDetailPageContent() {
             </DialogContent>
         </Dialog>
 
-
         <TabsContent value="announcements" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Announcements ({projectAnnouncements.length})</CardTitle>
-              {canManageProjectSettings && <Button size="sm" onClick={() => {}} ><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>}
+              {canManageAnnouncements && (
+                <Dialog open={isCreateAnnouncementDialogOpen} onOpenChange={(isOpen) => { setIsCreateAnnouncementDialogOpen(isOpen); if (!isOpen) projectAnnouncementForm.reset(); }}>
+                  <DialogTrigger asChild>
+                    <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> New Announcement</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create New Project Announcement</DialogTitle>
+                    </DialogHeader>
+                    <Form {...projectAnnouncementForm}>
+                      <form onSubmit={projectAnnouncementForm.handleSubmit(handleCreateProjectAnnouncementSubmit)} className="space-y-4">
+                        <FormField
+                          control={projectAnnouncementForm.control}
+                          name="title"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Title</FormLabel>
+                              <FormControl><Input {...field} placeholder="e.g., Sprint Review Next Week" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={projectAnnouncementForm.control}
+                          name="content"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Content (Markdown supported)</FormLabel>
+                              <FormControl><Textarea {...field} rows={6} placeholder="Details about the announcement..." /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        {createAnnouncementState?.error && !createAnnouncementState.fieldErrors && <p className="text-sm text-destructive">{createAnnouncementState.error}</p>}
+                        <DialogFooter>
+                          <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreateAnnouncementPending}>Cancel</Button></DialogClose>
+                          <Button type="submit" disabled={isCreateAnnouncementPending}>
+                            {isCreateAnnouncementPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Create Announcement
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+              )}
             </CardHeader>
             <CardContent>
-              {projectAnnouncements.length > 0 ? projectAnnouncements.map((ann: any) => (
-                <Card key={ann.uuid} className="p-3 mb-3">
-                  <h4 className="font-semibold">{ann.title}</h4>
-                  <p className="text-sm text-muted-foreground">{ann.content}</p>
-                  <p className="text-xs text-muted-foreground mt-1">By: {ann.authorUuid} on {new Date(ann.createdAt).toLocaleDateString()}</p>
-                </Card>
-              )) : <p className="text-muted-foreground text-center py-4">No announcements for this project yet.</p>}
+              {projectAnnouncements.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Megaphone className="mx-auto h-12 w-12 mb-4" />
+                  <p>No announcements for this project yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {projectAnnouncements.map((ann) => (
+                    <Card key={ann.uuid} className="shadow-sm">
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-lg">{ann.title}</CardTitle>
+                          { (canManageAnnouncements || user?.uuid === ann.authorUuid) && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete Announcement" onClick={() => setAnnouncementToDelete(ann)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                              </AlertDialogTrigger>
+                              {announcementToDelete?.uuid === ann.uuid && (
+                              <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Announcement: "{announcementToDelete.title}"?</AlertDialogTitle>
+                                      <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                      <AlertDialogCancel onClick={() => setAnnouncementToDelete(null)}>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={handleDeleteAnnouncementConfirm} disabled={isDeleteAnnouncementPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                          {isDeleteAnnouncementPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                                      </AlertDialogAction>
+                                  </AlertDialogFooter>
+                              </AlertDialogContent>
+                              )}
+                            </AlertDialog>
+                          )}
+                        </div>
+                        <CardDescription className="text-xs flex items-center gap-1.5">
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={ann.authorAvatar} alt={ann.authorName} data-ai-hint="user avatar small" />
+                            <AvatarFallback className="text-xs">{getInitials(ann.authorName)}</AvatarFallback>
+                          </Avatar>
+                          By {ann.authorName || 'Unknown User'} on {new Date(ann.createdAt).toLocaleDateString()}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{ann.content}</ReactMarkdown>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
+
 
         <TabsContent value="codespace" className="mt-4">
           <Card>
@@ -1720,7 +1912,7 @@ function ProjectDetailPageContent() {
                                     {inviteFormState?.fieldErrors?.projectUuid && <p className="text-sm text-destructive">{inviteFormState.fieldErrors.projectUuid.join(', ')}</p>}
                                     {inviteFormState?.error && !inviteFormState.fieldErrors && <p className="text-sm text-destructive">{inviteFormState.error}</p>}
                                     <DialogFooter>
-                                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                                        <DialogClose asChild><Button type="button" variant="ghost" disabled={isInvitePending}>Cancel</Button></DialogClose>
                                         <Button type="submit" disabled={isInvitePending}>
                                             {isInvitePending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                             Send Invitation
@@ -1865,7 +2057,7 @@ function ProjectDetailPageContent() {
                                         />
                                         {createProjectTagState?.error && <p className="text-sm text-destructive">{createProjectTagState.error}</p>}
                                         <DialogFooter>
-                                            <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                                            <DialogClose asChild><Button variant="ghost" disabled={isCreateProjectTagPending}>Cancel</Button></DialogClose>
                                             <Button type="submit" disabled={isCreateProjectTagPending}>
                                                 {isCreateProjectTagPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Add Tag
                                             </Button>
@@ -1912,3 +2104,4 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
+

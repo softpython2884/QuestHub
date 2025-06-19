@@ -43,6 +43,8 @@ export interface Document {
   filePath?: string; // URL or path for PDF or other uploaded files
   projectUuid: string;
   createdByUuid: string; // UUID of the user who created/uploaded the document
+  createdByName?: string; // Name of the user who created
+  creatorAvatar?: string; // Avatar of the user who created
   isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -70,13 +72,16 @@ export interface Project {
 }
 
 export interface Announcement {
-  id: string;
-  uuid: string;
+  id: string; // DB auto-increment ID
+  uuid: string; // Globally unique
   title: string;
   content: string;
   authorUuid: string;
-  projectUuid?: string;
-  isGlobal: boolean;
+  authorName?: string;
+  authorAvatar?: string;
+  projectUuid: string; // Changed from optional to required for project-specific announcements
+  isGlobal: boolean; // Will be false for project-specific ones
   createdAt: string;
   updatedAt: string;
 }
+

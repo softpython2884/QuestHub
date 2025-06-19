@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -27,6 +27,9 @@ import {
   updateDocumentContent as dbUpdateDocumentContent,
   deleteDocument as dbDeleteDocument,
   getDocumentByUuid as dbGetDocumentByUuid,
+  createProjectAnnouncement as dbCreateProjectAnnouncement,
+  getProjectAnnouncements as dbGetProjectAnnouncements,
+  deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -875,4 +878,109 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
         console.error("Error deleting document:", error);
         return { error: error.message || "An unexpected error occurred." };
     }
+}
+
+// Project Announcement Actions
+const CreateProjectAnnouncementSchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  title: z.string().min(1, "Title is required.").max(255),
+  content: z.string().min(1, "Content is required."),
+});
+
+export interface CreateProjectAnnouncementFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: Record<string, string[] | undefined>;
+  createdAnnouncement?: ProjectAnnouncement;
+}
+
+export async function createProjectAnnouncementAction(
+  prevState: CreateProjectAnnouncementFormState,
+  formData: FormData
+): Promise<CreateProjectAnnouncementFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const validatedFields = CreateProjectAnnouncementSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    title: formData.get('title'),
+    content: formData.get('content'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
+  }
+  const { projectUuid, title, content } = validatedFields.data;
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to create announcements for this project." };
+    }
+    
+    const createdAnnouncement = await dbCreateProjectAnnouncement({
+      projectUuid,
+      title,
+      content,
+      authorUuid: session.user.uuid,
+    });
+    return { message: "Announcement created successfully!", createdAnnouncement };
+  } catch (error: any) {
+    console.error("Error creating project announcement:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export async function fetchProjectAnnouncementsAction(projectUuid: string | undefined): Promise<ProjectAnnouncement[]> {
+  if (!projectUuid) return [];
+  try {
+    return await dbGetProjectAnnouncements(projectUuid);
+  } catch (error) {
+    console.error("Failed to fetch project announcements:", error);
+    return [];
+  }
+}
+
+export interface DeleteProjectAnnouncementFormState {
+  message?: string;
+  error?: string;
+}
+
+export async function deleteProjectAnnouncementAction(
+  prevState: DeleteProjectAnnouncementFormState,
+  formData: FormData
+): Promise<DeleteProjectAnnouncementFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const announcementUuid = formData.get('announcementUuid') as string;
+  const projectUuid = formData.get('projectUuid') as string;
+  const authorUuid = formData.get('authorUuid') as string;
+
+
+  if (!announcementUuid || !projectUuid) {
+    return { error: "Announcement UUID and Project UUID are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    const canDelete = userRole === 'owner' || userRole === 'co-owner' || session.user.uuid === authorUuid;
+    
+    if (!canDelete) {
+      return { error: "You do not have permission to delete this announcement." };
+    }
+
+    const success = await dbDeleteProjectAnnouncement(announcementUuid);
+    if (success) {
+      return { message: "Announcement deleted successfully." };
+    }
+    return { error: "Failed to delete announcement." };
+  } catch (error: any) {
+    console.error("Error deleting project announcement:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
 }

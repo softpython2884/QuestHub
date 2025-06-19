@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -316,11 +316,11 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
-      projectUuid TEXT,
+      projectUuid TEXT NOT NULL, /* Ensuring projectUuid is always present for project-specific announcements */
       authorUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
-      isGlobal BOOLEAN NOT NULL DEFAULT FALSE,
+      isGlobal BOOLEAN NOT NULL DEFAULT FALSE, /* Will be false for project announcements */
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
@@ -958,21 +958,27 @@ export async function createDocument(data: {
 
 export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocumentType[]> {
   const connection = await getDbConnection();
-  const docs = await connection.all<Array<ProjectDocumentType & { isPinned: 0 | 1 }>>(
-    'SELECT * FROM project_documents WHERE projectUuid = ? ORDER BY updatedAt DESC',
+  const docs = await connection.all<Array<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>>(
+    `SELECT pd.*, u.name as createdByName, u.avatar as creatorAvatar
+     FROM project_documents pd
+     JOIN users u ON pd.createdByUuid = u.uuid
+     WHERE pd.projectUuid = ? ORDER BY pd.updatedAt DESC`,
     projectUuid
   );
-  return docs.map(doc => ({ ...doc, isPinned: !!doc.isPinned }));
+  return docs.map(doc => ({ ...doc, id: doc.id.toString(), isPinned: !!doc.isPinned }));
 }
 
 export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentType | null> {
   const connection = await getDbConnection();
-  const doc = await connection.get<ProjectDocumentType & { isPinned: 0 | 1 }>(
-    'SELECT * FROM project_documents WHERE uuid = ?',
+  const doc = await connection.get<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>(
+    `SELECT pd.*, u.name as createdByName, u.avatar as creatorAvatar
+     FROM project_documents pd
+     JOIN users u ON pd.createdByUuid = u.uuid
+     WHERE pd.uuid = ?`,
     uuid
   );
   if (!doc) return null;
-  return { ...doc, isPinned: !!doc.isPinned };
+  return { ...doc, id: doc.id.toString(), isPinned: !!doc.isPinned };
 }
 
 export async function updateDocumentContent(docUuid: string, title: string, content?: string): Promise<ProjectDocumentType | null> {
@@ -1002,5 +1008,58 @@ export async function updateDocumentContent(docUuid: string, title: string, cont
 export async function deleteDocument(docUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   const result = await connection.run('DELETE FROM project_documents WHERE uuid = ?', docUuid);
+  return result.changes ? result.changes > 0 : false;
+}
+
+// Project Announcement DB Functions
+export async function createProjectAnnouncement(data: {
+  projectUuid: string;
+  authorUuid: string;
+  title: string;
+  content: string;
+}): Promise<ProjectAnnouncement> {
+  const connection = await getDbConnection();
+  const announcementUuid = uuidv4();
+  const now = new Date().toISOString();
+
+  const result = await connection.run(
+    'INSERT INTO project_announcements (uuid, projectUuid, authorUuid, title, content, isGlobal, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    announcementUuid, data.projectUuid, data.authorUuid, data.title, data.content, false, now, now
+  );
+  if (!result.lastID) throw new Error('Project announcement creation failed.');
+
+  const authorDetails = await getUserByUuid(data.authorUuid);
+
+  return {
+    id: result.lastID!.toString(),
+    uuid: announcementUuid,
+    projectUuid: data.projectUuid,
+    authorUuid: data.authorUuid,
+    authorName: authorDetails?.name,
+    authorAvatar: authorDetails?.avatar,
+    title: data.title,
+    content: data.content,
+    isGlobal: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function getProjectAnnouncements(projectUuid: string): Promise<ProjectAnnouncement[]> {
+  const connection = await getDbConnection();
+  const announcements = await connection.all<Array<ProjectAnnouncement & {authorName: string, authorAvatar?: string}>>(
+    `SELECT pa.*, u.name as authorName, u.avatar as authorAvatar
+     FROM project_announcements pa
+     JOIN users u ON pa.authorUuid = u.uuid
+     WHERE pa.projectUuid = ? AND pa.isGlobal = FALSE
+     ORDER BY pa.createdAt DESC`,
+    projectUuid
+  );
+  return announcements.map(ann => ({...ann, id: ann.id.toString()}));
+}
+
+export async function deleteProjectAnnouncement(announcementUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
