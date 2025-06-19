@@ -1098,18 +1098,20 @@ export async function linkProjectToGithubAction(
       }
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
     } catch (apiError: any) {
-      console.error("GitHub API error creating repository:", apiError.status, apiError.message, apiError.response?.data);
+      console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
       if (apiError.status === 422) { 
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${apiError.message}` };
       }
-       if (apiError.status === 404 && apiError.message?.includes("Resource not accessible by integration")) {
-        return { error: `The FlowUp GitHub App does not have permission to create repositories for the selected account/organization (${userGithubInstallation.github_account_login || 'unknown'}). Please check the app's repository permissions or re-install it with the correct access.`};
+       if (apiError.status === 403 && apiError.message?.includes("Resource not accessible by integration")) {
+        return { error: `The FlowUp GitHub App does not have permission to create repositories for the selected account/organization (${userGithubInstallation.github_account_login || 'unknown'}). Please check the app's repository permissions or re-install it with the correct access. GitHub details: ${apiError.message}`};
       }
-      // Handle TypeError specifically if octokit.rest.repos was undefined
+      if (apiError.status === 404 && apiError.message?.includes("Resource not accessible by integration")) {
+         return { error: `The FlowUp GitHub App may not have access to the specific organization or user account (${userGithubInstallation.github_account_login || 'unknown'}) targeted for repository creation. Please ensure the app is installed and has permissions for that entity. GitHub details: ${apiError.message}` };
+      }
       if (apiError instanceof TypeError && apiError.message.includes("Cannot read properties of undefined (reading 'repos')")) {
         return { error: `GitHub API client error: Failed to access repository functions. Please ensure the GitHub App is configured correctly. Details: ${apiError.message}`};
       }
-      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message}` };
+      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message} - ${apiError.documentation_url || ''}` };
     }
     
     const repoUrl = createdRepo.data.html_url;
@@ -1128,5 +1130,3 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
-
-    
