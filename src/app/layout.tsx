@@ -4,7 +4,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'NationQuest Hub',
+  title: 'FlowUp',
   description: 'Your all-in-one project management and collaboration platform.',
 };
 

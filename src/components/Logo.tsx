@@ -11,7 +11,7 @@ export function Logo({ className, iconSize = 24, textSize = 'text-xl' }: LogoPro
   return (
     <Link href="/" className={`flex items-center gap-2 ${className}`}>
       <Briefcase size={iconSize} className="text-primary" />
-      <span className={`font-bold ${textSize} text-foreground`}>NationQuest Hub</span>
+      <span className={`font-bold ${textSize} text-foreground`}>FlowUp</span>
     </Link>
   );
 }

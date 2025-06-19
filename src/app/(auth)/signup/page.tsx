@@ -34,7 +34,7 @@ export default function SignupPage() {
     <Card className="shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Create your Account</CardTitle>
-        <CardDescription>Join NationQuest Hub and streamline your projects.</CardDescription>
+        <CardDescription>Join FlowUp and streamline your projects.</CardDescription>
       </CardHeader>
       <CardContent>
         <SignupForm />

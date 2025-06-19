@@ -33,7 +33,7 @@ export default function LoginPage() {
     <Card className="shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Welcome Back!</CardTitle>
-        <CardDescription>Sign in to access your NationQuest Hub workspace.</CardDescription>
+        <CardDescription>Sign in to access your FlowUp workspace.</CardDescription>
       </CardHeader>
       <CardContent>
         <LoginForm />

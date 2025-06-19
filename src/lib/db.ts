@@ -12,7 +12,7 @@ import fs from 'fs';
 let db: Database | null = null;
 
 const DB_DIR = path.join(process.cwd(), 'db');
-const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
+const DB_PATH = path.join(DB_DIR, 'flowup_hub.db'); // Renamed DB file
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   // Standard PM Tags
@@ -153,7 +153,7 @@ console.log('Hello FlowUp')
 \`\`\`
 
 Exemple :  
-[Visitez NationQuest](https://nationquest.fr)
+[Visitez FlowUp](https://flowup.example.com)
 
 ---
 
@@ -355,7 +355,7 @@ export async function getDbConnection() {
     );
   `);
 
-  const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@nationquest.com');
+  const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@flowup.com'); // Renamed email
   if (!adminUser) {
     const defaultAdminUUID = '00000000-0000-0000-0000-000000000001'; 
     const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
@@ -363,14 +363,14 @@ export async function getDbConnection() {
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultAdminUUID,
       'Admin User',
-      'admin@nationquest.com',
+      'admin@flowup.com', // Renamed email
       defaultAdminPassword,
       'admin',
       `https://placehold.co/100x100.png?text=AU`
     );
   }
 
-  const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@nationquest.com');
+  const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@flowup.com'); // Renamed email
   if (!memberUser) {
     const defaultMemberUUID = uuidv4();
     const defaultMemberPassword = await bcrypt.hash('memberpassword', 10);
@@ -378,7 +378,7 @@ export async function getDbConnection() {
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultMemberUUID,
       'Member User',
-      'member@nationquest.com',
+      'member@flowup.com', // Renamed email
       defaultMemberPassword,
       'member',
       `https://placehold.co/100x100.png?text=MU`
@@ -1017,4 +1017,3 @@ export async function deleteDocument(docUuid: string): Promise<boolean> {
   const result = await connection.run('DELETE FROM project_documents WHERE uuid = ?', docUuid);
   return result.changes ? result.changes > 0 : false;
 }
-

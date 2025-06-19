@@ -52,7 +52,7 @@ export default function DashboardPage() {
             Welcome back, {user.name}!
           </CardTitle>
           <CardDescription className="text-lg">
-            Here&apos;s what&apos;s happening in your NationQuest Hub workspace today.
+            Here&apos;s what&apos;s happening in your FlowUp workspace today.
           </CardDescription>
         </CardHeader>
         <CardContent>
