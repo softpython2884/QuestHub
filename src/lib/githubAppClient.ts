@@ -2,11 +2,9 @@
 'use server';
 
 import { App } from '@octokit/app';
-import { Octokit } from 'octokit'; // Ensure this is the main Octokit class
+import { Octokit } from 'octokit';
 import fs from 'fs';
 import path from 'path';
-
-let appInstance: App | null = null;
 
 console.log('[GitHubAppClient] Top-level: typeof Octokit import:', typeof Octokit);
 if (Octokit && typeof Octokit === 'function') {
@@ -31,7 +29,7 @@ function getGitHubAppCredentialsOrThrow() {
         console.log(`[GitHubAppClient] Loaded private key from path: ${absolutePath}`);
       } catch (err: any) {
         console.warn(`[GitHubAppClient] Error reading GitHub private key from file ${absolutePath}: ${err.message}. Will check GITHUB_PRIVATE_KEY env var.`);
-        privateKey = undefined; // Explicitly set to undefined if file read fails
+        privateKey = undefined;
       }
     } else {
       console.warn(`[GitHubAppClient] Private key file not found at specified GITHUB_PRIVATE_KEY_PATH: ${absolutePath}. Will check GITHUB_PRIVATE_KEY env var.`);
@@ -50,7 +48,7 @@ function getGitHubAppCredentialsOrThrow() {
     if (privateKeyPath && !privateKeyEnvVar) {
       errorMessage += `Checked GITHUB_PRIVATE_KEY_PATH (${privateKeyPath}) but file was not found or was unreadable, and GITHUB_PRIVATE_KEY environment variable was not set.`;
     } else if (!privateKeyPath && privateKeyEnvVar) {
-      errorMessage += 'GITHUB_PRIVATE_KEY environment variable was set but GITHUB_PRIVATE_KEY_PATH was not (unexpected if trying to prioritize file).';
+      errorMessage += 'GITHUB_PRIVATE_KEY environment variable was set but GITHUB_PRIVATE_KEY_PATH was not (this is unexpected if trying to prioritize file reading).';
     } else if (privateKeyPath && privateKeyEnvVar) {
         errorMessage += `Attempted to load from GITHUB_PRIVATE_KEY_PATH (${privateKeyPath}) first, but failed, and also checked GITHUB_PRIVATE_KEY. Ensure one is correctly configured.`;
     } else {
@@ -69,9 +67,15 @@ function getGitHubAppCredentialsOrThrow() {
   };
 }
 
-// Simplified: Re-create app instance on each call for now to avoid staleness issues.
-// We can optimize with a singleton later if needed.
+// Singleton pattern for App instance to avoid re-instantiating on every call if not necessary,
+// but currently re-instantiating to ensure fresh config, can be optimized later.
+// let appInstance: App | null = null;
+
 async function getAppInstance(): Promise<App> {
+  // if (appInstance) {
+  //   console.log('[getAppInstance] Returning cached GitHub App client instance.');
+  //   return appInstance;
+  // }
   const { appId, privateKey, clientId, clientSecret } = getGitHubAppCredentialsOrThrow();
   console.log('[getAppInstance] Initializing GitHub App client instance...');
   try {
@@ -79,20 +83,23 @@ async function getAppInstance(): Promise<App> {
       appId,
       privateKey,
       oauth: { clientId, clientSecret },
-      Octokit: Octokit, // Explicitly pass the Octokit constructor
+      Octokit: Octokit, // Explicitly pass the Octokit constructor from the 'octokit' package
     });
     console.log('[getAppInstance] GitHub App client instantiated with explicit Octokit.');
     if (!app || typeof app.getInstallationOctokit !== 'function') {
       console.error('[getAppInstance] Failed to instantiate GitHub App properly (missing getInstallationOctokit).');
       throw new Error('Failed to instantiate GitHub App client (missing getInstallationOctokit).');
     }
-    // @ts-ignore
-    if (typeof app.octokit !== 'function') {
-        console.error('[getAppInstance] CRITICAL: app.octokit on the App instance is NOT a function. Type:', typeof app.octokit);
-        // Even if app.octokit is not a function, app.getInstallationOctokit might still work if it uses the passed Octokit.
+    
+    // @ts-ignore app.octokit is a property, not a function according to latest error
+    if (typeof app.octokit === 'function') {
+        console.warn('[getAppInstance] app.octokit on the App instance IS a function. This is unexpected based on recent errors.');
+    } else if (typeof app.octokit === 'object' && app.octokit !== null) {
+        console.log('[getAppInstance] app.octokit on the App instance IS an object (expected).');
     } else {
-        console.log('[getAppInstance] app.octokit on the App instance IS a function.');
+        console.error('[getAppInstance] CRITICAL: app.octokit on the App instance is neither a function nor a valid object. Type:', typeof app.octokit);
     }
+    // appInstance = app; // Cache the instance
     return app;
   } catch (e: any) {
     console.error('[getAppInstance] Error during App instantiation:', e.message, e.stack);
@@ -145,24 +152,26 @@ export async function getAppAuthOctokit(): Promise<Octokit> {
     console.log('[getAppAuthOctokit] Attempting to get app-authenticated Octokit.');
     
     // @ts-ignore
-    if (typeof app.octokit !== 'function') {
-        console.error('[getAppAuthOctokit] app.octokit is not a function. Type:', typeof app.octokit, 'Value:', app.octokit);
-        throw new Error('app.octokit is not a function on the App instance.');
+    if (typeof app.octokit === 'function') {
+        console.error('[getAppAuthOctokit] app.octokit is a function, this is unexpected. Type:', typeof app.octokit);
+        throw new Error('app.octokit is a function on the App instance, but expected an object.');
     }
 
     // @ts-ignore
-    const octokitInstance = await app.octokit();
-    console.log('[getAppAuthOctokit] Successfully obtained app-authenticated Octokit instance.');
-
+    const octokitInstance = app.octokit; // Access as a property
+    
     if (!octokitInstance) {
-        console.error('[getAppAuthOctokit] app.octokit() returned undefined after App instantiation.');
-        throw new Error('Failed to get app-authenticated Octokit instance: app.octokit() is undefined.');
+        console.error('[getAppAuthOctokit] app.octokit is undefined or null after App instantiation.');
+        throw new Error('Failed to get app-authenticated Octokit instance: app.octokit is falsy.');
     }
+    
+    console.log('[getAppAuthOctokit] Successfully obtained app-authenticated Octokit instance directly from app.octokit property.');
+
     // @ts-ignore
     if (!octokitInstance.rest) {
-        console.error('[getAppAuthOctokit] CRITICAL: App-authenticated Octokit instance is missing .rest property!');
-        throw new Error('App-authenticated Octokit instance is missing .rest property.');
+        console.error('[getAppAuthOctokit] CRITICAL: App-authenticated Octokit instance (from app.octokit property) is missing .rest property!');
+        throw new Error('App-authenticated Octokit instance (from app.octokit property) is missing .rest property.');
     }
-    console.log('[getAppAuthOctokit] App-authenticated Octokit instance seems valid.');
+    console.log('[getAppAuthOctokit] App-authenticated Octokit instance (from app.octokit property) seems valid.');
     return octokitInstance as Octokit;
 }
