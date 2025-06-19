@@ -1080,23 +1080,16 @@ export async function linkProjectToGithubAction(
         return { error: "Could not determine the GitHub account login for the installation." };
       }
 
-      if (accountType === "Organization") {
-        console.log(`Creating repository in organization: ${accountLogin}`);
-        createdRepo = await octokit.rest.repos.createInOrg({
-          org: accountLogin,
-          name: repoSlug,
-          private: true, 
-          description: `Repository for FlowUp project: ${projectName}`,
-        });
-      } else { 
-        console.log(`Creating repository for user: ${accountLogin}`);
-        createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
-          name: repoSlug,
-          private: true,
-          description: `Repository for FlowUp project: ${projectName}`,
-        });
-      }
+      console.log(`Creating repository for ${accountType}: ${accountLogin}`);
+      // Experimental: Always use createInOrg, treating user accounts as orgs for this API call.
+      createdRepo = await octokit.rest.repos.createInOrg({
+        org: accountLogin, // For User type, this will be their username. For Org type, it's the org login.
+        name: repoSlug,
+        private: true, 
+        description: `Repository for FlowUp project: ${projectName}`,
+      });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
+
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
       if (apiError.status === 422) { 
@@ -1130,3 +1123,6 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
+
+
+    
