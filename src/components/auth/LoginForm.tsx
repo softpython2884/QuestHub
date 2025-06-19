@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +22,7 @@ import { useState } from "react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }), // Simple validation for mock
+  password: z.string().min(1, { message: "Password is required." }),
 });
 
 export function LoginForm() {
@@ -60,7 +61,14 @@ export function LoginForm() {
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                  <Input placeholder="your@email.com" {...field} className="pl-10" />
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    {...field}
+                    name="email"
+                    autoComplete="email"
+                    className="pl-10"
+                  />
                 </FormControl>
               </div>
               <FormMessage />
@@ -76,7 +84,14 @@ export function LoginForm() {
               <div className="relative">
                  <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                  <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} className="pl-10 pr-10" />
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    {...field}
+                    name="password"
+                    autoComplete="current-password"
+                    className="pl-10 pr-10"
+                  />
                 </FormControl>
                 <Button
                     type="button"

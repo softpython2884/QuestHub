@@ -41,8 +41,7 @@ export function SignupForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     clearError();
-    // Role is defaulted to 'member' in authService.signup or can be passed if needed
-    await signup(values.name, values.email, values.password); 
+    await signup(values.name, values.email, values.password);
   }
 
   return (
@@ -64,7 +63,13 @@ export function SignupForm() {
               <div className="relative">
                 <UserIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                  <Input placeholder="Your Name" {...field} className="pl-10" />
+                  <Input
+                    placeholder="Your Name"
+                    {...field}
+                    name="name"
+                    autoComplete="name"
+                    className="pl-10"
+                  />
                 </FormControl>
               </div>
               <FormMessage />
@@ -80,7 +85,14 @@ export function SignupForm() {
                <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                  <Input placeholder="your@email.com" {...field} className="pl-10" />
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    {...field}
+                    name="email"
+                    autoComplete="email"
+                    className="pl-10"
+                  />
                 </FormControl>
               </div>
               <FormMessage />
@@ -96,7 +108,14 @@ export function SignupForm() {
               <div className="relative">
                 <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                 <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} className="pl-10 pr-10" />
+                 <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    {...field}
+                    name="password"
+                    autoComplete="new-password"
+                    className="pl-10 pr-10"
+                 />
                 </FormControl>
                  <Button
                     type="button"

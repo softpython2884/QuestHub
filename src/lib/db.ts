@@ -277,11 +277,10 @@ export async function getDbConnection() {
       isUrgent BOOLEAN DEFAULT FALSE,
       githubRepoUrl TEXT,
       githubRepoName TEXT,
-      github_installation_id INTEGER, -- Can be null if project not linked or linked by an older mechanism
+      github_installation_id INTEGER, 
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
-      FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE,
-      FOREIGN KEY (github_installation_id) REFERENCES user_github_installations (github_installation_id) ON DELETE SET NULL
+      FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS project_members (
@@ -1132,4 +1131,3 @@ export async function deleteProjectAnnouncement(announcementUuid: string): Promi
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
-
