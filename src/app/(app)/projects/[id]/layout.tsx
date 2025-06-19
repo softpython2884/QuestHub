@@ -2,7 +2,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useActionState } from 'react';
+import React, { useEffect, useState, useCallback, startTransition as ReactStartTransition, useActionState, cloneElement } from 'react';
 import type { Project, ProjectMemberRole, User } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from "@/components/ui/button";
@@ -109,12 +109,13 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
         if(updateProjectFormState.project) {
           setProject(updateProjectFormState.project);
         }
+        loadProjectData(); // Re-fetch to ensure UI consistency
       }
       if (updateProjectFormState.error) {
         toast({ variant: "destructive", title: "Error", description: updateProjectFormState.error });
       }
     }
-  }, [updateProjectFormState, isUpdateProjectPending, toast]);
+  }, [updateProjectFormState, isUpdateProjectPending, toast, loadProjectData]);
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
     if (!project) return;
@@ -224,7 +225,7 @@ export default function ProjectDetailLayout({ children }: { children: React.Reac
       </Card>
 
       {/* Pass project and user data to the children (page.tsx) */}
-      {React.cloneElement(children as React.ReactElement, { project, currentUserRole, user, projectUuid })}
+      {cloneElement(children as React.ReactElement, { project, currentUserRole, user, projectUuid, refreshProjectData: loadProjectData })}
     </div>
   );
 }
