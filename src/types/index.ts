@@ -69,6 +69,8 @@ export interface Project {
   isPrivate?: boolean;
   readmeContent?: string;
   isUrgent?: boolean;
+  githubRepoUrl?: string;
+  githubRepoName?: string;
 }
 
 export interface Announcement {
@@ -79,9 +81,8 @@ export interface Announcement {
   authorUuid: string;
   authorName?: string;
   authorAvatar?: string;
-  projectUuid: string; // Changed from optional to required for project-specific announcements
-  isGlobal: boolean; // Will be false for project-specific ones
+  projectUuid: string; 
+  isGlobal: boolean; 
   createdAt: string;
   updatedAt: string;
 }
-

@@ -7,7 +7,7 @@ import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateU
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 
-const AUTH_COOKIE_NAME = 'flowup_auth_token';
+const AUTH_COOKIE_NAME = 'flowup_auth_token'; // Renamed from nqh_auth_token
 
 const getJwtSecretOrThrow = (): string => {
   const secret = process.env.JWT_SECRET;

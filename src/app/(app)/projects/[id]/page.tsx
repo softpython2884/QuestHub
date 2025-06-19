@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2 } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, UploadCloud, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,8 @@ import {
   fetchProjectAnnouncementsAction,
   deleteProjectAnnouncementAction,
   type DeleteProjectAnnouncementFormState,
+  linkProjectToGithubAction,
+  type LinkProjectToGithubFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -250,6 +252,7 @@ function ProjectDetailPageContent() {
   const [deleteDocumentState, deleteDocumentFormAction, isDeleteDocumentPending] = useActionState(deleteDocumentAction, { message: "", error: "" });
   const [createAnnouncementState, createProjectAnnouncementFormAction, isCreateAnnouncementPending] = useActionState(createProjectAnnouncementAction, { message: "", error: "" });
   const [deleteAnnouncementState, deleteProjectAnnouncementFormAction, isDeleteAnnouncementPending] = useActionState(deleteProjectAnnouncementAction, { message: "", error: ""});
+  const [linkGithubState, linkProjectToGithubFormAction, isLinkGithubPending] = useActionState(linkProjectToGithubAction, { message: "", error: "" });
 
 
   const loadTasks = useCallback(async () => {
@@ -616,6 +619,20 @@ function ProjectDetailPageContent() {
       }
     }
   }, [deleteAnnouncementState, isDeleteAnnouncementPending, toast, loadProjectAnnouncements]);
+  
+  useEffect(() => {
+    if (!isLinkGithubPending && linkGithubState) {
+      if (linkGithubState.message && !linkGithubState.error) {
+        toast({ title: "Success", description: linkGithubState.message });
+        if (linkGithubState.project) {
+          setProject(linkGithubState.project); // Update project state with new GitHub URL
+        }
+      }
+      if (linkGithubState.error) {
+        toast({ variant: "destructive", title: "GitHub Link Error", description: linkGithubState.error });
+      }
+    }
+  }, [linkGithubState, isLinkGithubPending, toast]);
 
 
   useEffect(() => {
@@ -632,6 +649,7 @@ function ProjectDetailPageContent() {
   const isAdminOrOwner = currentUserRole === 'owner' || user?.role === 'admin';
   const canManageDocuments = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
   const canManageAnnouncements = currentUserRole === 'owner' || currentUserRole === 'co-owner';
+  const canManageCodeSpace = currentUserRole === 'owner' || currentUserRole === 'co-owner';
 
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -1037,6 +1055,16 @@ function ProjectDetailPageContent() {
     formData.append('authorUuid', announcementToDelete.authorUuid);
     ReactStartTransition(() => {
       deleteProjectAnnouncementFormAction(formData);
+    });
+  };
+
+  const handleLinkToGithub = () => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('projectName', project.name);
+    ReactStartTransition(() => {
+      linkProjectToGithubFormAction(formData);
     });
   };
 
@@ -1619,16 +1647,15 @@ function ProjectDetailPageContent() {
                             <h4 className="font-semibold cursor-pointer hover:underline" onClick={() => openViewDocumentDialog(doc)}>
                               {doc.title}
                             </h4>
-                            <Badge variant="outline" className="text-xs capitalize">{doc.fileType}</Badge>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-xs capitalize">{doc.fileType}</Badge>
+                            <span>•</span>
                             <Avatar className="h-4 w-4">
-                                <AvatarImage src={doc.creatorAvatar} alt={doc.createdByName} data-ai-hint="user avatar" />
+                                <AvatarImage src={doc.creatorAvatar} alt={doc.createdByName} data-ai-hint="user avatar small" />
                                 <AvatarFallback className="text-xs">{getInitials(doc.createdByName)}</AvatarFallback>
                             </Avatar>
                             <span>{doc.createdByName || 'Unknown User'}</span>
-                            <span>•</span>
-                            <span>Created: {new Date(doc.createdAt).toLocaleDateString()}</span>
                             <span>•</span>
                             <span>Updated: {new Date(doc.updatedAt).toLocaleDateString()}</span>
                           </div>
@@ -1681,21 +1708,23 @@ function ProjectDetailPageContent() {
             <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{documentToView?.title}</DialogTitle>
-                    <div className="text-sm text-muted-foreground pt-1">
-                        {documentToView?.createdByName && (
-                            <>
-                            <Avatar className="h-5 w-5 inline-block mr-1.5 align-middle">
-                                <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar" />
-                                <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
-                            </Avatar>
-                            By: {documentToView?.createdByName}
+                    <DialogDescription asChild>
+                        <div className="text-sm text-muted-foreground pt-1">
+                            {documentToView?.createdByName && (
+                                <>
+                                <Avatar className="h-5 w-5 inline-block mr-1.5 align-middle">
+                                    <AvatarImage src={documentToView?.creatorAvatar} alt={documentToView?.createdByName} data-ai-hint="user avatar small" />
+                                    <AvatarFallback className="text-xs">{getInitials(documentToView?.createdByName)}</AvatarFallback>
+                                </Avatar>
+                                By: {documentToView?.createdByName}
+                                <span className="mx-1.5">|</span>
+                                </>
+                            )}
+                            Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
                             <span className="mx-1.5">|</span>
-                            </>
-                        )}
-                        Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
-                        <span className="mx-1.5">|</span>
-                        Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}
-                    </div>
+                            Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}
+                        </div>
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="flex-grow overflow-y-auto pr-2 mt-2">
                     {documentToView?.fileType === 'markdown' && (
@@ -1839,18 +1868,69 @@ function ProjectDetailPageContent() {
         <TabsContent value="codespace" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace</CardTitle>
-              <CardDescription>Manage your project's code snippets, scripts, and version control links.</CardDescription>
+              <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace & GitHub</CardTitle>
+              <CardDescription>Manage your project's code by linking it to a GitHub repository.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="text-center py-12 text-muted-foreground">
-                <Code2 className="mx-auto h-12 w-12 mb-4" />
-                <h3 className="text-lg font-medium">CodeSpace is Coming Soon!</h3>
-                <p className="mt-1 text-sm">
-                  This area will allow you to link to repositories, manage small scripts,
-                  and keep track of code-related assets for your project.
-                </p>
-              </div>
+            <CardContent className="space-y-4">
+              {!project.githubRepoUrl ? (
+                <>
+                  <div className="p-4 border-dashed border-2 rounded-md text-center">
+                    <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                    <h3 className="text-lg font-semibold mb-1">Link this project to GitHub</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Create a new GitHub repository for this project or link an existing one (feature coming soon).
+                      This will enable code browsing, README sync, and more, directly within FlowUp.
+                    </p>
+                    <form action={linkProjectToGithubFormAction}>
+                        <input type="hidden" name="projectUuid" value={project.uuid} />
+                        <input type="hidden" name="projectName" value={project.name} />
+                        <Button type="submit" disabled={!canManageCodeSpace || isLinkGithubPending}>
+                          {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          <Github className="mr-2 h-4 w-4" /> Create and Link Repository (Simulated)
+                        </Button>
+                    </form>
+                    {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground">
+                    Note: For now, this will simulate linking and set up a placeholder repository URL.
+                    Actual GitHub API integration will be implemented later.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 border rounded-md bg-muted/30">
+                    <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <h3 className="text-lg font-semibold">Project Linked to GitHub!</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      This project is linked to the following GitHub repository:
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <Github className="h-4 w-4" />
+                        <a
+                        href={project.githubRepoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-sm text-primary hover:underline break-all"
+                        >
+                        {project.githubRepoUrl}
+                        </a>
+                        <Link2 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                     <p className="text-sm text-muted-foreground mt-1">Repository Name: <span className="font-medium">{project.githubRepoName}</span></p>
+                  </div>
+                  
+                  <Button variant="outline" disabled>
+                    <BookOpen className="mr-2 h-4 w-4" /> Synchronise README with GitHub (Soon)
+                  </Button>
+                  <div className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md">
+                    <Code2 className="mx-auto h-10 w-10 mb-3" />
+                    <p className="font-medium">File Browser & Editor Coming Soon</p>
+                    <p className="text-xs">You'll soon be able to browse, view, and edit your repository files here.</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2104,4 +2184,3 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
-

@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +27,7 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" defaultValue="admin@nationquest.com" />
+              <Input id="email" type="email" defaultValue="admin@flowup.com" />
             </div>
              <Button className="w-full">Save Changes</Button>
           </CardContent>

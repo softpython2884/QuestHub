@@ -12,7 +12,7 @@ import fs from 'fs';
 let db: Database | null = null;
 
 const DB_DIR = path.join(process.cwd(), 'db');
-const DB_PATH = path.join(DB_DIR, 'flowup_hub.db');
+const DB_PATH = path.join(DB_DIR, 'flowup_hub.db'); // Renamed database file
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Bug', color: '#EF4444' }, 
@@ -151,12 +151,12 @@ Exemple :
 ## 🖼️ Images
 
 \`\`\`markdown
-![Texte alternatif](https://via.placeholder.com/150)
+![Texte alternatif](https://placehold.co/400x200.png)
 \`\`\`
 
 Exemple :
 
-![Image de démonstration](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/130cbde8-9815-42f7-bf47-63bed996b100/dfl8gzd-983a6ce1-bb3c-49ef-a2fe-dceb5a21f60c.png/v1/fill/w_894,h_894,q_70,strp/realistic_real_life_night_fury_4k__night_fury_army_by_brawlfury_dfl8gzd-pre.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9MTI4MCIsInBhdGgiOiJcL2ZcLzEzMGNiZGU4LTk4MTUtNDJmNy1iZjQ3LTYzYmVkOTk2YjEwMFwvZGZsOGd6ZC05ODNhNmNlMS1iYjNjLTQ5ZWYtYTJmZS1kY2ViNWEyMWY2MGMucG5nIiwid2lkdGgiOiI8PTEyODAifV1dLCJhdWQiOlsidXJuOnNlcnZpY2U6aW1hZ2Uub3BlcmF0aW9ucyJdfQ.7ncNv51RbeanSB7oEtebvKNRiRsa1vAgimiU4l5dkdU)
+![Image de démonstration](https://placehold.co/400x200.png)
 
 ---
 
@@ -266,6 +266,8 @@ export async function getDbConnection() {
       isPrivate BOOLEAN DEFAULT TRUE,
       readmeContent TEXT,
       isUrgent BOOLEAN DEFAULT FALSE,
+      githubRepoUrl TEXT,
+      githubRepoName TEXT,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -316,11 +318,11 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS project_announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
-      projectUuid TEXT NOT NULL, /* Ensuring projectUuid is always present for project-specific announcements */
+      projectUuid TEXT NOT NULL, 
       authorUuid TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
-      isGlobal BOOLEAN NOT NULL DEFAULT FALSE, /* Will be false for project announcements */
+      isGlobal BOOLEAN NOT NULL DEFAULT FALSE, 
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
@@ -353,11 +355,11 @@ export async function getDbConnection() {
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultAdminUUID,
-      'Admin User',
+      'Admin FlowUp', // Renamed
       'admin@flowup.com',
       defaultAdminPassword,
       'admin',
-      `https://placehold.co/100x100.png?text=AU`
+      `https://placehold.co/100x100.png?text=AF` // AF for Admin FlowUp
     );
   }
 
@@ -368,11 +370,11 @@ export async function getDbConnection() {
     await db.run(
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultMemberUUID,
-      'Member User',
+      'Member FlowUp', // Renamed
       'member@flowup.com',
       defaultMemberPassword,
       'member',
-      `https://placehold.co/100x100.png?text=MU`
+      `https://placehold.co/100x100.png?text=MF` // MF for Member FlowUp
     );
   }
   return db;
@@ -480,8 +482,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null
     );
 
     if (!result.lastID) {
@@ -509,6 +511,8 @@ export async function createProject(name: string, description: string | undefine
       isPrivate: true,
       readmeContent: DEFAULT_PROJECT_README_CONTENT,
       isUrgent: false,
+      githubRepoUrl: undefined, // or null
+      githubRepoName: undefined, // or null
     };
   } catch (err) {
     await connection.run('ROLLBACK');
@@ -523,7 +527,7 @@ export async function createProject(name: string, description: string | undefine
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
   const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
-    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects WHERE uuid = ?',
+    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
   if (!projectRow) return null;
@@ -585,11 +589,22 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   return getProjectByUuid(projectUuid);
 }
 
+export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string, repoName: string): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE projects SET githubRepoUrl = ?, githubRepoName = ?, updatedAt = ? WHERE uuid = ?',
+    repoUrl, repoName, now, projectUuid
+  );
+  if (result.changes === 0) return null;
+  return getProjectByUuid(projectUuid);
+}
+
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
   const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.createdAt, p.updatedAt
+    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.githubRepoUrl, p.githubRepoName, p.createdAt, p.updatedAt
      FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
      WHERE pm.userUuid = ?
@@ -606,7 +621,7 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
     const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
+      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
     );
     return projectsData.map(p => ({
       ...p,
@@ -944,6 +959,7 @@ export async function createDocument(data: {
   const connection = await getDbConnection();
   const docUuid = uuidv4();
   const now = new Date().toISOString();
+  const creator = await getUserByUuid(data.createdByUuid);
 
   const result = await connection.run(
     'INSERT INTO project_documents (uuid, projectUuid, title, content, fileType, filePath, createdByUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -951,9 +967,21 @@ export async function createDocument(data: {
   );
   if (!result.lastID) throw new Error('Document creation failed.');
 
-  const newDoc = await getDocumentByUuid(docUuid);
-  if (!newDoc) throw new Error('Failed to retrieve created document.');
-  return newDoc;
+  return {
+    id: result.lastID.toString(),
+    uuid: docUuid,
+    projectUuid: data.projectUuid,
+    title: data.title,
+    content: data.content,
+    fileType: data.fileType,
+    filePath: data.filePath,
+    createdByUuid: data.createdByUuid,
+    createdByName: creator?.name,
+    creatorAvatar: creator?.avatar,
+    isPinned: false,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocumentType[]> {

@@ -30,6 +30,7 @@ import {
   createProjectAnnouncement as dbCreateProjectAnnouncement,
   getProjectAnnouncements as dbGetProjectAnnouncements,
   deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
+  updateProjectGithubRepo as dbUpdateProjectGithubRepo,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -981,6 +982,80 @@ export async function deleteProjectAnnouncementAction(
     return { error: "Failed to delete announcement." };
   } catch (error: any) {
     console.error("Error deleting project announcement:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+// CodeSpace / GitHub Integration Actions
+export interface LinkProjectToGithubFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/[^\w-]+/g, '') // Remove all non-word chars
+    .replace(/--+/g, '-'); // Replace multiple - with single -
+}
+
+export async function linkProjectToGithubAction(
+  prevState: LinkProjectToGithubFormState,
+  formData: FormData
+): Promise<LinkProjectToGithubFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const projectName = formData.get('projectName') as string;
+
+  if (!projectUuid || !projectName) {
+    return { error: "Project UUID and Name are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to link this project to GitHub." };
+    }
+
+    // Simulate GitHub API call for now
+    // In a real scenario, you'd use Octokit here to create a repository
+    // const githubPat = process.env.GITHUB_PAT;
+    // if (!githubPat) return { error: "GitHub PAT not configured on server."};
+    // const octokit = new Octokit({ auth: githubPat });
+    // const repoName = slugify(projectName);
+    // try {
+    //   const response = await octokit.rest.repos.createForAuthenticatedUser({ name: repoName, private: true });
+    //   const repoUrl = response.data.html_url;
+    //   const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, repoName);
+    //   if (!updatedProject) return { error: "Failed to save GitHub repository details to project."};
+    //   return { message: `Successfully created and linked GitHub repository: ${repoName}`, project: updatedProject };
+    // } catch (apiError: any) {
+    //   console.error("GitHub API error:", apiError);
+    //   return { error: `GitHub API Error: ${apiError.message}`};
+    // }
+    
+    // Simulated part:
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call delay
+    const repoName = slugify(projectName);
+    const repoUrl = `https://github.com/flowup-simulated-bot/${repoName}`;
+    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, repoName);
+    
+    if (!updatedProject) {
+        return { error: "Failed to save GitHub repository details to the project after simulated creation." };
+    }
+    
+    return { message: `GitHub repository '${repoName}' linked (simulated).`, project: updatedProject };
+
+  } catch (error: any) {
+    console.error("Error in linkProjectToGithubAction:", error);
     return { error: error.message || "An unexpected error occurred." };
   }
 }
