@@ -13,7 +13,7 @@ import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, Pr
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useRef } from 'react';
+import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useRef, Suspense } from 'react';
 import { useActionState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,9 +65,7 @@ import remarkGfm from 'remark-gfm';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 
-
 const projectAnnouncements: any[] = [];
-
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
 const memberRoles: Exclude<ProjectMemberRole, 'owner'>[] = ['co-owner', 'editor', 'viewer'];
@@ -92,6 +90,7 @@ const taskFormSchema = z.object({
   status: z.enum(taskStatuses),
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
+  todoListMarkdown: z.string().optional().default(''),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
@@ -133,8 +132,7 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
   }).filter(line => line.trim().length > 0).join('\n');
 };
 
-
-export default function ProjectDetailPage() {
+function ProjectDetailPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -184,6 +182,7 @@ export default function ProjectDetailPage() {
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
   const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<ProjectDocumentType | null>(null);
+  
   const [activeTab, setActiveTab] = useState('tasks');
 
   useEffect(() => {
@@ -210,14 +209,13 @@ export default function ProjectDetailPage() {
 
   const taskForm = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''},
+    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' },
   });
 
   const projectTagForm = useForm<ProjectTagFormValues>({
     resolver: zodResolver(projectTagFormSchema),
     defaultValues: { tagName: '', tagColor: '#6B7280' },
   });
-
 
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
@@ -384,7 +382,7 @@ export default function ProjectDetailPage() {
       if (createTaskState.message && !createTaskState.error) {
         toast({ title: "Success", description: createTaskState.message });
         setIsCreateTaskDialogOpen(false);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: ''});
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });
         loadTasks();
       }
       if (createTaskState.error) {
@@ -434,6 +432,7 @@ export default function ProjectDetailPage() {
 
         if (lastSubmitSourceRef.current === 'subtasks' && taskToManageSubtasks?.uuid === updateTaskState.updatedTask.uuid) {
              setIsManageSubtasksDialogOpen(false);
+             setTaskToManageSubtasks(null);
         } else if (lastSubmitSourceRef.current === 'main' && taskToEdit?.uuid === updateTaskState.updatedTask.uuid) {
             setIsEditTaskDialogOpen(false);
             setTaskToEdit(null);
@@ -450,6 +449,7 @@ export default function ProjectDetailPage() {
         status: taskToEdit.status,
         assigneeUuid: taskToEdit.assigneeUuid || UNASSIGNED_VALUE,
         tagsString: taskToEdit.tags.map(t => t.name).join(', ') || '',
+        todoListMarkdown: taskToEdit.todoListMarkdown || '',
       });
     }
   }, [isEditTaskDialogOpen, taskToEdit, taskForm]);
@@ -458,6 +458,8 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (isManageSubtasksDialogOpen && taskToManageSubtasks) {
       setSubtaskInput(convertMarkdownToSubtaskInput(taskToManageSubtasks.todoListMarkdown));
+    } else {
+      setSubtaskInput(''); // Reset when dialog closes or no task
     }
   }, [isManageSubtasksDialogOpen, taskToManageSubtasks]);
 
@@ -602,7 +604,7 @@ export default function ProjectDetailPage() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
-    formData.append('todoListMarkdown', '');
+    formData.append('todoListMarkdown', values.todoListMarkdown || '');
 
     ReactStartTransition(() => {
       createTaskFormAction(formData);
@@ -619,7 +621,7 @@ export default function ProjectDetailPage() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('description', values.description || '');
-    formData.append('todoListMarkdown', taskToEdit.todoListMarkdown || '');
+    formData.append('todoListMarkdown', values.todoListMarkdown || (taskToEdit.todoListMarkdown || ''));
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
@@ -644,12 +646,15 @@ export default function ProjectDetailPage() {
     formData.append('taskUuid', taskToManageSubtasks.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
+    
+    // Preserve other task fields
     formData.append('title', taskToManageSubtasks.title);
     formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
     if (taskToManageSubtasks.assigneeUuid) formData.append('assigneeUuid', taskToManageSubtasks.assigneeUuid);
     const currentTagsString = taskToManageSubtasks.tags.map(t => t.name).join(', ');
     if (currentTagsString) formData.append('tagsString', currentTagsString);
+
 
     ReactStartTransition(() => {
       updateTaskFormAction(formData);
@@ -671,6 +676,8 @@ export default function ProjectDetailPage() {
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
+      
+      // Preserve other task fields
       formData.append('title', taskToUpdate.title);
       formData.append('status', taskToUpdate.status);
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -687,6 +694,14 @@ export default function ProjectDetailPage() {
 
   const openEditTaskDialog = (task: Task) => {
     setTaskToEdit(task);
+    taskForm.reset({
+        title: task.title,
+        description: task.description || '',
+        status: task.status,
+        assigneeUuid: task.assigneeUuid || UNASSIGNED_VALUE,
+        tagsString: task.tags.map(t => t.name).join(', ') || '',
+        todoListMarkdown: task.todoListMarkdown || '',
+      });
     setIsEditTaskDialogOpen(true);
   };
 
@@ -1107,7 +1122,7 @@ export default function ProjectDetailPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           <TabsTrigger value="tasks"><CheckSquare className="mr-2 h-4 w-4"/>Tasks</TabsTrigger>
           <TabsTrigger value="readme"><BookOpen className="mr-2 h-4 w-4"/>README</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="mr-2 h-4 w-4"/>Documents</TabsTrigger>
@@ -1120,16 +1135,16 @@ export default function ProjectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({tasks.length})</CardTitle>
-               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1);} }}>
+               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
                 <DialogTrigger asChild>
-                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '' })}>
+                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' })}>
                         <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                     </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Create New Task</DialogTitle>
-                        <DialogDescription>Fill in the details for the new task. Sub-tasks are managed separately.</DialogDescription>
+                        <DialogDescription>Fill in the details for the new task.</DialogDescription>
                     </DialogHeader>
                     <Form {...taskForm}>
                         <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
@@ -1199,6 +1214,7 @@ export default function ProjectDetailPage() {
                                 </FormItem>
                                 )}
                             />
+                             <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             {createTaskState?.error && !createTaskState.fieldErrors && <p className="text-sm text-destructive">{createTaskState.error}</p>}
                             {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {createTaskState.fieldErrors.title.join(', ')}</p>}
                             {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
@@ -1331,12 +1347,11 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Main Edit Task Dialog */}
-        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); } }}>
+        <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
             <DialogContent className="sm:max-w-[525px]">
                 <DialogHeader>
                     <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
-                    <DialogDescription>Update the main details for this task. Sub-tasks are managed separately.</DialogDescription>
+                    <DialogDescription>Update the main details for this task.</DialogDescription>
                 </DialogHeader>
                 {taskToEdit && (
                     <Form {...taskForm}>
@@ -1407,6 +1422,7 @@ export default function ProjectDetailPage() {
                                 </FormItem>
                                 )}
                             />
+                             <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                             {updateTaskState?.error && !updateTaskState.fieldErrors && <p className="text-sm text-destructive">{updateTaskState.error}</p>}
                             {updateTaskState?.fieldErrors && Object.entries(updateTaskState.fieldErrors).map(([key, value]) => value && <p key={key} className="text-sm text-destructive">{`${key.charAt(0).toUpperCase() + key.slice(1)}: ${value.join(', ')}`}</p>)}
                             <DialogFooter>
@@ -1419,7 +1435,6 @@ export default function ProjectDetailPage() {
             </DialogContent>
         </Dialog>
 
-        {/* Manage Subtasks Dialog */}
         <Dialog open={isManageSubtasksDialogOpen} onOpenChange={(isOpen) => { setIsManageSubtasksDialogOpen(isOpen); if(!isOpen) setTaskToManageSubtasks(null); }}>
             <DialogContent className="sm:max-w-[525px]">
               <DialogHeader>
@@ -1569,14 +1584,17 @@ export default function ProjectDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* View Document Dialog */}
         <Dialog open={isViewDocumentDialogOpen} onOpenChange={setIsViewDocumentDialogOpen}>
             <DialogContent className="sm:max-w-3xl max-h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{documentToView?.title}</DialogTitle>
-                    <DialogDescription>Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge> | Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}</DialogDescription>
+                    <div className="text-sm text-muted-foreground pt-1"> {/* Replaced DialogDescription */}
+                        Type: <Badge variant="outline" className="capitalize text-xs">{documentToView?.fileType}</Badge>
+                        <span className="mx-1.5">|</span>
+                        Last updated: {documentToView ? new Date(documentToView.updatedAt).toLocaleString() : 'N/A'}
+                    </div>
                 </DialogHeader>
-                <div className="flex-grow overflow-y-auto pr-2">
+                <div className="flex-grow overflow-y-auto pr-2 mt-2">
                     {documentToView?.fileType === 'markdown' && (
                         <div className="prose dark:prose-invert max-w-none">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{documentToView?.content || ''}</ReactMarkdown>
@@ -1601,7 +1619,7 @@ export default function ProjectDetailPage() {
                          <p className="text-muted-foreground">Cannot display this file type directly. File name: {documentToView?.filePath || documentToView?.title}</p>
                     )}
                 </div>
-                <DialogFooter>
+                <DialogFooter className="mt-4">
                     <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
                 </DialogFooter>
             </DialogContent>
@@ -1885,4 +1903,12 @@ export default function ProjectDetailPage() {
       </Tabs>
     </div>
   );
+}
+
+export default function ProjectDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+      <ProjectDetailPageContent />
+    </Suspense>
+  )
 }

@@ -6,7 +6,7 @@ import { getUserByUuid as dbGetUserByUuid } from './db';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
-const AUTH_COOKIE_NAME = 'nqh_auth_token';
+const AUTH_COOKIE_NAME = 'flowup_auth_token';
 
 interface Session {
   user?: Omit<User, 'hashedPassword'>; 
@@ -30,7 +30,7 @@ const getJwtSecretOrThrow = (): string => {
 export async function auth(): Promise<Session | null> {
   console.log('[authEdge.auth] Attempting to get session.');
   const cookieStore = cookies();
-  const jwtSecret = getJwtSecretOrThrow(); // Will throw if secret is missing
+  const jwtSecret = getJwtSecretOrThrow(); 
 
   const tokenCookieValue = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
@@ -51,19 +51,16 @@ export async function auth(): Promise<Session | null> {
       cookieStore.delete(AUTH_COOKIE_NAME);
       return null;
     }
-
-    // Return only non-sensitive parts necessary for session identification.
-    // The full user object can be fetched by services that need it, using this UUID.
+    
     const { hashedPassword, ...userToReturn } = userFromDb; 
     
     console.log('[authEdge.auth] User found in DB, returning session for:', userToReturn.name);
     return {
-      user: userToReturn, // Contains uuid, name, email, role, avatar
+      user: userToReturn,
     };
 
   } catch (error: any) {
     console.warn('[authEdge.auth] JWT verification failed:', error.message ? error.message : error);
-    // If verification fails (e.g. invalid signature, expired), delete the bad cookie
     cookieStore.delete(AUTH_COOKIE_NAME);
     return null;
   }

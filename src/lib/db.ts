@@ -12,10 +12,9 @@ import fs from 'fs';
 let db: Database | null = null;
 
 const DB_DIR = path.join(process.cwd(), 'db');
-const DB_PATH = path.join(DB_DIR, 'nationquest_hub.db');
+const DB_PATH = path.join(DB_DIR, 'flowup_hub.db');
 
 const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
-  // Standard PM Tags
   { name: 'Bug', color: '#EF4444' }, 
   { name: 'Feature', color: '#3B82F6' }, 
   { name: 'Task', color: '#6B7280' }, 
@@ -26,14 +25,10 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Spike', color: '#F43F5E'}, 
   { name: 'User Story', color: '#93C5FD'}, 
   { name: 'Epic', color: '#7E22CE' }, 
-
-  // Priority
   { name: 'Urgent', color: '#DC2626' }, 
   { name: 'High Priority', color: '#F59E0B' }, 
   { name: 'Medium Priority', color: '#84CC16' }, 
   { name: 'Low Priority', color: '#60A5FA' }, 
-
-  // Departments/Areas
   { name: 'Frontend', color: '#EC4899' }, 
   { name: 'Backend', color: '#D946EF' }, 
   { name: 'UI/UX', color: '#8B5CF6' }, 
@@ -50,8 +45,6 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Research', color: '#059669' }, 
   { name: 'Support', color: '#F9A8D4' }, 
   { name: 'Sales', color: '#FB923C' }, 
-
-  // Status/Process
   { name: 'Needs Review', color: '#EAB308' }, 
   { name: 'In Review', color: '#FCD34D' }, 
   { name: 'Approved', color: '#A3E635' }, 
@@ -61,8 +54,6 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
   { name: 'Duplicate', color: '#A1A1AA' }, 
   { name: 'On Hold', color: '#FDBA74' }, 
   { name: 'Deferred', color: '#9CA3AF' }, 
-
-  // Other useful tags
   { name: 'Refactor', color: '#FACC15' }, 
   { name: 'Optimization', color: '#FB923C' }, 
   { name: 'Performance', color: '#F5A623'}, 
@@ -153,7 +144,7 @@ console.log('Hello FlowUp')
 \`\`\`
 
 Exemple :  
-[Visitez NationQuest](https://nationquest.fr)
+[Visitez FlowUp](https://example.com)
 
 ---
 
@@ -355,7 +346,7 @@ export async function getDbConnection() {
     );
   `);
 
-  const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@nationquest.com');
+  const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@flowup.com');
   if (!adminUser) {
     const defaultAdminUUID = '00000000-0000-0000-0000-000000000001'; 
     const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
@@ -363,14 +354,14 @@ export async function getDbConnection() {
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultAdminUUID,
       'Admin User',
-      'admin@nationquest.com',
+      'admin@flowup.com',
       defaultAdminPassword,
       'admin',
       `https://placehold.co/100x100.png?text=AU`
     );
   }
 
-  const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@nationquest.com');
+  const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@flowup.com');
   if (!memberUser) {
     const defaultMemberUUID = uuidv4();
     const defaultMemberPassword = await bcrypt.hash('memberpassword', 10);
@@ -378,7 +369,7 @@ export async function getDbConnection() {
       'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
       defaultMemberUUID,
       'Member User',
-      'member@nationquest.com',
+      'member@flowup.com',
       defaultMemberPassword,
       'member',
       `https://placehold.co/100x100.png?text=MU`
@@ -988,15 +979,12 @@ export async function updateDocumentContent(docUuid: string, title: string, cont
   const connection = await getDbConnection();
   const now = new Date().toISOString();
   
-  // Fetch the document to check its type, as PDF content/filePath might not be updatable here
   const currentDoc = await getDocumentByUuid(docUuid);
   if (!currentDoc) return null;
 
   let query = 'UPDATE project_documents SET title = ?, updatedAt = ?';
   const params: (string | number | null | undefined)[] = [title, now];
 
-  // Only update content if it's not a PDF and content is provided
-  // For PDF, content is null, filePath is used. This function primarily updates text-based content.
   if (currentDoc.fileType !== 'pdf' && content !== undefined) {
     query += ', content = ?';
     params.push(content);
@@ -1006,15 +994,13 @@ export async function updateDocumentContent(docUuid: string, title: string, cont
   params.push(docUuid);
 
   const result = await connection.run(query, ...params);
-  if (result.changes === 0) return null; // Or currentDoc if no actual change to content for PDF but title changed
+  if (result.changes === 0) return null; 
   
   return getDocumentByUuid(docUuid);
 }
 
 export async function deleteDocument(docUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
-  // Note: If files were stored on a filesystem/S3, they'd need to be deleted here too.
   const result = await connection.run('DELETE FROM project_documents WHERE uuid = ?', docUuid);
   return result.changes ? result.changes > 0 : false;
 }
-

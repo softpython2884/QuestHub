@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, AlertTriangle, FolderKanban, Megaphone } from 'lucide-react';
+import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, FolderKanban, Megaphone } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -34,11 +34,9 @@ export default function DashboardPage() {
   }, [authLoading, user, router]);
 
   if (authLoading || !user) {
-    // You might want to show a more sophisticated loading skeleton here
-    // For now, returning null or a simple loader if auth is still loading.
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
-            <PlusCircle className="h-12 w-12 animate-spin text-primary" /> {/* Using PlusCircle as a placeholder spinner */}
+            <PlusCircle className="h-12 w-12 animate-spin text-primary" /> 
         </div>
     );
   }
@@ -52,7 +50,7 @@ export default function DashboardPage() {
             Welcome back, {user.name}!
           </CardTitle>
           <CardDescription className="text-lg">
-            Here&apos;s what&apos;s happening in your NationQuest Hub workspace today.
+            Here&apos;s what&apos;s happening in your FlowUp workspace today.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -173,7 +171,6 @@ export default function DashboardPage() {
           <CardDescription>Latest updates from your team.</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Placeholder for announcements */}
           <div className="border rounded-lg p-4 text-center text-muted-foreground">
             <Megaphone className="h-8 w-8 mx-auto mb-2" />
             No new announcements.

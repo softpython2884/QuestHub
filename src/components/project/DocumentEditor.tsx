@@ -12,10 +12,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import type { ProjectDocumentType } from '@/types';
 import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
-import { AlertTriangle, Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode } from 'lucide-react';
+import { generateDocumentContent, type GenerateDocumentContentInput } from '@/ai/flows/generate-document-content';
+import { AlertTriangle, Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createDocumentAction, updateDocumentAction } from '@/app/(app)/projects/[id]/actions';
 
@@ -36,7 +38,7 @@ interface DocumentEditorProps {
 interface MarkdownTool {
   label: string;
   icon: React.ElementType;
-  action: (textarea: HTMLTextAreaElement, currentContent: string, setContent: (newContent: string) => void) => void;
+  action: () => void;
 }
 
 export function DocumentEditor({
@@ -49,6 +51,11 @@ export function DocumentEditor({
   const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+
 
   const form = useForm<DocumentEditorFormValues>({
     resolver: zodResolver(documentEditorFormSchema),
@@ -114,7 +121,7 @@ export function DocumentEditor({
     }
     
     const newValue = value.substring(0, selectionStart) + newText + value.substring(selectionEnd);
-    form.setValue('content', newValue);
+    form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
     handleContentChangeForAI(newValue);
 
     setTimeout(() => {
@@ -183,13 +190,49 @@ export function DocumentEditor({
     }
   };
 
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) {
+        toast({ variant: 'destructive', title: 'Error', description: 'AI prompt cannot be empty.' });
+        return;
+    }
+    setIsAiGenerating(true);
+    try {
+        const result = await generateDocumentContent({ prompt: aiPrompt });
+        if (result.markdownContent) {
+            form.setValue('content', result.markdownContent, { shouldValidate: true, shouldDirty: true });
+            handleContentChangeForAI(result.markdownContent); // Also run security check
+            toast({ title: 'Success', description: 'AI generated content populated.' });
+            setIsAiDialogOpen(false);
+            setAiPrompt('');
+        } else {
+            toast({ variant: 'destructive', title: 'AI Error', description: 'AI failed to generate content.' });
+        }
+    } catch (error: any) {
+        console.error("Error generating document with AI:", error);
+        toast({ variant: 'destructive', title: 'AI Error', description: error.message || 'Failed to generate content with AI.' });
+    } finally {
+        setIsAiGenerating(false);
+    }
+  };
+
+
   return (
+    <>
     <Card className="shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline">
-          {document ? 'Edit Document' : 'Create New Markdown Document'}
-        </CardTitle>
-        <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+                <CardTitle className="text-2xl font-headline">
+                {document ? 'Edit Document' : 'Create New Markdown Document'}
+                </CardTitle>
+                <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
+            </div>
+            <DialogTrigger asChild>
+                <Button variant="outline" onClick={() => setIsAiDialogOpen(true)}>
+                    <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
+                </Button>
+            </DialogTrigger>
+        </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -231,8 +274,8 @@ export function DocumentEditor({
                 textareaRef.current = e; 
               }}
               onChange={(e) => {
-                contentField.onChange(e); // Call original RHF onChange
-                handleContentChangeForAI(e.target.value); // Then custom AI check
+                contentField.onChange(e); 
+                handleContentChangeForAI(e.target.value); 
               }}
               rows={20}
               className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none", apiKeyRisk && "border-destructive ring-2 ring-destructive")}
@@ -265,5 +308,36 @@ export function DocumentEditor({
         </form>
       </CardContent>
     </Card>
+
+    <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" />Generate Document Content with AI</DialogTitle>
+                <UIDialogDescription>
+                    Enter a prompt for the AI to generate the Markdown content for your document.
+                </UIDialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                <Label htmlFor="ai-prompt">Your Prompt</Label>
+                <Textarea
+                    id="ai-prompt"
+                    placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    rows={5}
+                />
+            </div>
+            <DialogFooter>
+                <DialogClose asChild>
+                    <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
+                </DialogClose>
+                <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
+                    {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Generate Content
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }

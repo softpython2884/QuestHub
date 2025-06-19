@@ -1,3 +1,4 @@
+
 'use client';
 
 import { LoginForm } from '@/components/auth/LoginForm';
@@ -19,13 +20,18 @@ export default function LoginPage() {
 
   if (isLoading || (!isLoading && user)) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-1/3" />
-        <Skeleton className="h-6 w-2/3" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-      </div>
+      <Card className="shadow-xl">
+        <CardHeader>
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-5 w-full mt-2" />
+        </CardHeader>
+        <CardContent className="space-y-6 mt-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-5 w-1/2 mx-auto" />
+        </CardContent>
+      </Card>
     );
   }
 
@@ -33,7 +39,7 @@ export default function LoginPage() {
     <Card className="shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Welcome Back!</CardTitle>
-        <CardDescription>Sign in to access your NationQuest Hub workspace.</CardDescription>
+        <CardDescription>Sign in to access your FlowUp workspace.</CardDescription>
       </CardHeader>
       <CardContent>
         <LoginForm />

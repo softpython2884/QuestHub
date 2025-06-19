@@ -7,7 +7,7 @@ import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateU
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 
-const AUTH_COOKIE_NAME = 'nqh_auth_token';
+const AUTH_COOKIE_NAME = 'flowup_auth_token';
 
 const getJwtSecretOrThrow = (): string => {
   const secret = process.env.JWT_SECRET;
@@ -22,21 +22,13 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
   const JWT_SECRET = getJwtSecretOrThrow();
   const tokenPayload = {
     uuid: user.uuid,
-    // Add other non-sensitive identifiers if needed, but keep payload small
-    // role: user.role, 
-    // email: user.email,
-    // name: user.name
   };
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
-
-  // const cookieStore = cookies(); // This was the error point, calling cookies() directly.
-  // Instead, call it where it's used if needed, or better, ensure it's called once per request context.
-  // For server actions, `cookies()` from `next/headers` should be fine at the top level of the action.
 
   try {
     cookies().set(AUTH_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // FALSE for local HTTP, TRUE for production HTTPS
+      secure: process.env.NODE_ENV === 'production', 
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       sameSite: 'lax',
@@ -44,7 +36,6 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
     console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}. Secure flag: ${process.env.NODE_ENV === 'production'}`);
   } catch (error) {
      console.error("[authService.generateTokenAndSetCookie] Error setting cookie:", error);
-     // Potentially re-throw or handle as critical since session won't be established
   }
 };
 
@@ -122,8 +113,7 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
     if (updatedUserFromDb) {
         const { hashedPassword, ...userToReturn } = updatedUserFromDb;
         
-        // Re-issue token if sensitive info in payload changed or just to refresh expiry
-        const session = await auth(); // from authEdge
+        const session = await auth(); 
         if (session?.user?.uuid === userToReturn.uuid) {
             console.log('[authService.updateUserProfile] User data changed, re-issuing token for UUID:', userToReturn.uuid);
             generateTokenAndSetCookie(userToReturn);
@@ -137,26 +127,16 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
   }
 };
 
-// This function is called by the client (AuthContext) to get the current user based on the cookie
 export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] Attempting to get current user session from cookie.');
   const session = await auth(); 
   
   if (session?.user?.uuid) {
     console.log('[authService.getCurrentUserSession] Session found via auth() for user UUID:', session.user.uuid);
-    // The user object from auth() is already up-to-date from DB
     return session.user;
   }
   console.log('[authService.getCurrentUserSession] No active session found via auth().');
   return null;
 };
 
-// Removed the problematic re-export of auth. 
-// Server actions needing auth() should import it directly from '@/lib/authEdge'.
-// Example of how auth is imported from authEdge and used:
 import { auth } from '@/lib/authEdge';
-// async function someOtherAction() {
-//   const session = await auth();
-//   if (!session) { /* handle unauthorized */ }
-//   // ... proceed with action
-// }

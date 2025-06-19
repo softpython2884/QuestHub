@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,10 +7,10 @@ import Link from "next/link";
 
 // Mock data for documents
 const mockDocuments = [
-  { id: "doc-1", title: "Getting Started Guide", project: "NationQuest Hub", lastUpdated: "2023-10-20", category: "General" },
+  { id: "doc-1", title: "Getting Started Guide", project: "FlowUp", lastUpdated: "2023-10-20", category: "General" },
   { id: "doc-2", title: "Project Management Best Practices", project: "General", lastUpdated: "2023-10-15", category: "Guides" },
   { id: "doc-3", title: "API Documentation", project: "Project Alpha", lastUpdated: "2023-10-18", category: "Technical" },
-  { id: "doc-4", title: "User Roles and Permissions", project: "NationQuest Hub", lastUpdated: "2023-10-12", category: "Security" },
+  { id: "doc-4", title: "User Roles and Permissions", project: "FlowUp", lastUpdated: "2023-10-12", category: "Security" },
 ];
 
 export default function DocumentationPage() {

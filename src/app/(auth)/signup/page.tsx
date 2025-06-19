@@ -1,3 +1,4 @@
+
 'use client';
 
 import { SignupForm } from '@/components/auth/SignupForm';
@@ -19,14 +20,19 @@ export default function SignupPage() {
   
   if (isLoading || (!isLoading && user)) {
      return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-1/3" />
-        <Skeleton className="h-6 w-2/3" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-      </div>
+      <Card className="shadow-xl">
+        <CardHeader>
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-5 w-full mt-2" />
+        </CardHeader>
+        <CardContent className="space-y-6 mt-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-5 w-1/2 mx-auto" />
+        </CardContent>
+      </Card>
     );
   }
 
@@ -34,7 +40,7 @@ export default function SignupPage() {
     <Card className="shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl font-headline">Create your Account</CardTitle>
-        <CardDescription>Join NationQuest Hub and streamline your projects.</CardDescription>
+        <CardDescription>Join FlowUp and streamline your projects.</CardDescription>
       </CardHeader>
       <CardContent>
         <SignupForm />
