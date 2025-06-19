@@ -227,11 +227,40 @@ export function DocumentEditor({
                 </CardTitle>
                 <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
             </div>
-            <DialogTrigger asChild>
-                <Button variant="outline" onClick={() => setIsAiDialogOpen(true)}>
-                    <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
-                </Button>
-            </DialogTrigger>
+            <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
+              <DialogTrigger asChild>
+                  <Button variant="outline">
+                      <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
+                  </Button>
+              </DialogTrigger>
+              <DialogContent>
+                  <DialogHeader>
+                      <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" />Generate Document Content with AI</DialogTitle>
+                      <UIDialogDescription>
+                          Enter a prompt for the AI to generate the Markdown content for your document.
+                      </UIDialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                      <Label htmlFor="ai-prompt">Your Prompt</Label>
+                      <Textarea
+                          id="ai-prompt"
+                          placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
+                          value={aiPrompt}
+                          onChange={(e) => setAiPrompt(e.target.value)}
+                          rows={5}
+                      />
+                  </div>
+                  <DialogFooter>
+                      <DialogClose asChild>
+                          <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
+                      </DialogClose>
+                      <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
+                          {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Generate Content
+                      </Button>
+                  </DialogFooter>
+              </DialogContent>
+            </Dialog>
         </div>
       </CardHeader>
       <CardContent>
@@ -308,36 +337,6 @@ export function DocumentEditor({
         </form>
       </CardContent>
     </Card>
-
-    <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
-        <DialogContent>
-            <DialogHeader>
-                <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" />Generate Document Content with AI</DialogTitle>
-                <UIDialogDescription>
-                    Enter a prompt for the AI to generate the Markdown content for your document.
-                </UIDialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-                <Label htmlFor="ai-prompt">Your Prompt</Label>
-                <Textarea
-                    id="ai-prompt"
-                    placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    rows={5}
-                />
-            </div>
-            <DialogFooter>
-                <DialogClose asChild>
-                    <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
-                </DialogClose>
-                <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
-                    {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Generate Content
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
     </>
   );
 }
