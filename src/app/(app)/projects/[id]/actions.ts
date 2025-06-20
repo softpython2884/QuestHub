@@ -194,22 +194,13 @@ export async function inviteUserToProjectAction(
       console.log("[inviteUserToProjectAction] Project is linked to GitHub. Attempting to add collaborator.");
       const inviterOAuthToken = await dbGetUserGithubOAuthToken(inviterUserUuid);
       
-      // Attempt to get invited user's GitHub login details.
-      // This part needs a way to get the GitHub login for userToInvite.uuid
-      // For now, we'll try to fetch their details if they have an OAuth token.
       let invitedUserGithubLogin: string | undefined;
-      const invitedUserOAuthToken = await dbGetUserGithubOAuthToken(userToInvite.uuid);
-      if (invitedUserOAuthToken?.accessToken) {
-         try {
-            const invitedOctokit = new Octokit({ auth: invitedUserOAuthToken.accessToken });
-            const { data: invitedGithubUser } = await invitedOctokit.users.getAuthenticated();
-            invitedUserGithubLogin = invitedGithubUser.login;
-            console.log(`[inviteUserToProjectAction] Fetched GitHub login for invited user: ${invitedUserGithubLogin}`);
-         } catch (e: any) {
-            console.warn(`[inviteUserToProjectAction] Could not fetch GitHub login for invited user ${userToInvite.email}: ${e.message}`);
-         }
+      const invitedUserOAuthDetails = await fetchGithubUserDetailsAction(userToInvite.uuid); // Fetch details for invited user
+      if (invitedUserOAuthDetails?.login) {
+         invitedUserGithubLogin = invitedUserOAuthDetails.login;
+         console.log(`[inviteUserToProjectAction] Fetched GitHub login for invited user: ${invitedUserGithubLogin}`);
       } else {
-          console.log(`[inviteUserToProjectAction] Invited user ${userToInvite.email} has not connected their GitHub account via OAuth.`);
+          console.log(`[inviteUserToProjectAction] Invited user ${userToInvite.email} has not connected their GitHub account via OAuth or login not found.`);
       }
 
 
@@ -218,11 +209,9 @@ export async function inviteUserToProjectAction(
         const [owner, repo] = project.githubRepoName.split('/');
         if (owner && repo) {
           try {
-            // Map FlowUp role to GitHub permission
-            let githubPermission: 'pull' | 'push' | 'admin' | 'maintain' | 'triage' = 'pull'; // Default to read
-            if (role === 'editor' || role === 'co-owner') githubPermission = 'push'; // Write access
-            if (role === 'owner' || role === 'co-owner') githubPermission = 'admin'; // Admin access for co-owners (if desired)
-            // Note: 'owner' role in FlowUp might not directly map to GitHub repo owner, but 'admin' permission is closest for co-owners.
+            let githubPermission: 'pull' | 'push' | 'admin' | 'maintain' | 'triage' = 'pull'; 
+            if (role === 'editor' || role === 'co-owner') githubPermission = 'push'; 
+            if (role === 'owner' && project.ownerUuid !== userToInvite.uuid) githubPermission = 'admin'; // Only 'admin' for co-owner (actual repo owner is the one who created it)
             
             await octokit.rest.repos.addCollaborator({
               owner,
@@ -627,15 +616,15 @@ export interface SaveProjectReadmeFormState {
 }
 
 async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: string, content: string, existingSha?: string | null) {
-  const paramsForUpdate: any = {
+  const paramsForUpdate: any = { // Explicitly type as any if Octokit types are too complex to satisfy immediately
     owner,
     repo,
     path: 'README.md',
     message: 'Update README.md from FlowUp',
     content: Buffer.from(content).toString('base64'),
     committer: {
-      name: 'FlowUp Bot', // Or use authenticated user's name/email if preferred & available
-      email: 'bot@flowup.app', // Or user's email
+      name: 'FlowUp Bot', 
+      email: 'bot@flowup.app', 
     },
   };
   if (existingSha) {
@@ -648,8 +637,10 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
   } catch (error: any) {
      if (error.status === 404 && !existingSha) {
         console.log(`[updateReadmeOnGithub] README.md not found for ${owner}/${repo}, creating it.`);
-        const paramsForCreation = { ...paramsForUpdate };
-        delete paramsForCreation.sha; 
+        // If README.md doesn't exist and we are trying to create it (no existingSha means it's a create attempt or first sync)
+        // We need to ensure paramsForUpdate doesn't have a 'sha' for a create operation
+        const paramsForCreation = {...paramsForUpdate};
+        delete paramsForCreation.sha; // Ensure SHA is not present for creation
         try {
             await octokit.rest.repos.createOrUpdateFileContents(paramsForCreation);
             console.log(`[updateReadmeOnGithub] README.md created successfully on GitHub for ${owner}/${repo} after initial 404.`);
@@ -720,7 +711,9 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
         } catch (error: any) {
           if (error.status !== 404) {
             console.warn(`[saveProjectReadmeAction] Could not fetch existing README SHA for ${owner}/${repo}:`, error.message);
+            // Don't throw here, allow creation if SHA fetch fails for reasons other than 404
           }
+          // if 404, existingSha remains null, which is correct for creation.
         }
 
         await updateReadmeOnGithub(octokit, owner, repo, readmeContent, existingSha);
@@ -831,7 +824,11 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
                 return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'} in FlowUp and on GitHub.`, project: updatedProjectInDb };
             } catch (githubError: any) {
                 console.error(`[toggleProjectVisibilityAction] Failed to update GitHub repository visibility for ${owner}/${repo}:`, githubError.status, githubError.message, githubError.response?.data);
-                return { error: `Project visibility updated in FlowUp, but failed to update on GitHub: ${githubError.message} - ${githubError.documentation_url || ''}`, project: updatedProjectInDb };
+                // Provide more specific error if known, e.g., Not Found might mean repo name is wrong or token lacks access
+                let detailedError = githubError.message;
+                if (githubError.status === 404) detailedError = `Repository ${owner}/${repo} not found or access denied. Check repository name and token permissions.`;
+                else if (githubError.status === 403) detailedError = `Permission denied to update ${owner}/${repo}. Ensure your token has sufficient scopes.`;
+                return { error: `Project visibility updated in FlowUp, but failed to update on GitHub: ${detailedError}`, project: updatedProjectInDb };
             }
         } else {
              return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'} in FlowUp. GitHub token missing for GitHub update.`, project: updatedProjectInDb };
@@ -1194,27 +1191,30 @@ export interface GithubUserDetails {
   name: string | null;
 }
 
-export async function fetchGithubUserDetailsAction(): Promise<GithubUserDetails | null> {
-  const session = await auth();
-  if (!session?.user?.uuid) {
-    console.error("[fetchGithubUserDetailsAction] Authentication required.");
+export async function fetchGithubUserDetailsAction(targetUserUuid?: string): Promise<GithubUserDetails | null> {
+  const session = await auth(); // Authenticates current user making the request
+  const userUuidForToken = targetUserUuid || session?.user?.uuid;
+
+  if (!userUuidForToken) {
+    console.error("[fetchGithubUserDetailsAction] User UUID for token not determined (no session or target).");
     return null;
   }
-  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  
+  const oauthToken = await dbGetUserGithubOAuthToken(userUuidForToken);
   if (!oauthToken?.accessToken) {
-    console.log("[fetchGithubUserDetailsAction] No GitHub OAuth token found for user.");
+    console.log(`[fetchGithubUserDetailsAction] No GitHub OAuth token found for user ${userUuidForToken}.`);
     return null;
   }
 
   try {
     const octokit = new Octokit({ auth: oauthToken.accessToken });
-    const { data } = await octokit.rest.users.getAuthenticated();
+    const { data } = await octokit.rest.users.getAuthenticated(); // This gets the details of the user to whom the token belongs
     return { login: data.login, avatar_url: data.avatar_url, html_url: data.html_url, name: data.name };
   } catch (error: any) {
-    console.error("[fetchGithubUserDetailsAction] Error fetching GitHub user details:", error.status, error.message);
-    if (error.status === 401) { // Bad credentials, token might be revoked
-      await dbDeleteUserGithubOAuthToken(session.user.uuid); // Clean up bad token
-      console.warn("[fetchGithubUserDetailsAction] GitHub token was invalid (401), removed from DB.");
+    console.error(`[fetchGithubUserDetailsAction] Error fetching GitHub user details for user ${userUuidForToken}:`, error.status, error.message);
+    if (error.status === 401 && userUuidForToken === session?.user?.uuid) { // Bad credentials, token might be revoked, only delete if it's the current user's token
+      await dbDeleteUserGithubOAuthToken(session.user.uuid); 
+      console.warn(`[fetchGithubUserDetailsAction] GitHub token was invalid (401) for current user ${session.user.uuid}, removed from DB.`);
     }
     return null;
   }
@@ -1270,8 +1270,8 @@ export async function linkProjectToGithubAction(
   formData: FormData
 ): Promise<LinkProjectToGithubFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
-    return { error: "Authentication required. Please log in to FlowUp." };
+  if (!session?.user?.uuid || !session.user.name || !session.user.email) { // Ensure name and email for committer info
+    return { error: "Authentication required, or user name/email missing in session." };
   }
 
   const projectUuid = formData.get('projectUuid') as string;
@@ -1350,7 +1350,6 @@ export async function linkProjectToGithubAction(
             if (getContentError.status !== 404) {
                 console.warn(`[linkProjectToGithubAction] Could not fetch existing README SHA for ${createdRepo.data.owner.login}/${createdRepo.data.name}:`, getContentError.message);
             }
-            // If README doesn't exist (404), existingReadmeSha remains undefined, which is fine for createOrUpdateFileContents.
         }
         await updateReadmeOnGithub(octokit, createdRepo.data.owner.login, createdRepo.data.name, projectFromDb.readmeContent, existingReadmeSha);
       }
@@ -1358,23 +1357,21 @@ export async function linkProjectToGithubAction(
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
       const errorMessage = apiError.response?.data?.message || apiError.message || 'Unknown GitHub API error.';
-      if (apiError.status === 403) { // Forbidden
+      if (apiError.status === 403) { 
           return { error: `GitHub Permission Denied: ${errorMessage}. Ensure your GitHub OAuth token has the 'repo' scope and necessary permissions.`};
       }
-      if (apiError.status === 422) { // Unprocessable Entity - e.g., repo already exists
+      if (apiError.status === 422) { 
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${errorMessage}` };
       }
       return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${errorMessage} - ${apiError.documentation_url || ''}` };
     }
 
     const repoUrl = createdRepo.data.html_url;
-    const actualRepoName = createdRepo.data.full_name; // e.g., "username/repo-slug"
+    const actualRepoName = createdRepo.data.full_name; 
 
     const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName);
 
     if (!updatedProject) {
-        // This is problematic, the repo was created on GitHub but FlowUp failed to save it.
-        // Should ideally have a mechanism to delete the GitHub repo or notify admin.
         return { error: "Failed to save GitHub repository details to FlowUp project after creation on GitHub. Please check project settings or contact support." };
     }
 
@@ -1415,18 +1412,17 @@ export async function getRepoContentsAction(projectUuid: string, path: string = 
     if (Array.isArray(data)) {
       return data as GithubRepoContentItem[];
     }
-    // If data is a single file object (when path points to a file, though this endpoint usually returns array for dirs)
     return [data as GithubRepoContentItem];
   } catch (error: any) {
     console.error(`[getRepoContentsAction] Error fetching content for ${owner}/${repo}/${path}:`, error.status, error.message, error.response?.data);
     let userMessage = "Failed to fetch repository contents.";
     if (error.status === 404) {
         userMessage = `Path '${path}' not found in repository '${project.githubRepoName}'.`;
-    } else if (error.status === 403) { // Forbidden
+    } else if (error.status === 403) { 
         userMessage = `Access denied to repository '${project.githubRepoName}'. Check your GitHub token permissions (requires 'repo' scope) or the repository's existence and your access rights.`;
-    } else if (error.status === 401) { // Bad credentials
+    } else if (error.status === 401) { 
         userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
-        await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
+        await dbDeleteUserGithubOAuthToken(session.user.uuid); 
     } else if (error.response?.data?.message){
         userMessage = error.response.data.message;
     } else if (error.message) {
@@ -1465,7 +1461,7 @@ export async function getFileContentAction(
             path: filePath,
         });
 
-        // @ts-ignore - Octokit's type for data can be an array or object
+        // @ts-ignore 
         if (data.type !== 'file' || typeof data.content !== 'string' || typeof data.sha !== 'string') {
             return { error: "Path does not point to a valid file or content is missing." };
         }
@@ -1480,9 +1476,9 @@ export async function getFileContentAction(
             userMessage = `File '${filePath}' not found in repository '${project.githubRepoName}'.`;
         } else if (error.status === 403) {
             userMessage = `Access denied to file '${filePath}' in repository '${project.githubRepoName}'. Check token permissions.`;
-        } else if (error.status === 401) { // Bad credentials
+        } else if (error.status === 401) { 
             userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
-            await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
+            await dbDeleteUserGithubOAuthToken(session.user.uuid); 
         } else if (error.response?.data?.message) {
             userMessage = error.response.data.message;
         } else if (error.message) {
@@ -1540,25 +1536,23 @@ export async function saveFileContentAction(
       }
     });
     
-    // GitHub API returns 200 for update, 201 for create (though we use sha so it's usually update)
     if (response.status === 200 || response.status === 201) { 
       return { success: true, newSha: response.data.content?.sha };
     } else {
-      // This case should ideally not be reached if Octokit throws on non-2xx for this endpoint
       return { success: false, error: `GitHub API returned status ${response.status}` };
     }
   } catch (error: any) {
     console.error(`[saveFileContentAction] Error saving file ${filePath}:`, error.status, error.message, error.response?.data);
     let userMessage = `Failed to save file: ${error.message || 'Unknown error'}`;
-    if (error.status === 409) { // Conflict, SHA mismatch
+    if (error.status === 409) { 
         userMessage = "File has been modified since you opened it. Please refresh and try again.";
-    } else if (error.status === 403) { // Forbidden
+    } else if (error.status === 403) { 
         userMessage = "Permission denied. Ensure you have write access to this repository and your token has 'repo' scope.";
-    } else if (error.status === 404) { // Not found (e.g. path changed, or repo deleted)
+    } else if (error.status === 404) { 
         userMessage = "File not found. It might have been deleted or moved.";
-    } else if (error.status === 401) { // Bad credentials
+    } else if (error.status === 401) { 
         userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
-        await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
+        await dbDeleteUserGithubOAuthToken(session.user.uuid); 
     } else if (error.status === 422 && error.response?.data?.message?.includes("committer email is not associated with the committer")) {
         userMessage = `Failed to save file: Your FlowUp email ('${session.user.email}') is not associated with your GitHub account or is not verified. Please ensure your FlowUp email matches a verified email on GitHub.`;
     } else if (error.response?.data?.message) {
@@ -1567,4 +1561,153 @@ export async function saveFileContentAction(
     return { success: false, error: userMessage };
   }
 }
+
+export async function createGithubFileAction(
+  projectUuid: string,
+  filePath: string, // Full path including new file name
+  initialContent: string,
+  commitMessage?: string
+): Promise<{ success: boolean; error?: string; file?: GithubRepoContentItem }> {
+  const session = await auth();
+  if (!session?.user?.uuid || !session.user.name || !session.user.email) {
+    return { success: false, error: "Authentication required, or user name/email missing." };
+  }
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { success: false, error: "Project not found or not linked to GitHub." };
+  }
+
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken || !oauthToken.accessToken) {
+    return { success: false, error: "GitHub account not linked or token missing." };
+  }
+
+  const [owner, repo] = project.githubRepoName.split('/');
+  if (!owner || !repo) return { success: false, error: "Invalid GitHub repository name." };
+
+  const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+  try {
+    // Check if file already exists to prevent accidental overwrite (createOrUpdateFileContents would update if sha is not provided but path exists)
+    try {
+      await octokit.rest.repos.getContent({ owner, repo, path: filePath });
+      return { success: false, error: `File already exists at path: ${filePath}` };
+    } catch (error: any) {
+      if (error.status !== 404) { // An error other than "not found"
+        throw error; // Re-throw other errors
+      }
+      // If 404, file doesn't exist, proceed with creation
+    }
+
+    const response = await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: filePath,
+      message: commitMessage || `Create ${filePath} via FlowUp`,
+      content: Buffer.from(initialContent).toString('base64'),
+      // No SHA needed for creation
+      committer: { name: session.user.name, email: session.user.email },
+      author: { name: session.user.name, email: session.user.email },
+    });
+
+    if (response.status === 201) { // 201 for created
+      return { success: true, file: response.data.content as GithubRepoContentItem };
+    }
+    return { success: false, error: `GitHub API returned status ${response.status} for file creation.` };
+  } catch (error: any) {
+    console.error(`[createGithubFileAction] Error creating file ${filePath}:`, error);
+    return { success: false, error: `Failed to create file: ${error.message || 'Unknown error'}` };
+  }
+}
+
+
+export async function createGithubFolderAction(
+  projectUuid: string,
+  folderPath: string, // Full path for the new folder
+  commitMessage?: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid || !session.user.name || !session.user.email) {
+    return { success: false, error: "Authentication required." };
+  }
+  // Create a .gitkeep file within the folder to make GitHub recognize it
+  const gitkeepPath = `${folderPath.replace(/\/$/, '')}/.gitkeep`;
+  
+  // Re-use createGithubFileAction for this
+  const result = await createGithubFileAction(
+    projectUuid, 
+    gitkeepPath, 
+    '', // Empty content for .gitkeep
+    commitMessage || `Create folder ${folderPath} via FlowUp`
+  );
+
+  if (result.success) {
+    return { success: true };
+  } else {
+    // Check if error is because .gitkeep already exists (meaning folder might already exist)
+    if (result.error?.includes("File already exists")) {
+        // Consider this a success if the .gitkeep (and thus folder) effectively exists
+        console.warn(`[createGithubFolderAction] Attempted to create folder '${folderPath}' but it (or .gitkeep) might already exist. Error: ${result.error}`);
+        // To be more robust, one might list contents of parent to confirm folder's presence
+        // For now, if .gitkeep creation fails with "already exists", assume folder is there.
+        // Or, we can refine the error message.
+        return { success: false, error: `Folder '${folderPath}' or its .gitkeep file might already exist. Original error: ${result.error}`};
+    }
+    return { success: false, error: result.error || "Failed to create .gitkeep file for folder." };
+  }
+}
+
+export async function deleteGithubFileAction(
+  projectUuid: string,
+  filePath: string,
+  sha: string,
+  commitMessage?: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+   if (!session?.user?.uuid || !session.user.name || !session.user.email) {
+    return { success: false, error: "Authentication required or user details missing." };
+  }
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { success: false, error: "Project not found or not linked to GitHub." };
+  }
+
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken || !oauthToken.accessToken) {
+    return { success: false, error: "GitHub account not linked or token missing." };
+  }
+
+  const [owner, repo] = project.githubRepoName.split('/');
+  if (!owner || !repo) return { success: false, error: "Invalid GitHub repository name format." };
+
+  const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+  try {
+    const response = await octokit.rest.repos.deleteFile({
+      owner,
+      repo,
+      path: filePath,
+      message: commitMessage || `Delete ${filePath} via FlowUp`,
+      sha,
+      committer: { name: session.user.name, email: session.user.email },
+      author: { name: session.user.name, email: session.user.email },
+    });
+
+    if (response.status === 200) { // 200 for successful deletion
+      return { success: true };
+    }
+    return { success: false, error: `GitHub API returned status ${response.status} for file deletion.` };
+  } catch (error: any) {
+    console.error(`[deleteGithubFileAction] Error deleting file ${filePath}:`, error);
+    return { success: false, error: `Failed to delete file: ${error.message || 'Unknown error'}` };
+  }
+}
+
+
+// Note: Renaming and Deleting folders (especially non-empty ones) are more complex.
+// Renaming often involves creating new + deleting old.
+// Deleting non-empty folders requires recursive deletion of contents first.
+// These are deferred for now.
 
