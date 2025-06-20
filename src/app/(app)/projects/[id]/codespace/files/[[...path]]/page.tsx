@@ -12,30 +12,31 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as UIAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as UIAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Renamed to avoid conflict
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles } from 'lucide-react';
-import { 
-  getRepoContentsAction, 
-  getFileContentAction, 
-  fetchProjectAction, 
+import {
+  getRepoContentsAction,
+  getFileContentAction,
+  fetchProjectAction,
   saveFileContentAction,
   createGithubFileAction,
   createGithubFolderAction,
   deleteGithubFileAction,
   generateProjectFilesWithAIAction,
   type GenerateProjectFilesAIFormState,
-  editFileWithAIAction, // Added new action
+  editFileWithAIAction,
+  type EditFileContentAIOutput,
 } from '@/app/(app)/projects/[id]/actions';
 import type { GithubRepoContentItem, Project } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import NextImage from 'next/image';
-import { useForm } from 'react-hook-form'; 
-import { useActionState, startTransition } from 'react'; // Corrected import
+import { useForm } from 'react-hook-form';
+import { useActionState, startTransition } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -78,14 +79,14 @@ function FileExplorerContent() {
   const { toast } = useToast();
 
   const projectUuid = params.id as string;
-  
+
   const filePathArray = useMemo(() => (params.path || []) as string[], [params.path]);
   const currentPath = useMemo(() => filePathArray.join('/'), [filePathArray]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [contents, setContents] = useState<GithubRepoContentItem[]>([]);
   const [fileData, setFileData] = useState<{ name: string; path: string; content: string; type: 'md' | 'image' | 'html' | 'text' | 'other'; downloadUrl?: string | null, encoding?: string, sha: string } | null>(null);
-  
+
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isLoadingPathContent, setIsLoadingPathContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,19 +115,20 @@ function FileExplorerContent() {
   const newFileForm = useForm<NewFileFormValues>({ resolver: zodResolver(newFileFormSchema), defaultValues: { fileName: '', initialContent: ''}});
   const newFolderForm = useForm<NewFolderFormValues>({ resolver: zodResolver(newFolderFormSchema), defaultValues: { folderName: ''}});
 
+
   const loadContent = useCallback(async (pathToLoad: string) => {
     if (!project || !project.githubRepoName || authLoading || isLoadingProject) {
       return;
     }
     setIsLoadingPathContent(true);
     setError(null);
-    setFileData(null); 
-    setIsViewingFile(false); 
+    setFileData(null);
+    setIsViewingFile(false);
 
     try {
       const extension = pathToLoad.includes('.') ? getFileExtension(pathToLoad.split('/').pop()!) : null;
-      const isFileCandidate = !!extension && !pathToLoad.endsWith('/'); 
-      
+      const isFileCandidate = !!extension && !pathToLoad.endsWith('/');
+
       if (isFileCandidate) {
         const fetchedFileData = await getFileContentAction(projectUuid, pathToLoad);
         if ('content' in fetchedFileData && fetchedFileData.sha) {
@@ -135,7 +137,7 @@ function FileExplorerContent() {
           else if (IMAGE_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'image';
           else if (extension === 'html') fileDisplayType = 'html';
           else if (TEXT_EXTENSIONS.includes(`.${extension}`) || fetchedFileData.encoding === 'utf-8' || !fetchedFileData.encoding) fileDisplayType = 'text';
-          
+
           setFileData({
             name: pathToLoad.split('/').pop()!,
             path: pathToLoad,
@@ -151,7 +153,7 @@ function FileExplorerContent() {
           setError(fetchedFileData.error || "Failed to load file content.");
           setIsViewingFile(false);
         }
-      } else { 
+      } else {
         const dirData = await getRepoContentsAction(projectUuid, pathToLoad);
         if (Array.isArray(dirData)) {
           setContents(dirData.sort((a, b) => {
@@ -188,7 +190,7 @@ function FileExplorerContent() {
           setProject(fetchedProject);
           if (!fetchedProject.githubRepoName) {
             setError("Project is not linked to a GitHub repository.");
-            setIsLoadingPathContent(false); 
+            setIsLoadingPathContent(false);
           }
         }
       })
@@ -235,7 +237,7 @@ function FileExplorerContent() {
       toast({ title: "File Created", description: `${values.fileName} created successfully.`});
       setIsCreateFileModalOpen(false);
       newFileForm.reset();
-      loadContent(currentPath); 
+      loadContent(currentPath);
     } else {
       toast({ variant: "destructive", title: "Creation Error", description: result.error || "Failed to create file."});
     }
@@ -251,7 +253,7 @@ function FileExplorerContent() {
       toast({ title: "Folder Created", description: `${values.folderName} created successfully.`});
       setIsCreateFolderModalOpen(false);
       newFolderForm.reset();
-      loadContent(currentPath); 
+      loadContent(currentPath);
     } else {
       toast({ variant: "destructive", title: "Creation Error", description: result.error || "Failed to create folder."});
     }
@@ -265,11 +267,11 @@ function FileExplorerContent() {
     if (result.success) {
       toast({ title: "File Deleted", description: `${contentToDelete.name} deleted successfully.`});
       setContentToDelete(null);
-      if (isViewingFile && fileData?.path === contentToDelete.path) { 
+      if (isViewingFile && fileData?.path === contentToDelete.path) {
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
         router.push(`/projects/${projectUuid}/codespace/files${parentPath ? '/' + parentPath : ''}`);
       } else {
-        loadContent(currentPath); 
+        loadContent(currentPath);
       }
     } else {
       toast({ variant: "destructive", title: "Deletion Error", description: result.error || "Failed to delete file."});
@@ -293,7 +295,7 @@ function FileExplorerContent() {
             toast({ title: "AI Scaffold Success", description: aiScaffoldState.message });
             setIsAiScaffoldModalOpen(false);
             aiScaffoldForm.reset();
-            loadContent(currentPath); 
+            loadContent(currentPath);
         }
         if (aiScaffoldState.error) {
             toast({ variant: "destructive", title: "AI Scaffold Error", description: aiScaffoldState.error });
@@ -305,8 +307,8 @@ function FileExplorerContent() {
     if (!project || !fileData || !editingContent) return;
     setIsAiEditingFile(true);
     try {
-      const result = await editFileWithAIAction(project.uuid, editingContent, values.aiEditPrompt);
-      if (result.newContent) {
+      const result: EditFileContentAIOutput | { error: string } = await editFileWithAIAction(project.uuid, editingContent, values.aiEditPrompt);
+      if ('newContent' in result) {
         setEditingContent(result.newContent);
         toast({ title: "AI Edit Success", description: "Content updated by AI." });
         setIsAiEditFileModalOpen(false);
@@ -336,17 +338,17 @@ function FileExplorerContent() {
   const isLoadingPage = authLoading || isLoadingProject || isLoadingPathContent;
 
 
-  if (isLoadingPage && !error && !project?.githubRepoName) { 
+  if (isLoadingPage && !error && !project?.githubRepoName) {
     return (
       <div className="space-y-6">
          <div className="flex justify-between items-center">
-             <Skeleton className="h-9 w-48" /> 
+             <Skeleton className="h-9 w-48" />
         </div>
         <Card>
             <CardHeader>
-                <Skeleton className="h-8 w-1/2 mb-2" /> 
-                <Skeleton className="h-5 w-3/4" /> 
-                <div className="mt-2 flex space-x-1 pb-1 border-t pt-2"> 
+                <Skeleton className="h-8 w-1/2 mb-2" />
+                <Skeleton className="h-5 w-3/4" />
+                <div className="mt-2 flex space-x-1 pb-1 border-t pt-2">
                     <Skeleton className="h-5 w-16" /> <Skeleton className="h-5 w-4" /> <Skeleton className="h-5 w-20" />
                 </div>
             </CardHeader>
@@ -359,7 +361,7 @@ function FileExplorerContent() {
       </div>
     );
   }
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -506,8 +508,8 @@ function FileExplorerContent() {
                 </AlertDescription>
               </Alert>
           ) : isViewingFile && fileData ? (
-            <div className="flex flex-col h-full"> {/* Main container for file view */}
-                <div className="flex justify-between items-center mb-4 flex-shrink-0"> {/* Header: Title and Buttons */}
+            <div className="flex flex-col h-full">
+                <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h3 className="text-xl font-semibold truncate">{fileData.name}</h3>
                     <div className="flex items-center gap-2">
                         {canEditCurrentFile && (
@@ -531,9 +533,7 @@ function FileExplorerContent() {
                          )}
                     </div>
                 </div>
-
-                {/* Content area that will scroll if needed */}
-                <div className="overflow-auto flex-grow"> {/* This div handles scrolling for its children */}
+                <div className="overflow-auto flex-grow">
                     {fileData.type === 'md' && (
                         <div className="prose dark:prose-invert max-w-none p-4 border rounded-md bg-muted/30 min-w-max">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileData.content}</ReactMarkdown>
@@ -556,11 +556,11 @@ function FileExplorerContent() {
                     {fileData.type === 'html' && (
                          <div className="p-4 border rounded-md bg-muted/30">
                             <h4 className="text-sm font-semibold mb-2">HTML Preview:</h4>
-                            <iframe 
-                                srcDoc={fileData.content} 
+                            <iframe
+                                srcDoc={fileData.content}
                                 title={`Preview of ${fileData.name}`}
                                 className="w-full h-[50vh] border rounded-md bg-white min-w-[600px]"
-                                sandbox="allow-scripts" 
+                                sandbox="allow-scripts"
                             />
                         </div>
                     )}
@@ -598,7 +598,7 @@ function FileExplorerContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filePathArray.length > 0 && ( 
+                {filePathArray.length > 0 && (
                   <TableRow className="hover:bg-muted/30 cursor-pointer">
                     <TableCell colSpan={4}>
                       <Link href={
@@ -612,8 +612,7 @@ function FileExplorerContent() {
                   </TableRow>
                 )}
                 {contents.map((item) => (
-                  <TableRow key={item.path}> {/* Changed key to item.path */}
-                    <TableCell>
+                  <TableRow key={item.path}><TableCell>
                       <Link
                         href={`/projects/${projectUuid}/codespace/files/${item.path}`}
                         className="flex items-center hover:underline group"
@@ -621,10 +620,7 @@ function FileExplorerContent() {
                         {item.type === 'dir' ? <Folder className="mr-2 h-5 w-5 text-sky-500 group-hover:text-sky-600 flex-shrink-0" /> : <FileText className="mr-2 h-5 w-5 text-gray-500 group-hover:text-gray-700 flex-shrink-0" />}
                         <span className="truncate">{item.name}</span>
                       </Link>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell capitalize">{item.type === 'dir' ? 'Folder' : 'File'}</TableCell>
-                    <TableCell className="hidden md:table-cell">{item.type === 'file' && item.size > 0 ? `${(item.size / 1024).toFixed(2)} KB` : item.type === 'file' ? '0 KB' : '-'}</TableCell>
-                    <TableCell className="text-right">
+                    </TableCell><TableCell className="hidden sm:table-cell capitalize">{item.type === 'dir' ? 'Folder' : 'File'}</TableCell><TableCell className="hidden md:table-cell">{item.type === 'file' && item.size > 0 ? `${(item.size / 1024).toFixed(2)} KB` : item.type === 'file' ? '0 KB' : '-'}</TableCell><TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                            <Button variant="outline" size="sm" asChild>
                                <Link href={`/projects/${projectUuid}/codespace/files/${item.path}`}>
@@ -638,7 +634,7 @@ function FileExplorerContent() {
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
-                                    {contentToDelete?.path === item.path && ( 
+                                    {contentToDelete?.path === item.path && (
                                         <AlertDialogContent>
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Delete File: "{contentToDelete.name}"?</AlertDialogTitle>
@@ -654,14 +650,13 @@ function FileExplorerContent() {
                                     )}
                                </AlertDialog>
                            )}
-                           {item.type === 'dir' && ( 
+                           {item.type === 'dir' && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete Folder (Not Implemented)" disabled>
                                     <Trash2 className="h-4 w-4 opacity-50" />
                                 </Button>
                            )}
                         </div>
-                    </TableCell>
-                  </TableRow>
+                    </TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
@@ -689,7 +684,7 @@ function FileExplorerContent() {
               Modify the content of the file. Your changes will be committed to GitHub.
               <Dialog open={isAiEditFileModalOpen} onOpenChange={setIsAiEditFileModalOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!canEditCurrentFile || isSavingFile}>
+                  <Button variant="outline" size="sm" disabled={!canEditCurrentFile || isSavingFile || isAiEditingFile}>
                       <Sparkles className="mr-2 h-4 w-4 text-primary" /> Assist with AI
                   </Button>
                 </DialogTrigger>
