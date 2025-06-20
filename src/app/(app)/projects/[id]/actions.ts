@@ -32,7 +32,7 @@ import {
   deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
   updateProjectGithubRepo as dbUpdateProjectGithubRepo,
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
-  getUserGithubInstallation,
+  // getUserGithubInstallation, // Not used directly, part of GitHub client
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -565,8 +565,8 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
     message: 'Update README.md from FlowUp',
     content: Buffer.from(content).toString('base64'),
     committer: {
-      name: 'FlowUp Bot',
-      email: 'bot@flowup.app',
+      name: 'FlowUp Bot', // Or use the user's GitHub name if available
+      email: 'bot@flowup.app', // Or user's email if allowed and consented
     },
   };
   if (existingSha) {
@@ -579,8 +579,6 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
   } catch (error: any) {
      if (error.status === 404 && !existingSha) {
         console.log(`[updateReadmeOnGithub] README.md not found for ${owner}/${repo}, creating it.`);
-        // If it was a 404 and we didn't have an existing SHA, it means the file doesn't exist.
-        // We can try creating it without the SHA.
         const paramsForCreation = { ...paramsForUpdate };
         delete paramsForCreation.sha;
         try {
@@ -596,6 +594,7 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
     }
   }
 }
+
 
 export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormState, formData: FormData): Promise<SaveProjectReadmeFormState> {
   const session = await auth();
@@ -625,7 +624,17 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
       const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
       if (oauthToken?.accessToken) {
         const octokit = new Octokit({ auth: oauthToken.accessToken });
-        const [owner, repo] = updatedProject.githubRepoName.split('/');
+        
+        const repoParts = updatedProject.githubRepoName.split('/');
+        if (repoParts.length !== 2) {
+             console.error(`[saveProjectReadmeAction] Invalid githubRepoName format: ${updatedProject.githubRepoName}`);
+             return { message: "README saved in FlowUp, but GitHub repo name format is invalid for GitHub update.", project: updatedProject };
+        }
+        const [owner, repo] = repoParts;
+         if (!owner || !repo) {
+            console.error(`[saveProjectReadmeAction] Invalid owner or repo after splitting githubRepoName: ${updatedProject.githubRepoName}`);
+            return { message: "README saved in FlowUp, but GitHub owner or repo name is invalid for GitHub update.", project: updatedProject };
+        }
         
         let existingSha: string | null = null;
         try {
@@ -1112,15 +1121,23 @@ export async function fetchUserGithubOAuthTokenAction(): Promise<UserGithubOAuth
   }
 }
 
-function sanitizeRepoName(name: string): string {
-  let sanitized = name
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9_.-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^\.+|\.$|^-+|-+$/g, ''); 
+function sanitizeRepoName(name: string | null | undefined): string {
+  if (!name) { 
+    return '';
+  }
+  const trimmedName = name.trim();
+  if (trimmedName === '') {
+    return '';
+  }
 
-  return sanitized.substring(0, 100);
+  let sanitized = trimmedName
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/[^a-zA-Z0-9_.-]/g, '') // Remove invalid characters
+    .replace(/-+/g, '-') // Replace multiple hyphens with a single one
+    .replace(/^\.+|\.$/g, '') // Remove leading/trailing dots
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+    
+  return sanitized.substring(0, 100); // GitHub repo name max length is 100
 }
 
 
@@ -1140,28 +1157,35 @@ export async function linkProjectToGithubAction(
   }
 
   const projectUuid = formData.get('projectUuid') as string;
-  const flowUpProjectName = formData.get('flowUpProjectName') as string; 
-  const githubRepoNameInput = formData.get('githubRepoName') as string; 
+  const flowUpProjectNameValue = formData.get('flowUpProjectName');
+  const githubRepoNameValue = formData.get('githubRepoName');
   const useDefaultRepoName = formData.get('useDefaultRepoName') === 'true';
 
+  let nameForRepoCreation: string;
 
-  if (!projectUuid || !flowUpProjectName) {
-    return { error: "Project UUID and FlowUp Project Name are required." };
+  if (useDefaultRepoName) {
+    if (typeof flowUpProjectNameValue === 'string' && flowUpProjectNameValue.trim() !== '') {
+      nameForRepoCreation = `FlowUp-${flowUpProjectNameValue}`;
+    } else {
+      return { error: "FlowUp Project Name is required to generate the default repository name." };
+    }
+  } else {
+    if (typeof githubRepoNameValue === 'string' && githubRepoNameValue.trim() !== '') {
+      nameForRepoCreation = githubRepoNameValue;
+    } else {
+      return { error: "Custom repository name cannot be empty." };
+    }
+  }
+  
+  const repoSlug = sanitizeRepoName(nameForRepoCreation);
+  if (!repoSlug) {
+    return { error: "Resulting repository name is invalid after sanitization. Please provide a valid name." };
   }
 
   const projectFromDb = await dbGetProjectByUuid(projectUuid);
   if (!projectFromDb) {
     return { error: "FlowUp project not found." };
   }
-
-  const repoSlug = useDefaultRepoName 
-    ? sanitizeRepoName(`FlowUp-${flowUpProjectName}`)
-    : sanitizeRepoName(githubRepoNameInput);
-  
-  if (!repoSlug) {
-    return { error: "Invalid repository name. Please provide a valid name or use the default." };
-  }
-
   const repoIsPrivate = projectFromDb.isPrivate !== undefined ? projectFromDb.isPrivate : true;
 
 
@@ -1185,20 +1209,27 @@ export async function linkProjectToGithubAction(
       createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
         name: repoSlug,
         private: repoIsPrivate,
-        description: `Repository for FlowUp project: ${flowUpProjectName}`,
+        description: `Repository for FlowUp project: ${projectFromDb.name}`,
         auto_init: true, 
       });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
       if (projectFromDb.readmeContent && projectFromDb.readmeContent.trim() !== '') {
-         const { data: readmeData } = await octokit.rest.repos.getContent({
-            owner: createdRepo.data.owner.login,
-            repo: createdRepo.data.name,
-            path: 'README.md',
-          });
-        let existingReadmeSha: string | undefined = undefined;
-        if ('sha' in readmeData && readmeData.type === 'file') {
-            existingReadmeSha = readmeData.sha;
+        // Fetch existing README's SHA to avoid errors if it was created by auto_init
+         let existingReadmeSha: string | undefined = undefined;
+        try {
+            const { data: readmeData } = await octokit.rest.repos.getContent({
+                owner: createdRepo.data.owner.login,
+                repo: createdRepo.data.name,
+                path: 'README.md',
+            });
+            if ('sha' in readmeData && readmeData.type === 'file') { // Check if readmeData is a file object
+                existingReadmeSha = readmeData.sha;
+            }
+        } catch (getContentError: any) {
+            if (getContentError.status !== 404) { // Log error if not a "file not found"
+                console.warn(`[linkProjectToGithubAction] Could not fetch existing README SHA for ${createdRepo.data.owner.login}/${createdRepo.data.name}:`, getContentError.message);
+            }
         }
         await updateReadmeOnGithub(octokit, createdRepo.data.owner.login, createdRepo.data.name, projectFromDb.readmeContent, existingReadmeSha);
       }
@@ -1206,7 +1237,7 @@ export async function linkProjectToGithubAction(
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
       const errorMessage = apiError.response?.data?.message || apiError.message || 'Unknown GitHub API error.';
-      if (apiError.status === 422) {
+      if (apiError.status === 422) { // Unprocessable Entity (e.g., repo already exists)
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${errorMessage}` };
       }
       return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${errorMessage} - ${apiError.documentation_url || ''}` };
@@ -1215,7 +1246,7 @@ export async function linkProjectToGithubAction(
     const repoUrl = createdRepo.data.html_url;
     const actualRepoName = createdRepo.data.full_name; 
 
-    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName, null);
+    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName);
 
     if (!updatedProject) {
         return { error: "Failed to save GitHub repository details to FlowUp project after creation on GitHub." };
@@ -1229,9 +1260,13 @@ export async function linkProjectToGithubAction(
   }
 }
 
+/* 
+// This function might be needed if we switch back to GitHub App installation flow for repo creation
+// For now, with OAuth flow, it's not directly used for creating repos but good for fetching installation details
+// if we need to interact with the app installation itself.
 export async function fetchUserGithubAccessDetailsAction(userUuid: string): Promise<{
     oauthToken: UserGithubOAuthToken | null;
-    installation: UserGithubInstallation | null;
+    installation: UserGithubInstallation | null; // Placeholder, not fully implemented for OAuth flow
 }> {
     const session = await auth();
     if (!session?.user?.uuid || session.user.uuid !== userUuid) {
@@ -1240,10 +1275,13 @@ export async function fetchUserGithubAccessDetailsAction(userUuid: string): Prom
     }
     try {
         const oauthToken = await dbGetUserGithubOAuthToken(userUuid);
-        const installation = await getUserGithubInstallation(userUuid);
-        return { oauthToken, installation };
+        // const installation = await getUserGithubInstallation(userUuid); // This is for GitHub App installs
+        return { oauthToken, installation: null }; // Return null for installation in pure OAuth flow
     } catch (error) {
         console.error("[fetchUserGithubAccessDetailsAction] Error fetching GitHub access details:", error);
         return { oauthToken: null, installation: null };
     }
 }
+*/
+
+```
