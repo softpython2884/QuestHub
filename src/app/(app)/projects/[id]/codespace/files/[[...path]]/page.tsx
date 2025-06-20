@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, Suspense, useCallback, useMemo } from 'react';
+import { useEffect, useState, Suspense, useCallback, useMemo, startTransition as ReactStartTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,7 +34,7 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import NextImage from 'next/image';
 import { useForm } from 'react-hook-form'; 
-import { useActionState as useReactActionState } from 'react';
+import { useActionState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -98,7 +98,7 @@ function FileExplorerContent() {
 
   const [isAiScaffoldModalOpen, setIsAiScaffoldModalOpen] = useState(false);
   const aiScaffoldForm = useForm<AiScaffoldFormValues>({ resolver: zodResolver(aiScaffoldFormSchema), defaultValues: { prompt: ''}});
-  const [aiScaffoldState, aiScaffoldFormAction, isAiScaffolding] = useReactActionState(generateProjectFilesWithAIAction, { message: "", error: ""});
+  const [aiScaffoldState, aiScaffoldFormAction, isAiScaffolding] = useActionState(generateProjectFilesWithAIAction, { message: "", error: ""});
 
 
   const newFileForm = useForm<NewFileFormValues>({ resolver: zodResolver(newFileFormSchema), defaultValues: { fileName: '', initialContent: ''}});
@@ -203,10 +203,7 @@ function FileExplorerContent() {
     } else if (project && !project.githubRepoName && !isLoadingProject) {
         setIsLoadingPathContent(false);
     }
-  // Deliberately not including forceReloadContent or currentPath in deps to avoid loops.
-  // forceReloadContent is called explicitly or when project data changes.
-  // currentPath changes trigger URL navigation, which leads to this effect running again via param changes.
-  }, [project, authLoading, isLoadingProject, currentPath]); // Removed forceReloadContent from here
+  }, [project, authLoading, isLoadingProject, currentPath, forceReloadContent]);
 
 
   const handleSaveFile = async () => {
@@ -263,7 +260,7 @@ function FileExplorerContent() {
     if (result.success) {
       toast({ title: "File Deleted", description: `${contentToDelete.name} deleted successfully.`});
       setContentToDelete(null);
-      if (isViewingFile && fileData?.path === contentToDelete.path) { // If viewing the deleted file, go up
+      if (isViewingFile && fileData?.path === contentToDelete.path) { 
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
         await forceReloadContent(parentPath);
         router.push(`/projects/${projectUuid}/codespace/files${parentPath ? '/' + parentPath : ''}`);
@@ -281,7 +278,9 @@ function FileExplorerContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('prompt', values.prompt);
     formData.append('basePath', currentPath);
-    aiScaffoldFormAction(formData);
+    ReactStartTransition(() => {
+        aiScaffoldFormAction(formData);
+    });
   };
 
   useEffect(() => {
@@ -290,7 +289,7 @@ function FileExplorerContent() {
             toast({ title: "AI Scaffold Success", description: aiScaffoldState.message });
             setIsAiScaffoldModalOpen(false);
             aiScaffoldForm.reset();
-            forceReloadContent(); // Reload current directory
+            forceReloadContent(); 
         }
         if (aiScaffoldState.error) {
             toast({ variant: "destructive", title: "AI Scaffold Error", description: aiScaffoldState.error });
@@ -661,7 +660,6 @@ function FileExplorerContent() {
             <DialogTitle>Edit: {fileData?.name}</DialogTitle>
             <DialogDescription>
               Modify the content of the file. Your changes will be committed to GitHub.
-              {/* Placeholder for AI button */}
               <Button variant="outline" size="sm" className="ml-auto mt-2" disabled>
                 <Sparkles className="mr-2 h-4 w-4 text-primary" /> Assist with AI (Soon)
               </Button>
