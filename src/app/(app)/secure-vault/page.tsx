@@ -8,8 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-// import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks'; // Removed
-import { ShieldCheck, PlusCircle, KeyRound, Eye, EyeOff, Copy, Trash2, AlertTriangle } from "lucide-react";
+import { ShieldCheck, PlusCircle, KeyRound, Eye, EyeOff, Copy, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface SecretItem {
@@ -36,7 +35,7 @@ export default function SecureVaultPage() {
   const { toast } = useToast();
 
   const toggleShowValue = (id: string) => {
-    setSecrets(prevSecrets => 
+    setSecrets(prevSecrets =>
       prevSecrets.map(s => s.id === id ? { ...s, showValue: !s.showValue } : s)
     );
   };
@@ -45,12 +44,14 @@ export default function SecureVaultPage() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied!", description: "Secret value copied to clipboard." });
   };
-  
-  const handleAddSecret = () => {
+
+  const handleAddSecret = async () => {
     if(!newSecretName || !newSecretValue) {
         toast({ variant: "destructive", title: "Error", description: "Secret name and value cannot be empty." });
         return;
     }
+
+    // AI check for API key risk removed
     const newSecret: SecretItem = {
         id: `secret-${Date.now()}`,
         name: newSecretName,
@@ -90,9 +91,9 @@ export default function SecureVaultPage() {
           </div>
           <div>
             <Label htmlFor="secret-value">Secret Value</Label>
-            <Textarea 
-              id="secret-value" 
-              placeholder="Enter the secret key, password, or note" 
+            <Textarea
+              id="secret-value"
+              placeholder="Enter the secret key, password, or note"
               value={newSecretValue}
               onChange={(e) => setNewSecretValue(e.target.value)}
             />
@@ -158,4 +159,3 @@ export default function SecureVaultPage() {
     </div>
   );
 }
-

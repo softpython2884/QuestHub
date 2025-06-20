@@ -1,7 +1,9 @@
+
 'use server';
 
 /**
  * @fileOverview AI agent to flag potential API key risks in text.
+ * THIS FLOW IS CURRENTLY NOT USED AND HAS BEEN REMOVED FROM ACTIVE CODE.
  *
  * - flagApiKeyRisks - A function that analyzes text for potential API keys and flags them.
  * - FlagApiKeyRisksInput - The input type for the flagApiKeyRisks function.
@@ -34,7 +36,9 @@ const FlagApiKeyRisksOutputSchema = z.object({
 export type FlagApiKeyRisksOutput = z.infer<typeof FlagApiKeyRisksOutputSchema>;
 
 export async function flagApiKeyRisks(input: FlagApiKeyRisksInput): Promise<FlagApiKeyRisksOutput> {
-  return flagApiKeyRisksFlow(input);
+  // This flow is disabled. Returning a non-flagged response.
+  // return flagApiKeyRisksFlow(input);
+  return { flagged: false };
 }
 
 const prompt = ai.definePrompt({
@@ -63,3 +67,4 @@ const flagApiKeyRisksFlow = ai.defineFlow(
     return output!;
   }
 );
+

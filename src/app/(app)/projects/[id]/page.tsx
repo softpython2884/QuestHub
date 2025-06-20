@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles, Settings2, Unlink } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +72,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -112,6 +113,15 @@ const projectAnnouncementFormSchema = z.object({
   content: z.string().min(1, "Content is required."),
 });
 type ProjectAnnouncementFormValues = z.infer<typeof projectAnnouncementFormSchema>;
+
+const linkGithubFormSchema = z.object({
+  githubRepoName: z.string().optional(),
+  useDefaultRepoName: z.boolean().default(true),
+}).refine(data => data.useDefaultRepoName || (data.githubRepoName && data.githubRepoName.trim() !== ''), {
+  message: "Custom repository name cannot be empty if not using default.",
+  path: ["githubRepoName"],
+});
+type LinkGithubFormValues = z.infer<typeof linkGithubFormSchema>;
 
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
@@ -205,6 +215,14 @@ function ProjectDetailPageContent() {
 
   const [activeTab, setActiveTab] = useState('tasks');
 
+  const [isLinkGithubDialogOpen, setIsLinkGithubDialogOpen] = useState(false);
+  const linkGithubForm = useForm<LinkGithubFormValues>({
+    resolver: zodResolver(linkGithubFormSchema),
+    defaultValues: { useDefaultRepoName: true, githubRepoName: '' },
+  });
+  const useDefaultRepoNameWatch = linkGithubForm.watch("useDefaultRepoName");
+
+
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && ['tasks', 'readme', 'documents', 'announcements', 'codespace', 'settings'].includes(tabFromUrl)) {
@@ -213,13 +231,11 @@ function ProjectDetailPageContent() {
     const oauthStatus = searchParams.get('oauth_status');
     if (oauthStatus === 'success') {
       toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
-      // Refresh OAuth token state
       loadUserGithubOAuth();
-      // Clean URL
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('oauth_status');
-      newUrl.searchParams.delete('code'); // also remove code if present from github redirect
-      newUrl.searchParams.delete('state'); // also remove state
+      newUrl.searchParams.delete('code');
+      newUrl.searchParams.delete('state');
       router.replace(newUrl.toString(), { scroll: false });
     } else if (oauthStatus === 'error' || searchParams.get('error')) {
        toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
@@ -231,7 +247,7 @@ function ProjectDetailPageContent() {
        router.replace(newUrl.toString(), { scroll: false });
     }
 
-  }, [searchParams, router, toast]); // Add toast and router to dependencies
+  }, [searchParams, router, toast]);
 
 
   const loadUserGithubOAuth = useCallback(async () => {
@@ -411,7 +427,7 @@ function ProjectDetailPageContent() {
                     await loadProjectTagsData();
                     await loadProjectDocuments();
                     await loadProjectAnnouncements();
-                    await loadUserGithubOAuth(); 
+                    await loadUserGithubOAuth();
 
                 } else {
                     setAccessDenied(true);
@@ -674,14 +690,15 @@ function ProjectDetailPageContent() {
         toast({ title: "Success", description: linkGithubState.message });
         if (linkGithubState.project) {
           setProject(linkGithubState.project);
-          // loadUserGithubOAuth(); No, GitHub App installation is separate from OAuth for user
         }
+        setIsLinkGithubDialogOpen(false);
+        linkGithubForm.reset({ useDefaultRepoName: true, githubRepoName: '' });
       }
       if (linkGithubState.error) {
         toast({ variant: "destructive", title: "GitHub Link Error", description: linkGithubState.error });
       }
     }
-  }, [linkGithubState, isLinkGithubPending, toast]); // Removed loadUserGithubOAuth
+  }, [linkGithubState, isLinkGithubPending, toast, linkGithubForm]);
 
 
   useEffect(() => {
@@ -894,7 +911,7 @@ function ProjectDetailPageContent() {
     if (!project) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
-    formData.append('isPrivate', String(checked));
+    formData.append('isPrivate', String(checked)); // checked is the new "isPrivate" state for GitHub
     ReactStartTransition(() => {
       toggleVisibilityFormAction(formData);
     });
@@ -1105,22 +1122,30 @@ function ProjectDetailPageContent() {
     });
   };
 
-  const handleLinkOrInstallGithub = async () => {
+  const handleLinkToGithubSubmit = (values: LinkGithubFormValues) => {
     if (!project || !user) return;
-
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
-    formData.append('projectName', project.name);
+    formData.append('flowUpProjectName', project.name);
+    if (!values.useDefaultRepoName && values.githubRepoName) {
+      formData.append('githubRepoName', values.githubRepoName);
+    }
+    // project.isPrivate will be used by the server action
     ReactStartTransition(() => {
       linkProjectToGithubFormAction(formData);
     });
   };
 
+
   const handleInitiateGithubOAuth = () => {
     if (!project) return;
     const redirectTo = `/projects/${project.uuid}?tab=codespace`;
-    // Redirect to our own API route that will then redirect to GitHub
     window.location.href = `/api/auth/github/oauth/login?redirectTo=${encodeURIComponent(redirectTo)}&projectUuid=${project.uuid}`;
+  };
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${type} Copied!`, description: `${type} URL copied to clipboard.` });
   };
 
 
@@ -1638,6 +1663,9 @@ function ProjectDetailPageContent() {
                 <CardTitle>Project README</CardTitle>
                 <CardDescription>
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
+                  {project?.githubRepoUrl && (
+                     <span className="block text-xs mt-1 text-green-600">This README is synced with GitHub.</span>
+                  )}
                 </CardDescription>
               </div>
                <Button onClick={handleSaveReadme} disabled={isSaveReadmePending || !canCreateUpdateDeleteTasks}>
@@ -1924,7 +1952,7 @@ function ProjectDetailPageContent() {
               <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace & GitHub</CardTitle>
               <CardDescription>Manage your project's code by linking it to a GitHub repository.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               {isLoadingGithubAuth && (
                 <div className="flex items-center justify-center p-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1932,7 +1960,7 @@ function ProjectDetailPageContent() {
                 </div>
               )}
               {!isLoadingGithubAuth && !userGithubOAuthToken && (
-                <div className="p-4 border-dashed border-2 rounded-md text-center">
+                <div className="p-6 border-dashed border-2 rounded-md text-center bg-muted/30">
                   <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <h3 className="text-lg font-semibold mb-1">Connect to GitHub</h3>
                   <p className="text-sm text-muted-foreground mb-4">
@@ -1944,52 +1972,164 @@ function ProjectDetailPageContent() {
                 </div>
               )}
                {!isLoadingGithubAuth && userGithubOAuthToken && !project.githubRepoUrl && (
-                <div className="p-4 border-dashed border-2 rounded-md text-center">
+                <div className="p-6 border-dashed border-2 rounded-md text-center bg-muted/30">
                   <Github className="h-12 w-12 mx-auto text-primary mb-3" />
                    <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
                   <p className="text-sm text-muted-foreground mb-4">
                     Your GitHub account is linked. You can now create a repository for this FlowUp project.
+                    The repository will be {project.isPrivate ? 'private' : 'public'} by default, matching your project's visibility setting.
                   </p>
-                  <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
-                    {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Github className="mr-2 h-4 w-4" /> Create and Link Repository
-                  </Button>
-                   {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
+                   <Dialog open={isLinkGithubDialogOpen} onOpenChange={setIsLinkGithubDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button disabled={!canManageCodeSpace || isLinkGithubPending}>
+                           {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                           <Github className="mr-2 h-4 w-4" /> Create and Link Repository
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Configure GitHub Repository</DialogTitle>
+                            <DialogDescription>
+                                Confirm repository name and visibility. The README will be synced.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Form {...linkGithubForm}>
+                            <form onSubmit={linkGithubForm.handleSubmit(handleLinkToGithubSubmit)} className="space-y-4">
+                                <FormField
+                                    control={linkGithubForm.control}
+                                    name="useDefaultRepoName"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background/50">
+                                            <div className="space-y-0.5">
+                                                <FormLabel>Use Default Repository Name</FormLabel>
+                                                <FormDescription>
+                                                    FlowUp - {project.name}
+                                                </FormDescription>
+                                            </div>
+                                            <FormControl>
+                                                <Checkbox
+                                                    checked={field.value}
+                                                    onCheckedChange={field.onChange}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                {!useDefaultRepoNameWatch && (
+                                    <FormField
+                                        control={linkGithubForm.control}
+                                        name="githubRepoName"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Custom Repository Name</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} placeholder="your-custom-repo-name" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                                <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-md">
+                                    <InfoIcon className="h-5 w-5 text-primary" />
+                                    <p className="text-sm text-muted-foreground">
+                                        The GitHub repository will be created as <strong>{project.isPrivate ? 'Private' : 'Public'}</strong>, matching your project's visibility setting.
+                                    </p>
+                                </div>
+                                {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
+                                <DialogFooter>
+                                    <DialogClose asChild><Button type="button" variant="ghost" disabled={isLinkGithubPending}>Cancel</Button></DialogClose>
+                                    <Button type="submit" disabled={isLinkGithubPending}>
+                                        {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Confirm and Create
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    </DialogContent>
+                   </Dialog>
                 </div>
               )}
               {!isLoadingGithubAuth && project.githubRepoUrl && (
                 <div className="space-y-4">
-                  <div className="p-4 border rounded-md bg-muted/30">
-                    <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <h3 className="text-lg font-semibold">Project Linked to GitHub!</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      This project is linked to the following GitHub repository:
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                        <Github className="h-4 w-4" />
-                        <a
-                        href={project.githubRepoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-sm text-primary hover:underline break-all"
-                        >
-                        {project.githubRepoUrl}
-                        </a>
-                        <Link2 className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                     <p className="text-sm text-muted-foreground mt-1">Repository Name: <span className="font-medium">{project.githubRepoName}</span></p>
-                  </div>
+                  <Card className="bg-green-50 dark:bg-green-900/30 border-green-500">
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <CheckCircle className="h-6 w-6 text-green-600" />
+                            <CardTitle className="text-green-700 dark:text-green-400">Project Linked to GitHub!</CardTitle>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                        This project is linked to the GitHub repository:
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Github className="h-5 w-5" />
+                            <a
+                            href={project.githubRepoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-sm text-primary hover:underline break-all"
+                            >
+                            {project.githubRepoName || project.githubRepoUrl}
+                            </a>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                            <div>
+                                <Label htmlFor="git-https-url">HTTPS Clone URL</Label>
+                                <div className="flex items-center gap-1">
+                                <Input id="git-https-url" readOnly value={`${project.githubRepoUrl}.git`} className="h-8 text-xs" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToClipboard(`${project.githubRepoUrl}.git`, 'HTTPS URL')}><CopyIcon className="h-4 w-4"/></Button>
+                                </div>
+                            </div>
+                            <div>
+                                <Label htmlFor="git-ssh-url">SSH Clone URL</Label>
+                                 <div className="flex items-center gap-1">
+                                <Input id="git-ssh-url" readOnly value={`git@github.com:${project.githubRepoName}.git`} className="h-8 text-xs" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToClipboard(`git@github.com:${project.githubRepoName}.git`, 'SSH URL')}><CopyIcon className="h-4 w-4"/></Button>
+                                 </div>
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            The project's README is synced with the `README.md` file in this repository.
+                            Changes made to the README in FlowUp will be pushed to GitHub.
+                        </p>
+                    </CardContent>
+                  </Card>
 
-                  <Button variant="outline" disabled>
-                    <BookOpen className="mr-2 h-4 w-4" /> Synchronise README with GitHub (Soon)
-                  </Button>
-                  <div className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md">
-                    <Code2 className="mx-auto h-10 w-10 mb-3" />
-                    <p className="font-medium">File Browser & Editor Coming Soon</p>
-                    <p className="text-xs">You'll soon be able to browse, view, and edit your repository files here.</p>
-                  </div>
+                  <Card>
+                      <CardHeader>
+                          <CardTitle className="flex items-center"><Code2 className="mr-2 h-5 w-5"/>File Management (Coming Soon)</CardTitle>
+                          <CardDescription>Soon you'll be able to browse, view, and edit your repository files directly within FlowUp.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
+                          <GitBranch className="mx-auto h-10 w-10 mb-3 opacity-50" />
+                          <p className="font-medium">File Browser & Editor</p>
+                          <p className="text-xs">This feature is under development.</p>
+                      </CardContent>
+                  </Card>
+                    <Card>
+                      <CardHeader>
+                          <CardTitle className="flex items-center"><Terminal className="mr-2 h-5 w-5"/>Discord Logs (Coming Soon)</CardTitle>
+                           <CardDescription>Integrate with Discord to send commit logs or other notifications.</CardDescription>
+                      </CardHeader>
+                       <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12c0 1.99.586 3.823 1.589 5.34L2.056 22l4.603-1.534A9.956 9.956 0 0 0 12 22z"></path><path d="M8 12.5c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2zm8 0c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2z"></path></svg>
+                          <p className="font-medium">Discord Integration</p>
+                          <p className="text-xs">This feature is planned for a future update.</p>
+                      </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader>
+                          <CardTitle className="flex items-center"><DownloadCloud className="mr-2 h-5 w-5"/>Desktop Application (Coming Soon)</CardTitle>
+                           <CardDescription>Access FlowUp more easily with a dedicated desktop application.</CardDescription>
+                      </CardHeader>
+                       <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                          <p className="font-medium">Desktop App</p>
+                          <p className="text-xs">We're working on it!</p>
+                      </CardContent>
+                  </Card>
                 </div>
               )}
             </CardContent>
@@ -2135,7 +2275,7 @@ function ProjectDetailPageContent() {
                 <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
                      <Label htmlFor="project-visibility" className="flex flex-col">
                         <span>Private Project</span>
-                        <span className="text-xs font-normal text-muted-foreground">If unchecked, project becomes public. Only owners/admins can change project visibility.</span>
+                        <span className="text-xs font-normal text-muted-foreground">If unchecked, project becomes public. This also sets GitHub repo visibility. Only owners/admins can change visibility.</span>
                     </Label>
                     <Switch
                         id="project-visibility"
@@ -2245,5 +2385,3 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
-
-

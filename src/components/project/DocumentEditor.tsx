@@ -15,9 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import type { ProjectDocumentType } from '@/types';
-// import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks'; // Removed
 import { generateDocumentContent, type GenerateDocumentContentInput } from '@/ai/flows/generate-document-content';
-import { AlertTriangle, Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
+import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createDocumentAction, updateDocumentAction } from '@/app/(app)/projects/[id]/actions';
 
@@ -54,7 +53,6 @@ export function DocumentEditor({
   const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
-
 
   const form = useForm<DocumentEditorFormValues>({
     resolver: zodResolver(documentEditorFormSchema),
@@ -95,7 +93,7 @@ export function DocumentEditor({
     } else {
       newText = `${syntaxStart}${syntaxEnd}`;
     }
-    
+
     const newValue = value.substring(0, selectionStart) + newText + value.substring(selectionEnd);
     form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
 
@@ -117,7 +115,7 @@ export function DocumentEditor({
       }
     }, 0);
   };
-  
+
   const markdownTools: MarkdownTool[] = [
     { label: 'H1', icon: Heading1, action: () => applyMarkdownSyntax('# ', '', false, true) },
     { label: 'H2', icon: Heading2, action: () => applyMarkdownSyntax('## ', '', false, true) },
@@ -137,6 +135,8 @@ export function DocumentEditor({
 
   const onSubmit = async (data: DocumentEditorFormValues) => {
     setIsSubmitting(true);
+    // AI check for API key risk removed from here
+
     const formData = new FormData();
     formData.append('projectUuid', projectUuid);
     formData.append('title', data.title);
@@ -273,8 +273,8 @@ export function DocumentEditor({
               id="content"
               {...contentField}
                ref={(e) => {
-                contentField.ref(e); 
-                textareaRef.current = e; 
+                contentField.ref(e);
+                textareaRef.current = e;
               }}
               onChange={(e) => {
                 contentField.onChange(e);
@@ -287,7 +287,7 @@ export function DocumentEditor({
               <p className="text-sm text-destructive mt-1">{form.formState.errors.content.message}</p>
             )}
           </div>
-          
+
           <div className="border rounded-md p-4 bg-muted/30 min-h-[450px] h-full overflow-y-auto">
             <Label className="text-lg block mb-2">Live Preview</Label>
             <div className="prose dark:prose-invert max-w-none">
@@ -312,4 +312,3 @@ export function DocumentEditor({
     </>
   );
 }
-

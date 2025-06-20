@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -31,12 +31,12 @@ import {
   getProjectAnnouncements as dbGetProjectAnnouncements,
   deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
   updateProjectGithubRepo as dbUpdateProjectGithubRepo,
-  getUserGithubInstallation as dbGetUserGithubInstallation,
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
+import { Buffer } from 'buffer';
 
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -99,7 +99,7 @@ export async function updateProjectAction(
     if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
         return { error: `You do not have permission to edit this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
-
+    // API Key risk check removed
     const updatedProject = await dbUpdateProjectDetails(projectUuid, name, description || undefined);
     if (!updatedProject) {
       return { error: 'Failed to update project or project not found.' };
@@ -556,14 +556,42 @@ export interface SaveProjectReadmeFormState {
   project?: Project;
 }
 
+async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: string, content: string, existingSha?: string | null) {
+  try {
+    const params: any = {
+      owner,
+      repo,
+      path: 'README.md',
+      message: 'Update README.md from FlowUp',
+      content: Buffer.from(content).toString('base64'),
+      committer: {
+        name: 'FlowUp Bot',
+        email: 'bot@flowup.app',
+      },
+    };
+    if (existingSha) {
+      params.sha = existingSha;
+    }
+    await octokit.rest.repos.createOrUpdateFileContents(params);
+    console.log(`[updateReadmeOnGithub] README.md updated successfully on GitHub for ${owner}/${repo}`);
+  } catch (error: any) {
+     if (error.status === 404 && !existingSha) { // If README doesn't exist (no SHA provided initially)
+        console.log(`[updateReadmeOnGithub] README.md not found for ${owner}/${repo}, creating it.`);
+        delete params.sha; // Remove SHA if it was there due to an incorrect previous attempt
+        await octokit.rest.repos.createOrUpdateFileContents(params);
+        console.log(`[updateReadmeOnGithub] README.md created successfully on GitHub for ${owner}/${repo}`);
+    } else {
+        console.error(`[updateReadmeOnGithub] Failed to update README.md on GitHub for ${owner}/${repo}:`, error.status, error.message, error.response?.data);
+        throw new Error(`Failed to update README on GitHub: ${error.message}`);
+    }
+  }
+}
+
 export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormState, formData: FormData): Promise<SaveProjectReadmeFormState> {
   const session = await auth();
   if (!session?.user?.uuid) {
-    console.error("[saveProjectReadmeAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
-  console.log("[saveProjectReadmeAction] Authenticated user for permission check:", session.user.uuid);
-
 
   const projectUuid = formData.get('projectUuid') as string;
   const readmeContent = formData.get('readmeContent') as string;
@@ -574,14 +602,45 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[saveProjectReadmeAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to edit the README for this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+      return { error: "You do not have permission to edit the README for this project." };
     }
+    // API Key risk check removed
     const updatedProject = await dbUpdateProjectReadme(projectUuid, readmeContent);
     if (!updatedProject) {
-      return { error: "Failed to save README." };
+      return { error: "Failed to save README in FlowUp." };
     }
+
+    // If linked to GitHub, update README there too
+    if (updatedProject.githubRepoUrl && updatedProject.githubRepoName) {
+      const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+      if (oauthToken?.accessToken) {
+        const octokit = new Octokit({ auth: oauthToken.accessToken });
+        const [owner, repo] = updatedProject.githubRepoName.split('/');
+        
+        let existingSha: string | null = null;
+        try {
+          const { data: readmeData } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: 'README.md',
+          });
+          if ('sha' in readmeData) { // Check if it's a file and not an array (directory)
+             existingSha = readmeData.sha;
+          }
+        } catch (error: any) {
+          if (error.status !== 404) { // If error is not "Not Found", then it's a real issue
+            console.warn(`[saveProjectReadmeAction] Could not fetch existing README SHA for ${owner}/${repo}:`, error.message);
+          }
+        }
+        
+        await updateReadmeOnGithub(octokit, owner, repo, readmeContent, existingSha);
+        return { message: "README saved in FlowUp and updated on GitHub.", project: updatedProject };
+      } else {
+        return { message: "README saved in FlowUp. GitHub not linked or token missing for GitHub update.", project: updatedProject };
+      }
+    }
+
     return { message: "README saved successfully.", project: updatedProject };
   } catch (error: any) {
     console.error("Error saving README:", error);
@@ -640,12 +699,15 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
   console.log("[toggleProjectVisibilityAction] Authenticated user for permission check:", session.user.uuid);
 
   const projectUuid = formData.get('projectUuid') as string;
-  const isPrivate = formData.get('isPrivate') === 'true';
+  const isPrivate = formData.get('isPrivate') === 'true'; // This is the GitHub repo visibility
 
   if (!projectUuid) {
     return { error: "Project UUID is required." };
   }
   try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project) return { error: "Project not found." };
+
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
     const globalUser = await dbGetUserByUuid(session.user.uuid);
     console.log(`[toggleProjectVisibilityAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}, Global role: ${globalUser?.role}`);
@@ -653,11 +715,36 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
     if (userRole !== 'owner' && globalUser?.role !== 'admin') {
       return { error: `Only project owners or admins can change project visibility. Your project role: ${userRole || 'not a member'}, global role: ${globalUser?.role || 'unknown'}. UUID: ${session.user.uuid}` };
     }
-    const updatedProject = await dbUpdateProjectVisibility(projectUuid, isPrivate);
-    if (!updatedProject) {
-      return { error: "Failed to update project visibility." };
+    
+    const updatedProjectInDb = await dbUpdateProjectVisibility(projectUuid, isPrivate); // Update FlowUp's record of project visibility
+    if (!updatedProjectInDb) {
+      return { error: "Failed to update project visibility in FlowUp." };
     }
-    return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'}.`, project: updatedProject };
+
+    // If linked to GitHub, update repo visibility there too
+    if (updatedProjectInDb.githubRepoUrl && updatedProjectInDb.githubRepoName) {
+        const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+        if (oauthToken?.accessToken) {
+            const octokit = new Octokit({ auth: oauthToken.accessToken });
+            const [owner, repo] = updatedProjectInDb.githubRepoName.split('/');
+            try {
+                await octokit.rest.repos.update({
+                    owner,
+                    repo,
+                    private: isPrivate,
+                });
+                console.log(`[toggleProjectVisibilityAction] GitHub repository ${owner}/${repo} visibility updated to ${isPrivate ? 'Private' : 'Public'}.`);
+                return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'} in FlowUp and on GitHub.`, project: updatedProjectInDb };
+            } catch (githubError: any) {
+                console.error(`[toggleProjectVisibilityAction] Failed to update GitHub repository visibility for ${owner}/${repo}:`, githubError.status, githubError.message);
+                return { error: `Project visibility updated in FlowUp, but failed to update on GitHub: ${githubError.message}`, project: updatedProjectInDb };
+            }
+        } else {
+             return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'} in FlowUp. GitHub token missing for GitHub update.`, project: updatedProjectInDb };
+        }
+    }
+
+    return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'}.`, project: updatedProjectInDb };
   } catch (error: any) {
     return { error: error.message || "An unexpected error occurred." };
   }
@@ -990,7 +1077,7 @@ export async function deleteProjectAnnouncementAction(
   }
 }
 
-// CodeSpace / GitHub Integration Actions (OAuth Flow)
+// GitHub OAuth and Repo Actions
 
 export async function fetchUserGithubOAuthTokenAction(): Promise<UserGithubOAuthToken | null> {
   const session = await auth();
@@ -1007,21 +1094,26 @@ export async function fetchUserGithubOAuthTokenAction(): Promise<UserGithubOAuth
   }
 }
 
+function sanitizeRepoName(name: string): string {
+  // Replace spaces and consecutive hyphens with a single hyphen
+  // Remove characters that are not alphanumeric, hyphen, underscore, or period
+  // Ensure it doesn't start or end with a hyphen or period
+  // Max length 100 chars
+  let sanitized = name
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_.-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^\.+|\.$|^-+|-+$/g, ''); // Remove leading/trailing dots/hyphens
+
+  return sanitized.substring(0, 100);
+}
+
 
 export interface LinkProjectToGithubFormState {
   message?: string;
   error?: string;
   project?: Project;
-}
-
-function slugify(text: string): string {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-') 
-    .replace(/[^\w-]+/g, '') 
-    .replace(/--+/g, '-'); 
 }
 
 export async function linkProjectToGithubAction(
@@ -1034,11 +1126,21 @@ export async function linkProjectToGithubAction(
   }
 
   const projectUuid = formData.get('projectUuid') as string;
-  const projectName = formData.get('projectName') as string; 
+  const flowUpProjectName = formData.get('flowUpProjectName') as string; // Name from FlowUp
+  const githubRepoNameInput = formData.get('githubRepoName') as string; // Potentially custom name
 
-  if (!projectUuid || !projectName) {
-    return { error: "Project UUID and Name are required." };
+  if (!projectUuid || !flowUpProjectName) {
+    return { error: "Project UUID and FlowUp Project Name are required." };
   }
+
+  const projectFromDb = await dbGetProjectByUuid(projectUuid);
+  if (!projectFromDb) {
+    return { error: "FlowUp project not found." };
+  }
+
+  const repoNameToCreate = sanitizeRepoName(githubRepoNameInput || `FlowUp-${sanitizeRepoName(flowUpProjectName)}`);
+  const repoIsPrivate = projectFromDb.isPrivate !== undefined ? projectFromDb.isPrivate : true;
+
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -1054,39 +1156,51 @@ export async function linkProjectToGithubAction(
     const octokit = new Octokit({ auth: oauthToken.accessToken });
     console.log('[linkProjectToGithubAction] Octokit instance created with user OAuth token.');
 
-    const repoSlug = slugify(projectName);
     let createdRepo;
-
     try {
-      console.log(`Attempting to create repository '${repoSlug}' for authenticated user.`);
+      console.log(`Attempting to create repository '${repoNameToCreate}' for authenticated user. Private: ${repoIsPrivate}`);
       createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
-        name: repoSlug,
-        private: true, 
-        description: `Repository for FlowUp project: ${projectName}`,
+        name: repoNameToCreate,
+        private: repoIsPrivate,
+        description: `Repository for FlowUp project: ${flowUpProjectName}`,
+        auto_init: true, // Initialize with a README
       });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
-    } catch (apiError: any) {
-      console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data, apiError.documentation_url);
-      if (apiError.status === 403) {
-        return { error: `GitHub API Error (403): Permission denied. The authenticated GitHub user might not have permission to create repositories, or the 'repo' scope was not granted during OAuth. Details: ${apiError.message} - ${apiError.documentation_url}`};
-      }
-      if (apiError.status === 422) { 
-        return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${apiError.message}` };
-      }
-      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message} ${apiError.response?.data?.message || ''} ${apiError.documentation_url || ''}` };
-    }
-    
-    const repoUrl = createdRepo.data.html_url;
-    const actualRepoName = createdRepo.data.name;
+      // If FlowUp project has README content, push it to the new repo
+      if (projectFromDb.readmeContent && projectFromDb.readmeContent.trim() !== '') {
+         const { data: readmeData } = await octokit.rest.repos.getContent({
+            owner: createdRepo.data.owner.login,
+            repo: createdRepo.data.name,
+            path: 'README.md',
+          });
+        let existingReadmeSha: string | undefined = undefined;
+        if ('sha' in readmeData && readmeData.type === 'file') {
+            existingReadmeSha = readmeData.sha;
+        }
 
-    // We are not using installationId for this OAuth flow for repo creation
-    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName, null);
-    
+        await updateReadmeOnGithub(octokit, createdRepo.data.owner.login, createdRepo.data.name, projectFromDb.readmeContent, existingReadmeSha);
+      }
+
+
+    } catch (apiError: any) {
+      console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
+      const errorMessage = apiError.response?.data?.message || apiError.message || 'Unknown GitHub API error.';
+      if (apiError.status === 422) {
+        return { error: `Failed to create GitHub repository '${repoNameToCreate}'. It might already exist or there's a naming conflict. GitHub's message: ${errorMessage}` };
+      }
+      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${errorMessage} - ${apiError.documentation_url || ''}` };
+    }
+
+    const repoUrl = createdRepo.data.html_url;
+    const actualRepoName = createdRepo.data.full_name; // owner/repo
+
+    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName, null); // No GitHub App installation ID for OAuth flow
+
     if (!updatedProject) {
         return { error: "Failed to save GitHub repository details to FlowUp project after creation on GitHub." };
     }
-    
+
     return { message: `GitHub repository '${actualRepoName}' created and linked successfully!`, project: updatedProject };
 
   } catch (error: any) {
@@ -1094,4 +1208,3 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
-    
