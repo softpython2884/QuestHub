@@ -545,8 +545,8 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
   } catch (error: any) {
      if (error.status === 404 && !existingSha) {
         console.log(`[updateReadmeOnGithub] README.md not found for ${owner}/${repo}, creating it.`);
-        const paramsForCreation = { ...paramsForUpdate }; // Re-create params for creation
-        delete paramsForCreation.sha; // Ensure SHA is not in creation params
+        const paramsForCreation = { ...paramsForUpdate };
+        delete paramsForCreation.sha; 
         try {
             await octokit.rest.repos.createOrUpdateFileContents(paramsForCreation);
             console.log(`[updateReadmeOnGithub] README.md created successfully on GitHub for ${owner}/${repo} after initial 404.`);
@@ -609,7 +609,7 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
             repo,
             path: 'README.md',
           });
-          // @ts-ignore // Octokit types can be tricky with union types for content
+          // @ts-ignore 
           if ('sha' in readmeData && readmeData.type === 'file') {
              // @ts-ignore
              existingSha = readmeData.sha;
@@ -712,7 +712,7 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
         if (oauthToken?.accessToken) {
             const octokit = new Octokit({ auth: oauthToken.accessToken });
             const repoParts = updatedProjectInDb.githubRepoName.split('/');
-            if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) { // Added check for empty parts
+            if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) { 
                 console.error(`[toggleProjectVisibilityAction] Invalid githubRepoName format: ${updatedProjectInDb.githubRepoName}`);
                 return { error: `Project visibility updated in FlowUp, but GitHub repo name format is invalid.`, project: updatedProjectInDb };
             }
@@ -1169,7 +1169,7 @@ export async function linkProjectToGithubAction(
 
     let createdRepo;
     try {
-      console.log(`Attempting to create repository '${repoSlug}' for authenticated user (OAuth). Private: ${repoIsPrivate}`);
+      console.log(`Attempting to create repository '${repoSlug}' for authenticated user. Private: ${repoIsPrivate}`);
       createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
         name: repoSlug,
         private: repoIsPrivate,
@@ -1326,6 +1326,74 @@ export async function getFileContentAction(
     }
 }
 
+
+export async function saveFileContentAction(
+  projectUuid: string,
+  filePath: string,
+  content: string,
+  sha: string,
+  commitMessage?: string
+): Promise<{ success: boolean; newSha?: string; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { success: false, error: "Authentication required." };
+  }
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { success: false, error: "Project not found or not linked to GitHub." };
+  }
+
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken || !oauthToken.accessToken) {
+    return { success: false, error: "GitHub account not linked or token missing." };
+  }
+
+  const [owner, repo] = project.githubRepoName.split('/');
+  if (!owner || !repo) {
+    return { success: false, error: "Invalid GitHub repository name format." };
+  }
+
+  const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+  try {
+    const response = await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: filePath,
+      message: commitMessage || `Update ${filePath} via FlowUp`,
+      content: Buffer.from(content).toString('base64'),
+      sha,
+      committer: { // Optional: use user's GitHub details if available
+        name: session.user.name || 'FlowUp User',
+        email: session.user.email || 'user@flowup.app',
+      },
+      author: {
+        name: session.user.name || 'FlowUp User',
+        email: session.user.email || 'user@flowup.app',
+      }
+    });
+    
+    if (response.status === 200 || response.status === 201) { // 200 for update, 201 for create
+      return { success: true, newSha: response.data.content?.sha };
+    } else {
+      return { success: false, error: `GitHub API returned status ${response.status}` };
+    }
+  } catch (error: any) {
+    console.error(`[saveFileContentAction] Error saving file ${filePath}:`, error.status, error.message, error.response?.data);
+    let userMessage = `Failed to save file: ${error.message || 'Unknown error'}`;
+    if (error.status === 409) { // Conflict, SHA mismatch
+        userMessage = "File has been modified since you opened it. Please refresh and try again.";
+    } else if (error.status === 403) {
+        userMessage = "Permission denied. Ensure you have write access to this repository.";
+    } else if (error.status === 404) {
+        userMessage = "File not found. It might have been deleted or moved.";
+    }
+    return { success: false, error: userMessage };
+  }
+}
+
+
 // Placeholder for future GitHub App related auth, if needed
 // export async function fetchUserGithubAccessDetailsAction(): Promise<{
 //   installation: UserGithubInstallation | null;
@@ -1343,5 +1411,6 @@ export async function getFileContentAction(
 //     return { error: "Failed to fetch GitHub access details: " + error.message };
 //   }
 // }
+
 
 
