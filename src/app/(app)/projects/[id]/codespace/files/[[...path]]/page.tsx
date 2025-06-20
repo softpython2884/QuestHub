@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, Suspense, useCallback, useMemo, startTransition as ReactStartTransition } from 'react';
+import { useEffect, useState, Suspense, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -106,18 +106,21 @@ function FileExplorerContent() {
 
   const loadContent = useCallback(async (pathToLoad: string) => {
     if (!project || !project.githubRepoName || authLoading || isLoadingProject) {
+      console.log("loadContent: Aborting, pre-conditions not met.", { projectExists: !!project, githubRepoName: project?.githubRepoName, authLoading, isLoadingProject });
       return;
     }
+    console.log(`loadContent: Loading content for path: ${pathToLoad}`);
     setIsLoadingPathContent(true);
     setError(null);
-    setFileData(null);
-    setIsViewingFile(false);
+    setFileData(null); // Reset file data when navigating to a new path
+    setIsViewingFile(false); // Reset viewing state
 
     try {
       const extension = pathToLoad.includes('.') ? getFileExtension(pathToLoad.split('/').pop()!) : null;
-      const isFileCandidate = extension && !pathToLoad.endsWith('/');
+      const isFileCandidate = !!extension && !pathToLoad.endsWith('/'); // More robust check
       
       if (isFileCandidate) {
+        console.log(`loadContent: Path is a file candidate: ${pathToLoad}`);
         const fetchedFileData = await getFileContentAction(projectUuid, pathToLoad);
         if ('content' in fetchedFileData && fetchedFileData.sha) {
           let fileDisplayType: 'md' | 'image' | 'html' | 'text' | 'other' = 'other';
@@ -137,11 +140,14 @@ function FileExplorerContent() {
           });
           setEditingContent(fetchedFileData.content);
           setIsViewingFile(true);
+          console.log(`loadContent: Successfully loaded file: ${pathToLoad}, type: ${fileDisplayType}`);
         } else {
           setError(fetchedFileData.error || "Failed to load file content.");
           setIsViewingFile(false);
+           console.error(`loadContent: Error loading file content for ${pathToLoad}:`, fetchedFileData.error);
         }
       } else { // Is a directory or root
+        console.log(`loadContent: Path is a directory candidate: ${pathToLoad}`);
         const dirData = await getRepoContentsAction(projectUuid, pathToLoad);
         if (Array.isArray(dirData)) {
           setContents(dirData.sort((a, b) => {
@@ -149,22 +155,28 @@ function FileExplorerContent() {
             if (a.type !== 'dir' && b.type === 'dir') return 1;
             return a.name.localeCompare(b.name);
           }));
+          console.log(`loadContent: Successfully loaded directory contents for ${pathToLoad}:`, dirData.length, "items");
         } else {
           setError(dirData.error || "Failed to fetch repository contents.");
+          console.error(`loadContent: Error loading directory contents for ${pathToLoad}:`, dirData.error);
         }
       }
     } catch (e: any) {
       setError(e.message || 'An unexpected error occurred while loading content.');
       toast({ variant: 'destructive', title: 'Error', description: e.message });
+      console.error(`loadContent: Exception for path ${pathToLoad}:`, e);
     } finally {
       setIsLoadingPathContent(false);
+      console.log(`loadContent: Finished loading for path: ${pathToLoad}`);
     }
-  }, [project, projectUuid, authLoading, isLoadingProject, toast]);
+  }, [projectUuid, project, authLoading, isLoadingProject, toast]);
 
 
   useEffect(() => {
+    console.log("Project/Auth Effect: Triggered", { projectUuid, authLoading, user: !!user });
     if (!projectUuid || authLoading) return;
     if (!user) {
+        console.log("Project/Auth Effect: No user, redirecting to login.");
         router.push('/login');
         return;
     }
@@ -174,30 +186,39 @@ function FileExplorerContent() {
         if (!fetchedProject) {
           setError("Project not found or access denied.");
           setProject(null);
+          console.log("Project/Auth Effect: Project not found.");
         } else {
           setProject(fetchedProject);
+          console.log("Project/Auth Effect: Project loaded:", fetchedProject.name);
           if (!fetchedProject.githubRepoName) {
             setError("Project is not linked to a GitHub repository.");
             setIsLoadingPathContent(false); 
+            console.log("Project/Auth Effect: Project not linked to GitHub.");
           }
         }
       })
       .catch(err => {
-        console.error("Error fetching project:", err);
+        console.error("Project/Auth Effect: Error fetching project:", err);
         setError("Failed to load project details.");
         setProject(null);
       })
       .finally(() => {
         setIsLoadingProject(false);
+        console.log("Project/Auth Effect: Finished loading project details.");
       });
   }, [projectUuid, user, authLoading, router]);
 
 
   useEffect(() => {
+    console.log("Path/Content Effect: Triggered", { projectExists: !!project, githubLinked: !!project?.githubRepoName, isLoadingProject, currentPath });
     if (project && project.githubRepoName && !isLoadingProject) {
         loadContent(currentPath);
+    } else if (project && !project.githubRepoName && !isLoadingProject) {
+      console.log("Path/Content Effect: Project exists but not linked to GitHub. Skipping content load.");
+      // setError("Project is not linked to a GitHub repository."); // Already set in project load effect
+      setIsLoadingPathContent(false);
     }
-  }, [project, isLoadingProject, currentPath, loadContent]);
+  }, [project, isLoadingProject, currentPath, loadContent]); // loadContent is now stable due to useCallback
 
 
   const handleSaveFile = async () => {
@@ -257,7 +278,6 @@ function FileExplorerContent() {
       if (isViewingFile && fileData?.path === contentToDelete.path) { 
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
         router.push(`/projects/${projectUuid}/codespace/files${parentPath ? '/' + parentPath : ''}`);
-        // loadContent will be called by useEffect due to currentPath change
       } else {
         loadContent(currentPath); 
       }
@@ -307,7 +327,7 @@ function FileExplorerContent() {
   const isLoadingPage = authLoading || isLoadingProject || isLoadingPathContent;
 
 
-  if (isLoadingPage && !error && !project?.githubRepoName) { // Initial loading state before project details are known
+  if (isLoadingPage && !error && !project?.githubRepoName) { 
     return (
       <div className="space-y-6">
          <div className="flex justify-between items-center">
@@ -477,9 +497,9 @@ function FileExplorerContent() {
                 </AlertDescription>
               </Alert>
           ) : isViewingFile && fileData ? (
-            <div>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold">{fileData.name}</h3>
+             <div className="flex flex-col"> {/* Flex column for the entire file view section */}
+                <div className="flex justify-between items-center mb-4 flex-shrink-0"> {/* Header: Title and Buttons. flex-shrink-0 is important here. */}
+                    <h3 className="text-xl font-semibold truncate">{fileData.name}</h3>
                     <div className="flex items-center gap-2">
                         {canEditCurrentFile && (
                             <Button variant="outline" size="sm" onClick={() => setIsEditModalOpen(true)}>
@@ -502,13 +522,17 @@ function FileExplorerContent() {
                          )}
                     </div>
                 </div>
+
+                {/* Content area that will scroll if needed */}
                 {fileData.type === 'md' && (
-                    <div className="prose dark:prose-invert max-w-none p-4 border rounded-md bg-muted/30">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileData.content}</ReactMarkdown>
+                    <div className="overflow-x-auto">
+                        <div className="prose dark:prose-invert max-w-none p-4 border rounded-md bg-muted/30 min-w-max">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileData.content}</ReactMarkdown>
+                        </div>
                     </div>
                 )}
                 {fileData.type === 'image' && fileData.encoding === 'base64' && (
-                    <div className="p-4 border rounded-md bg-muted/30 flex justify-center items-center max-h-[70vh] overflow-hidden">
+                    <div className="p-4 border rounded-md bg-muted/30 flex justify-center items-center max-h-[70vh] overflow-auto">
                         <NextImage
                             src={`data:image/${getFileExtension(fileData.name)};base64,${fileData.content}`}
                             alt={fileData.name}
@@ -522,20 +546,22 @@ function FileExplorerContent() {
                     </div>
                 )}
                 {fileData.type === 'html' && (
-                     <div className="p-4 border rounded-md bg-muted/30">
+                     <div className="p-4 border rounded-md bg-muted/30 overflow-x-auto">
                         <h4 className="text-sm font-semibold mb-2">HTML Preview:</h4>
                         <iframe 
                             srcDoc={fileData.content} 
                             title={`Preview of ${fileData.name}`}
-                            className="w-full h-[50vh] border rounded-md bg-white"
+                            className="w-full h-[50vh] border rounded-md bg-white min-w-[600px]"
                             sandbox="allow-scripts" 
                         />
                     </div>
                 )}
                 {fileData.type === 'text' && (
-                    <pre className="p-4 border rounded-md bg-muted/30 text-sm overflow-x-auto max-h-[60vh]">
-                        <code>{fileData.content}</code>
-                    </pre>
+                    <div className="overflow-x-auto">
+                        <pre className="p-4 border rounded-md bg-muted/30 text-sm max-h-[60vh] min-w-max">
+                            <code>{fileData.content}</code>
+                        </pre>
+                    </div>
                 )}
                 {fileData.type === 'other' && (
                      <Alert>
@@ -605,7 +631,7 @@ function FileExplorerContent() {
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
-                                    {contentToDelete?.path === item.path && ( // Check path instead of sha for key consistency
+                                    {contentToDelete?.path === item.path && ( 
                                         <AlertDialogContent>
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Delete File: "{contentToDelete.name}"?</AlertDialogTitle>
@@ -685,5 +711,3 @@ export default function GitHubFilesPage() {
         </Suspense>
     )
 }
-
-    
