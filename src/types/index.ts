@@ -2,8 +2,8 @@
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
-  id: string; 
-  uuid: string; 
+  id: string;
+  uuid: string;
   email: string;
   name: string;
   role: UserRole;
@@ -13,7 +13,7 @@ export interface User {
 export interface UserGithubInstallation {
     user_uuid: string;
     github_installation_id: number;
-    github_account_login?: string | null; 
+    github_account_login?: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -23,10 +23,27 @@ export interface UserGithubOAuthToken {
   accessToken: string;
   refreshToken?: string | null;
   expiresIn?: number | null;
-  scopes: string; 
+  scopes: string;
   tokenType: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GithubRepoContentItem {
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  url: string;
+  html_url: string;
+  git_url: string;
+  download_url: string | null;
+  _links: {
+    self: string;
+    git: string;
+    html: string;
+  };
 }
 
 export interface Tag {
@@ -41,29 +58,29 @@ export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Archived';
 export interface Task {
   uuid: string;
   title: string;
-  description?: string; 
-  todoListMarkdown?: string; 
+  description?: string;
+  todoListMarkdown?: string;
   status: TaskStatus;
-  assigneeUuid?: string | null; 
-  assigneeName?: string | null; 
+  assigneeUuid?: string | null;
+  assigneeName?: string | null;
   projectUuid: string;
-  tags: Tag[]; 
+  tags: Tag[];
   createdAt: string;
   updatedAt: string;
   isPinned?: boolean;
 }
 
 export interface Document {
-  id: string; 
-  uuid: string; 
+  id: string;
+  uuid: string;
   title: string;
-  content?: string; 
-  fileType: 'markdown' | 'txt' | 'html' | 'pdf' | 'other'; 
-  filePath?: string; 
+  content?: string;
+  fileType: 'markdown' | 'txt' | 'html' | 'pdf' | 'other';
+  filePath?: string;
   projectUuid: string;
-  createdByUuid: string; 
-  createdByName?: string; 
-  creatorAvatar?: string; 
+  createdByUuid: string;
+  createdByName?: string;
+  creatorAvatar?: string;
   isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -90,20 +107,19 @@ export interface Project {
   isUrgent?: boolean;
   githubRepoUrl?: string;
   githubRepoName?: string;
-  githubInstallationId?: number; 
+  githubInstallationId?: number;
 }
 
 export interface Announcement {
-  id: string; 
-  uuid: string; 
+  id: string;
+  uuid: string;
   title: string;
   content: string;
   authorUuid: string;
   authorName?: string;
   authorAvatar?: string;
-  projectUuid: string; 
-  isGlobal: boolean; 
+  projectUuid: string;
+  isGlobal: boolean;
   createdAt: string;
   updatedAt: string;
 }
-

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -8,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -31,8 +30,6 @@ import {
   createTaskAction,
   type CreateTaskFormState,
   fetchTasksAction,
-  updateTaskStatusAction,
-  type UpdateTaskStatusFormState,
   updateTaskAction,
   type UpdateTaskFormState,
   deleteTaskAction,
@@ -124,7 +121,7 @@ const linkGithubFormSchema = z.object({
   }
   return true; // Otherwise (default name is chosen), validation passes
 }, {
-  message: "Custom repository name cannot be empty if you are not using the default name.",
+  message: "Custom repository name cannot be empty if not using the default.",
   path: ["githubRepoName"],
 });
 type LinkGithubFormValues = z.infer<typeof linkGithubFormSchema>;
@@ -237,13 +234,13 @@ function ProjectDetailPageContent() {
     const oauthStatus = searchParams.get('oauth_status');
     if (oauthStatus === 'success') {
       toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
-      loadUserGithubOAuth(); // Reload token after successful OAuth
+      loadUserGithubOAuth();
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('oauth_status');
-      newUrl.searchParams.delete('code'); // Also remove code and state if they exist
+      newUrl.searchParams.delete('code');
       newUrl.searchParams.delete('state');
       router.replace(newUrl.toString(), { scroll: false });
-    } else if (oauthStatus === 'error' || searchParams.get('error')) { // Handle error state from OAuth
+    } else if (oauthStatus === 'error' || searchParams.get('error')) {
        toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
        const newUrl = new URL(window.location.href);
        newUrl.searchParams.delete('oauth_status');
@@ -253,7 +250,7 @@ function ProjectDetailPageContent() {
        router.replace(newUrl.toString(), { scroll: false });
     }
 
-  }, [searchParams, router, toast]); // toast added to dependency array
+  }, [searchParams, router, toast]);
 
 
   const loadUserGithubOAuth = useCallback(async () => {
@@ -310,7 +307,7 @@ function ProjectDetailPageContent() {
   const [updateProjectFormState, updateProjectFormAction, isUpdateProjectPending] = useActionState(updateProjectAction, { message: "", errors: {} });
   const [inviteFormState, inviteUserFormAction, isInvitePending] = useActionState(inviteUserToProjectAction, { message: "", error: "" });
   const [createTaskState, createTaskFormAction, isCreateTaskPending] = useActionState(createTaskAction, { message: "", error: "" });
-  const [updateTaskStatusState, performUpdateTaskStatusAction, isUpdateTaskStatusPending] = useActionState(updateTaskStatusAction, { message: "", error: "" });
+
   const [updateTaskState, updateTaskFormAction, isUpdateTaskPending] = useActionState(updateTaskAction, { message: "", error: "" });
   const [deleteTaskState, deleteTaskFormAction, isDeleteTaskPending] = useActionState(deleteTaskAction, { message: "", error: ""});
   const [saveReadmeState, saveReadmeFormAction, isSaveReadmePending] = useActionState(saveProjectReadmeAction, { message: "", error: "" });
@@ -506,20 +503,8 @@ function ProjectDetailPageContent() {
     }
   }, [createTaskState, isCreateTaskPending, toast, loadTasks, taskForm]);
 
-  useEffect(() => {
-    if (!isUpdateTaskStatusPending && updateTaskStatusState) {
-        if (updateTaskStatusState.message && !updateTaskStatusState.error) {
-            toast({ title: "Success", description: updateTaskStatusState.message });
-            loadTasks();
-        }
-        if (updateTaskStatusState.error) {
-            toast({ variant: "destructive", title: "Status Update Error", description: updateTaskStatusState.error });
-        }
-    }
-  }, [updateTaskStatusState, isUpdateTaskStatusPending, toast, loadTasks]);
 
-
-  useEffect(() => {
+ useEffect(() => {
     if (isUpdateTaskPending || !updateTaskState) return;
 
     if (updateTaskState.error && !isUpdateTaskPending) {
@@ -800,6 +785,9 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
+    // Pass other existing fields to satisfy schema, but they won't be "updated" by this action
+    // if the updateTaskAction is smart enough to only update provided fields.
+    // Assuming updateTaskAction only updates fields present in formData or changed.
     formData.append('title', taskToManageSubtasks.title);
     formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
@@ -823,12 +811,13 @@ function ProjectDetailPageContent() {
     }
 
     debounceTimers.current[taskUuid] = setTimeout(() => {
-      lastSubmitSourceRef.current = null;
+      lastSubmitSourceRef.current = null; // Not from main edit dialog or subtask dialog
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
 
+      // Pass other existing fields
       formData.append('title', taskToUpdate.title);
       formData.append('status', taskToUpdate.status);
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -874,8 +863,15 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus as string);
 
+    // Pass other fields to satisfy schema for updateTaskAction
+    const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
+    if (taskToUpdate) {
+        formData.append('title', taskToUpdate.title); // Required by schema if not optional
+    }
+
+
     ReactStartTransition(() => {
-        performUpdateTaskStatusAction(formData);
+        updateTaskFormAction(formData);
     });
   };
 
@@ -917,7 +913,7 @@ function ProjectDetailPageContent() {
     if (!project) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
-    formData.append('isPrivate', String(checked)); // checked is the new "isPrivate" state for GitHub
+    formData.append('isPrivate', String(checked));
     ReactStartTransition(() => {
       toggleVisibilityFormAction(formData);
     });
@@ -965,10 +961,11 @@ function ProjectDetailPageContent() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        grouped['Archived'].push(task);
+        grouped['Archived'].push(task); // Default to Archived if status is unexpected
       }
     });
 
+    // Sort tasks within each status group: pinned first, then by updatedAt descending
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -988,27 +985,29 @@ function ProjectDetailPageContent() {
 
   const handleTagsStringInputChange = (
     event: React.ChangeEvent<HTMLInputElement>,
-    fieldApi: any,
-    formApi: any
+    fieldApi: any, // ControllerRenderProps from react-hook-form
+    formApi: any // UseFormReturn
   ) => {
     const inputValue = event.currentTarget.value;
-    fieldApi.onChange(inputValue);
+    fieldApi.onChange(inputValue); // Update form state
 
     const fragment = getCurrentTagFragment(inputValue);
-    setActiveTagInputName(fieldApi.name as "tagsString");
+    setActiveTagInputName(fieldApi.name as "tagsString"); // Ensure type safety
 
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
+        // Filter out tags already fully entered in the input
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
             .filter(tag =>
                 tag.name.toLowerCase().startsWith(lowerFragment) &&
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase())
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) // Exclude already "committed" tags
             )
-            .slice(0, 5);
+            .slice(0, 5); // Limit suggestions
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
 
+        // Reset active suggestion if the typed fragment changes significantly (not just adding a character)
         if (fragment !== lastTypedFragmentRef.current) {
              setActiveSuggestionIndex(-1);
         }
@@ -1025,15 +1024,15 @@ function ProjectDetailPageContent() {
 
   const handleTagSuggestionClick = (
     suggestion: TagType,
-    fieldApi: any,
-    formApi: any
+    fieldApi: any, // ControllerRenderProps
+    formApi: any // UseFormReturn
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name;
+    parts[parts.length - 1] = suggestion.name; // Replace current fragment with full tag name
 
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) {
+    if (!newValue.endsWith(', ')) { // Add a comma and space for the next tag
          newValue += ', ';
     }
 
@@ -1041,14 +1040,14 @@ function ProjectDetailPageContent() {
     setTagSuggestions([]);
     setShowTagSuggestions(false);
     setActiveSuggestionIndex(-1);
-    lastTypedFragmentRef.current = "";
-    setTimeout(() => tagInputRef.current?.focus(), 0);
+    lastTypedFragmentRef.current = ""; // Clear last fragment
+    setTimeout(() => tagInputRef.current?.focus(), 0); // Refocus input
   };
 
   const handleTagInputKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>,
-    fieldApi: any,
-    formApi: any
+    fieldApi: any, // ControllerRenderProps
+    formApi: any // UseFormReturn
   ) => {
     if (showTagSuggestions && tagSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -1058,10 +1057,10 @@ function ProjectDetailPageContent() {
         event.preventDefault();
         setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
       } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
-        event.preventDefault();
-        event.stopPropagation();
+        event.preventDefault(); // Prevent form submission or tabbing away
+        event.stopPropagation(); // Stop event from bubbling
         handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
-        return;
+        return; // Important to return to prevent further processing
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -1071,6 +1070,7 @@ function ProjectDetailPageContent() {
         return;
       }
     } else {
+      // If suggestions are not shown, still allow escape to clear things if needed
       if (event.key === 'Escape') {
         setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
@@ -1132,7 +1132,7 @@ function ProjectDetailPageContent() {
     if (!project || !user) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
-    formData.append('flowUpProjectName', project.name);
+    formData.append('flowUpProjectName', project.name); // Pass FlowUp project name
     formData.append('useDefaultRepoName', values.useDefaultRepoName.toString());
     if (!values.useDefaultRepoName && values.githubRepoName) {
       formData.append('githubRepoName', values.githubRepoName);
@@ -1145,9 +1145,12 @@ function ProjectDetailPageContent() {
 
   const handleInitiateGithubOAuth = () => {
     if (!project) return;
-    const redirectTo = `/projects/${project.uuid}?tab=codespace`;
-    // Pass projectUuid in state for the callback to use
-    window.location.href = `/api/auth/github/oauth/login?redirectTo=${encodeURIComponent(redirectTo)}&projectUuid=${project.uuid}`;
+    // Construct state with redirectTo and projectUuid
+    const statePayload = new URLSearchParams({
+        redirectTo: `/projects/${project.uuid}?tab=codespace`,
+        projectUuid: project.uuid,
+    }).toString();
+    window.location.href = `/api/auth/github/oauth/login?state=${encodeURIComponent(statePayload)}`;
   };
 
   const copyToClipboard = (text: string, type: string) => {
@@ -1159,11 +1162,11 @@ function ProjectDetailPageContent() {
   if (authLoading || isLoadingData || isLoadingGithubAuth) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-9 w-36 mb-4" />
+        <Skeleton className="h-9 w-36 mb-4" /> {/* Back button */}
         <Card className="shadow-lg">
           <CardHeader>
-            <Skeleton className="h-8 w-1/2" />
-            <Skeleton className="h-5 w-3/4 mt-2" />
+            <Skeleton className="h-8 w-1/2" /> {/* Project Name */}
+            <Skeleton className="h-5 w-3/4 mt-2" /> {/* Description */}
              <div className="mt-3 flex flex-wrap gap-2">
                 <Skeleton className="h-6 w-20 rounded-full" />
                 <Skeleton className="h-6 w-24 rounded-full" />
@@ -1178,13 +1181,14 @@ function ProjectDetailPageContent() {
             </div>
           </CardContent>
         </Card>
-        <Skeleton className="h-10 w-full" />
-        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
+        <Skeleton className="h-10 w-full" /> {/* Tabs List */}
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card> {/* Tab Content */}
       </div>
     );
   }
 
   if (accessDenied || !project || !user) {
+    // This should ideally not be reached if routing logic in useEffect is correct, but good fallback.
     return (
         <div className="space-y-6 text-center flex flex-col items-center justify-center min-h-[calc(100vh-12rem)]">
             <Button variant="outline" onClick={() => router.push('/projects')} className="mb-4 self-start">
@@ -1202,7 +1206,7 @@ function ProjectDetailPageContent() {
 
   return (
     <div className="space-y-6">
-      <Button variant="outline" onClick={() => router.back()} className="mb-0">
+      <Button variant="outline" onClick={() => router.back()} className="mb-0"> {/* Changed from router.push('/projects') to router.back() */}
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
@@ -1225,13 +1229,14 @@ function ProjectDetailPageContent() {
                 <CardDescription className="mt-1">No description provided.</CardDescription>
               )}
               <div className="mt-2 flex flex-wrap gap-2">
-                {projectTags.slice(0, 5).map(tag => (
+                {projectTags.slice(0, 5).map(tag => ( // Only show a few tags initially
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white text-xs">{tag.name}</Badge>
                 ))}
                 {projectTags.length > 5 && <Badge variant="outline">+{projectTags.length - 5} more</Badge>}
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              {/* Edit Project Dialog */}
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" disabled={!canManageProjectSettings}>
@@ -1287,6 +1292,7 @@ function ProjectDetailPageContent() {
                   </Form>
                 </DialogContent>
               </Dialog>
+              {/* Delete Project Alert Dialog (Placeholder) */}
               <AlertDialog>
                   <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm" disabled={currentUserRole !== 'owner'}>
@@ -1297,12 +1303,12 @@ function ProjectDetailPageContent() {
                       <AlertDialogHeader>
                           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                           <AlertDialogDescription>
-                              This action cannot be undone. This will permanently delete the project and all its associated data.
+                              This action cannot be undone. This will permanently delete the project and all its associated data. (This action is currently disabled).
                           </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => {/* TODO: Implement delete project action */ } } disabled>
+                          <AlertDialogAction onClick={() => { toast({title: "Info", description: "Project deletion not implemented yet."}) } } disabled>
                               Yes, delete project
                           </AlertDialogAction>
                       </AlertDialogFooter>
@@ -1331,6 +1337,7 @@ function ProjectDetailPageContent() {
           <TabsTrigger value="settings"><Users className="mr-2 h-4 w-4"/>Team & Settings</TabsTrigger>
         </TabsList>
 
+        {/* TASKS TAB */}
         <TabsContent value="tasks" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1483,7 +1490,7 @@ function ProjectDetailPageContent() {
                               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 flex-shrink-0">
                                 <Select
                                   value={task.status}
-                                  disabled={!canEditTaskStatus || isUpdateTaskStatusPending}
+                                  disabled={!canEditTaskStatus || isUpdateTaskPending}
                                   onValueChange={(newStatus) => handleTaskStatusChange(task.uuid, newStatus as TaskStatus)}
                                 >
                                   <SelectTrigger className="w-full sm:w-[150px] text-xs h-8">
@@ -1663,6 +1670,7 @@ function ProjectDetailPageContent() {
             </Dialog>
         </TabsContent>
 
+        {/* README TAB */}
         <TabsContent value="readme" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1671,7 +1679,7 @@ function ProjectDetailPageContent() {
                 <CardDescription>
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
                   {project?.githubRepoUrl && (
-                     <span className="block text-xs mt-1 text-green-600">This README is synced with GitHub. Changes saved here will be pushed.</span>
+                     <span className="block text-xs mt-1 text-green-600"><CheckCircle className="inline-block h-3 w-3 mr-1"/>README is synced with GitHub. Changes saved here will be pushed.</span>
                   )}
                 </CardDescription>
               </div>
@@ -1698,7 +1706,7 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
-
+        {/* DOCUMENTS TAB */}
         <TabsContent value="documents" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1845,6 +1853,7 @@ function ProjectDetailPageContent() {
             </DialogContent>
         </Dialog>
 
+        {/* ANNOUNCEMENTS TAB */}
         <TabsContent value="announcements" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1952,7 +1961,7 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
-
+        {/* CODESPACE TAB */}
         <TabsContent value="codespace" className="mt-4">
           <Card>
             <CardHeader>
@@ -1971,7 +1980,7 @@ function ProjectDetailPageContent() {
                   <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <h3 className="text-lg font-semibold mb-1">Connect to GitHub</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    To link this project and create a repository, you first need to connect your GitHub account to FlowUp.
+                    To link this project and manage repository files, you first need to connect your GitHub account to FlowUp.
                   </p>
                   <Button onClick={handleInitiateGithubOAuth} disabled={!canManageCodeSpace}>
                     <Github className="mr-2 h-4 w-4" /> Connect GitHub Account
@@ -1983,7 +1992,7 @@ function ProjectDetailPageContent() {
                   <Github className="h-12 w-12 mx-auto text-primary mb-3" />
                    <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Your GitHub account is linked. You can now create a repository for this FlowUp project.
+                    You can now create a repository for this FlowUp project.
                     The repository will be {project.isPrivate ? 'private' : 'public'}, matching your project's visibility.
                   </p>
                    <Dialog open={isLinkGithubDialogOpen} onOpenChange={setIsLinkGithubDialogOpen}>
@@ -2016,7 +2025,13 @@ function ProjectDetailPageContent() {
                                             <FormControl>
                                                 <Checkbox
                                                     checked={field.value}
-                                                    onCheckedChange={field.onChange}
+                                                    onCheckedChange={(checked) => {
+                                                        field.onChange(checked);
+                                                        if (checked) {
+                                                            linkGithubForm.setValue('githubRepoName', ''); // Clear custom name if default is chosen
+                                                            linkGithubForm.clearErrors('githubRepoName');
+                                                        }
+                                                    }}
                                                 />
                                             </FormControl>
                                         </FormItem>
@@ -2099,23 +2114,18 @@ function ProjectDetailPageContent() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
                             The project's README is synced with the `README.md` file in this repository.
-                            Changes made to the README in FlowUp will be pushed to GitHub.
                         </p>
+                         {canManageCodeSpace && (
+                            <Button asChild variant="outline" className="mt-2">
+                                <Link href={`/projects/${projectUuid}/codespace/files`}>
+                                    <FileCode className="mr-2 h-4 w-4"/> Manage Repository Files
+                                </Link>
+                            </Button>
+                        )}
                     </CardContent>
                   </Card>
 
                   <Card>
-                      <CardHeader>
-                          <CardTitle className="flex items-center"><Code2 className="mr-2 h-5 w-5"/>File Management (Placeholder)</CardTitle>
-                          <CardDescription>Future: Browse, view, and edit your repository files directly within FlowUp.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
-                          <GitBranch className="mx-auto h-10 w-10 mb-3 opacity-50" />
-                          <p className="font-medium">File Browser & Editor</p>
-                          <p className="text-xs">This feature is under development.</p>
-                      </CardContent>
-                  </Card>
-                    <Card>
                       <CardHeader>
                           <CardTitle className="flex items-center"><MessageSquare className="mr-2 h-5 w-5"/>Discord Logs (Placeholder)</CardTitle>
                            <CardDescription>Future: Integrate with Discord to send commit logs or other notifications.</CardDescription>
@@ -2143,6 +2153,7 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
+        {/* TEAM & SETTINGS TAB */}
          <TabsContent value="settings" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -2371,7 +2382,7 @@ function ProjectDetailPageContent() {
                 <div>
                     <h4 className="font-semibold mb-2 text-lg text-destructive">Danger Zone</h4>
                     <div className="border border-destructive p-4 rounded-md ">
-                        <p className="text-destructive">Deleting a project is permanent and cannot be undone.</p>
+                        <p className="text-destructive">Deleting a project is permanent and cannot be undone. (This action is currently disabled).</p>
                         <Button variant="destructive" className="mt-3" size="sm" disabled><Trash2 className="mr-2 h-4 w-4"/>Delete Project</Button>
                     </div>
                 </div>
@@ -2392,4 +2403,3 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
-

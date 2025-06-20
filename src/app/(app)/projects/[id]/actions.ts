@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -13,7 +13,6 @@ import {
   getProjectMemberRole as dbGetProjectMemberRole,
   createTask as dbCreateTask,
   getTasksForProject as dbGetTasksForProject,
-  updateTaskStatus as dbUpdateTaskStatus,
   updateTask as dbUpdateTask,
   deleteTask as dbDeleteTask,
   getProjectTags as dbGetProjectTags,
@@ -37,7 +36,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
-import { getInstallationOctokit, getAppAuthOctokit } from '@/lib/githubAppClient';
+import { getAppAuthOctokit, getInstallationOctokit } from '@/lib/githubAppClient';
 
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -321,65 +320,6 @@ export async function fetchTasksAction(projectUuid: string | undefined): Promise
   }
 }
 
-const UpdateTaskStatusSchema = z.object({
-  taskUuid: z.string().uuid("Invalid task UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."),
-  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-});
-
-export interface UpdateTaskStatusFormState {
-  message?: string;
-  error?: string;
-  updatedTask?: Task;
-}
-
-export async function updateTaskStatusAction(prevState: UpdateTaskStatusFormState, formData: FormData): Promise<UpdateTaskStatusFormState> {
-  const session = await auth();
-  if (!session?.user?.uuid) {
-     console.error("[updateTaskStatusAction] Authentication required. No session user UUID.");
-     return { error: "Authentication required." };
-    }
-  console.log("[updateTaskStatusAction] Authenticated user for permission check:", session.user.uuid);
-
-  const validatedFields = UpdateTaskStatusSchema.safeParse({
-    taskUuid: formData.get('taskUuid'),
-    projectUuid: formData.get('projectUuid'),
-    status: formData.get('status'),
-  });
-
-  if (!validatedFields.success) {
-    return { error: "Invalid input: " + JSON.stringify(validatedFields.error.flatten().fieldErrors) };
-  }
-  const { taskUuid, projectUuid, status } = validatedFields.data;
-
-  try {
-    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[updateTaskStatusAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
-    if (!userRole) {
-      return { error: `You are not a member of this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
-    }
-
-    const updatedTask = await dbUpdateTaskStatus(taskUuid, status);
-    if (!updatedTask) {
-      return { error: "Failed to update task status." };
-    }
-    return { message: "Task status updated successfully!", updatedTask };
-  } catch (error: any) {
-    console.error("Error updating task status:", error);
-    return { error: error.message || "An unexpected error occurred." };
-  }
-}
-
-const UpdateTaskSchema = z.object({
-  taskUuid: z.string().uuid("Invalid task UUID."),
-  projectUuid: z.string().uuid("Invalid project UUID."),
-  title: z.string().min(1, "Title is required.").max(255),
-  description: z.string().optional(),
-  todoListMarkdown: z.string().optional().default(''),
-  status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]),
-  assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
-  tagsString: z.string().optional(),
-});
 
 export interface UpdateTaskFormState {
   message?: string;
@@ -396,16 +336,27 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
   }
    console.log("[updateTaskAction] Authenticated user for permission check:", session.user.uuid);
 
+  const UpdateTaskSchema = z.object({
+    taskUuid: z.string().uuid("Invalid task UUID."),
+    projectUuid: z.string().uuid("Invalid project UUID."),
+    title: z.string().min(1, "Title is required.").max(255).optional(),
+    description: z.string().optional(),
+    todoListMarkdown: z.string().optional().default(''),
+    status: z.enum(['To Do', 'In Progress', 'Done', 'Archived'] as [TaskStatus, ...TaskStatus[]]).optional(),
+    assigneeUuid: z.string().uuid("Invalid Assignee UUID format.").optional().or(z.literal('')),
+    tagsString: z.string().optional(),
+});
+
 
   const validatedFields = UpdateTaskSchema.safeParse({
     taskUuid: formData.get('taskUuid'),
     projectUuid: formData.get('projectUuid'),
-    title: formData.get('title'),
-    description: formData.get('description') || '',
-    todoListMarkdown: formData.get('todoListMarkdown') || '',
-    status: formData.get('status'),
-    assigneeUuid: formData.get('assigneeUuid') || '',
-    tagsString: formData.get('tagsString'),
+    title: formData.has('title') ? formData.get('title') : undefined,
+    description: formData.has('description') ? (formData.get('description') || '') : undefined,
+    todoListMarkdown: formData.has('todoListMarkdown') ? (formData.get('todoListMarkdown') || '') : undefined,
+    status: formData.has('status') ? formData.get('status') : undefined,
+    assigneeUuid: formData.has('assigneeUuid') ? (formData.get('assigneeUuid') || '') : undefined,
+    tagsString: formData.has('tagsString') ? formData.get('tagsString') : undefined,
   });
 
   if (!validatedFields.success) {
@@ -413,31 +364,46 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     return { error: "Invalid input.", fieldErrors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { taskUuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid: rawAssigneeUuid, tagsString } = validatedFields.data;
+  const { taskUuid, projectUuid, ...taskUpdateData } = validatedFields.data;
 
-  let finalAssigneeUuid: string | null = null;
-    if (rawAssigneeUuid && rawAssigneeUuid !== '' && rawAssigneeUuid !== '__UNASSIGNED__') {
-        finalAssigneeUuid = rawAssigneeUuid;
+  let finalAssigneeUuid: string | null | undefined = taskUpdateData.assigneeUuid;
+  if (taskUpdateData.assigneeUuid === '__UNASSIGNED__') {
+    finalAssigneeUuid = null;
+  } else if (taskUpdateData.assigneeUuid === '') {
+    finalAssigneeUuid = undefined; // To not update if not provided
   }
+
 
   try {
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
     console.log(`[updateTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
-    if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-      return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
+
+    const canUpdateStatusOnly = userRole && !['owner', 'co-owner', 'editor'].includes(userRole);
+    const canUpdateFull = userRole && ['owner', 'co-owner', 'editor'].includes(userRole);
+
+    if (!canUpdateFull && !canUpdateStatusOnly) {
+       return { error: `You do not have permission to update tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
 
-    const taskData: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
+    const dataToUpdate: Partial<Omit<Task, 'uuid' | 'projectUuid' | 'createdAt' | 'updatedAt' | 'tags' | 'assigneeName'>> & { tagsString?: string } = {};
 
-    if (formData.has('title')) taskData.title = title;
-    if (formData.has('description')) taskData.description = description || undefined;
-    if (formData.has('todoListMarkdown')) taskData.todoListMarkdown = todoListMarkdown || undefined;
-    if (formData.has('status')) taskData.status = status;
-    if (formData.has('assigneeUuid')) taskData.assigneeUuid = finalAssigneeUuid;
-    if (formData.has('tagsString')) taskData.tagsString = tagsString || undefined;
+    if (canUpdateFull) {
+        if (taskUpdateData.title !== undefined) dataToUpdate.title = taskUpdateData.title;
+        if (taskUpdateData.description !== undefined) dataToUpdate.description = taskUpdateData.description || undefined;
+        if (taskUpdateData.todoListMarkdown !== undefined) dataToUpdate.todoListMarkdown = taskUpdateData.todoListMarkdown || undefined;
+        if (finalAssigneeUuid !== undefined) dataToUpdate.assigneeUuid = finalAssigneeUuid; // Handles null for unassign
+        if (taskUpdateData.tagsString !== undefined) dataToUpdate.tagsString = taskUpdateData.tagsString || undefined;
+    }
+
+    // Status can always be updated by any member
+    if (taskUpdateData.status !== undefined) dataToUpdate.status = taskUpdateData.status;
 
 
-    const updatedTask = await dbUpdateTask(taskUuid, taskData);
+    if (Object.keys(dataToUpdate).length === 0) {
+        return { message: "No changes to update.", updatedTask: await dbGetTaskByUuid(taskUuid) || undefined };
+    }
+
+    const updatedTask = await dbUpdateTask(taskUuid, dataToUpdate);
     if (!updatedTask) {
       return { error: "Failed to update task."};
     }
@@ -564,8 +530,8 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
     message: 'Update README.md from FlowUp',
     content: Buffer.from(content).toString('base64'),
     committer: {
-      name: 'FlowUp Bot',
-      email: 'bot@flowup.app',
+      name: 'FlowUp Bot', // Consider making this configurable or using the user's GitHub name
+      email: 'bot@flowup.app', // Or a no-reply / user's email
     },
   };
   if (existingSha) {
@@ -642,7 +608,9 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
             repo,
             path: 'README.md',
           });
+          // @ts-ignore // Octokit types can be tricky with union types for content
           if ('sha' in readmeData && readmeData.type === 'file') {
+             // @ts-ignore
              existingSha = readmeData.sha;
           }
         } catch (error: any) {
@@ -1155,20 +1123,20 @@ export async function linkProjectToGithubAction(
   }
 
   const projectUuid = formData.get('projectUuid') as string;
-  const flowUpProjectNameValue = formData.get('flowUpProjectName');
-  const githubRepoNameValue = formData.get('githubRepoName');
+  const flowUpProjectNameValue = formData.get('flowUpProjectName') as string | null;
+  const githubRepoNameValue = formData.get('githubRepoName') as string | null;
   const useDefaultRepoName = formData.get('useDefaultRepoName') === 'true';
 
   let nameForRepoCreation: string;
 
   if (useDefaultRepoName) {
-    if (typeof flowUpProjectNameValue === 'string' && flowUpProjectNameValue.trim() !== '') {
+    if (flowUpProjectNameValue && flowUpProjectNameValue.trim() !== '') {
       nameForRepoCreation = `FlowUp - ${flowUpProjectNameValue}`;
     } else {
       return { error: "FlowUp Project Name is required to generate the default repository name." };
     }
   } else {
-    if (typeof githubRepoNameValue === 'string' && githubRepoNameValue.trim() !== '') {
+    if (githubRepoNameValue && githubRepoNameValue.trim() !== '') {
       nameForRepoCreation = githubRepoNameValue;
     } else {
       return { error: "Custom repository name cannot be empty." };
@@ -1208,10 +1176,11 @@ export async function linkProjectToGithubAction(
         name: repoSlug,
         private: repoIsPrivate,
         description: `Repository for FlowUp project: ${projectFromDb.name}`,
-        auto_init: true,
+        auto_init: true, // Initialize with a README to avoid empty repo issues
       });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
+      // Sync FlowUp README to GitHub if content exists
       if (projectFromDb.readmeContent && projectFromDb.readmeContent.trim() !== '') {
          let existingReadmeSha: string | undefined = undefined;
         try {
@@ -1220,7 +1189,9 @@ export async function linkProjectToGithubAction(
                 repo: createdRepo.data.name,
                 path: 'README.md',
             });
+            // @ts-ignore
             if ('sha' in readmeData && readmeData.type === 'file') {
+                // @ts-ignore
                 existingReadmeSha = readmeData.sha;
             }
         } catch (getContentError: any) {
@@ -1244,7 +1215,7 @@ export async function linkProjectToGithubAction(
     }
 
     const repoUrl = createdRepo.data.html_url;
-    const actualRepoName = createdRepo.data.full_name;
+    const actualRepoName = createdRepo.data.full_name; // e.g., "username/repo-name"
 
     const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName);
 
@@ -1260,22 +1231,79 @@ export async function linkProjectToGithubAction(
   }
 }
 
-async function fetchUserGithubAccessDetailsAction(userUuid: string): Promise<{
-    oauthToken: UserGithubOAuthToken | null;
-    installation: UserGithubInstallation | null;
-}> {
-    const session = await auth();
-    if (!session?.user?.uuid || session.user.uuid !== userUuid) {
-        console.error("[fetchUserGithubAccessDetailsAction] Authentication mismatch or missing session.");
-        return { oauthToken: null, installation: null };
+// GitHub File Management Actions
+export async function getRepoContentsAction(projectUuid: string, path: string = ''): Promise<GithubRepoContentItem[] | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { error: "Project not found or not linked to GitHub." };
+  }
+
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken || !oauthToken.accessToken) {
+    return { error: "GitHub account not linked or token missing." };
+  }
+
+  const [owner, repo] = project.githubRepoName.split('/');
+  if (!owner || !repo) return { error: "Invalid GitHub repository name format." };
+
+  const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+    });
+    if (Array.isArray(data)) {
+      return data as GithubRepoContentItem[];
     }
-    try {
-        const oauthToken = await dbGetUserGithubOAuthToken(userUuid);
-        return { oauthToken, installation: null };
-    } catch (error) {
-        console.error("[fetchUserGithubAccessDetailsAction] Error fetching GitHub access details:", error);
-        return { oauthToken: null, installation: null };
-    }
+    // If data is a single file object (when path points to a file)
+    return [data as GithubRepoContentItem];
+  } catch (error: any) {
+    console.error(`[getRepoContentsAction] Error fetching content for ${owner}/${repo}/${path}:`, error);
+    return { error: error.message || "Failed to fetch repository contents." };
+  }
 }
 
-    
+export async function getFileContentAction(projectUuid: string, filePath: string): Promise<{ content: string; sha: string } | { error: string }> {
+    const session = await auth();
+    if (!session?.user?.uuid) return { error: "Authentication required." };
+
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project || !project.githubRepoName) {
+        return { error: "Project not found or not linked to GitHub." };
+    }
+
+    const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+    if (!oauthToken || !oauthToken.accessToken) {
+        return { error: "GitHub account not linked or token missing." };
+    }
+
+    const [owner, repo] = project.githubRepoName.split('/');
+    if (!owner || !repo) return { error: "Invalid GitHub repository name format." };
+
+    const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+    try {
+        const { data } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: filePath,
+        });
+
+        // @ts-ignore - Octokit's type for data can be an array or object
+        if (data.type !== 'file' || typeof data.content !== 'string' || typeof data.sha !== 'string') {
+            return { error: "Path does not point to a valid file or content is missing." };
+        }
+        // @ts-ignore
+        const content = Buffer.from(data.content, data.encoding as BufferEncoding || 'base64').toString('utf8');
+        // @ts-ignore
+        return { content, sha: data.sha };
+    } catch (error: any) {
+        console.error(`[getFileContentAction] Error fetching file content for ${owner}/${repo}/${filePath}:`, error);
+        return { error: error.message || "Failed to fetch file content." };
+    }
+}
