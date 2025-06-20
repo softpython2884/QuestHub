@@ -1,6 +1,7 @@
+
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -31,10 +32,12 @@ import {
   deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
   updateProjectGithubRepo as dbUpdateProjectGithubRepo,
   getUserGithubInstallation as dbGetUserGithubInstallation,
+  getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
-import { getAppAuthOctokit, getInstallationOctokit } from '@/lib/githubAppClient';
+import { Octokit } from 'octokit';
+
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
   if (!uuid) return null;
@@ -987,28 +990,20 @@ export async function deleteProjectAnnouncementAction(
   }
 }
 
-// CodeSpace / GitHub Integration Actions
+// CodeSpace / GitHub Integration Actions (OAuth Flow)
 
-export interface UserGithubAccessDetails {
-  installationId: number | null;
-  accountLogin: string | null;
-  error?: string;
-}
-
-export async function fetchUserGithubAccessDetailsAction(): Promise<UserGithubAccessDetails> {
+export async function fetchUserGithubOAuthTokenAction(): Promise<UserGithubOAuthToken | null> {
   const session = await auth();
   if (!session?.user?.uuid) {
-    return { installationId: null, accountLogin: null, error: "Authentication required." };
+    console.error("[fetchUserGithubOAuthTokenAction] Authentication required.");
+    return null;
   }
   try {
-    const installation = await dbGetUserGithubInstallation(session.user.uuid);
-    if (installation) {
-      return { installationId: installation.github_installation_id, accountLogin: installation.github_account_login };
-    }
-    return { installationId: null, accountLogin: null };
-  } catch (error: any) {
-    console.error("Error fetching user GitHub installation ID:", error);
-    return { installationId: null, accountLogin: null, error: "Failed to fetch GitHub integration details." };
+    const token = await dbGetUserGithubOAuthToken(session.user.uuid);
+    return token;
+  } catch (error) {
+    console.error("[fetchUserGithubOAuthTokenAction] Error fetching OAuth token:", error);
+    return null;
   }
 }
 
@@ -1035,11 +1030,11 @@ export async function linkProjectToGithubAction(
 ): Promise<LinkProjectToGithubFormState> {
   const session = await auth();
   if (!session?.user?.uuid) {
-    return { error: "Authentication required." };
+    return { error: "Authentication required. Please log in to FlowUp." };
   }
 
   const projectUuid = formData.get('projectUuid') as string;
-  const projectName = formData.get('projectName') as string; // This is the FlowUp project name
+  const projectName = formData.get('projectName') as string; 
 
   if (!projectUuid || !projectName) {
     return { error: "Project UUID and Name are required." };
@@ -1051,62 +1046,33 @@ export async function linkProjectToGithubAction(
       return { error: "You do not have permission to link this project to GitHub." };
     }
 
-    const userGithubInstallation = await dbGetUserGithubInstallation(session.user.uuid);
-    if (!userGithubInstallation || !userGithubInstallation.github_installation_id) {
-      return { error: "GitHub App not installed or authorized for your account. Please install it first via the CodeSpace tab." };
-    }
-    const installationId = userGithubInstallation.github_installation_id;
-    
-    const octokit = await getInstallationOctokit(installationId);
-    console.log('[linkProjectToGithubAction] Octokit instance obtained for installation.');
-
-    const appOctokit = await getAppAuthOctokit();
-    const installationDetails = await appOctokit.request('GET /app/installations/{installation_id}', {
-      installation_id: installationId,
-    });
-    
-    const accountType = installationDetails.data.account?.type; 
-    const accountLogin = installationDetails.data.account?.login;
-
-    if (!accountLogin) {
-      return { error: "Could not determine the GitHub account login for the installation." };
+    const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+    if (!oauthToken || !oauthToken.accessToken) {
+      return { error: "GitHub account not linked or token missing. Please connect your GitHub account via the CodeSpace tab." };
     }
 
-    const repoSlug = slugify(projectName); // Use FlowUp project name to generate repo slug
+    const octokit = new Octokit({ auth: oauthToken.accessToken });
+    console.log('[linkProjectToGithubAction] Octokit instance created with user OAuth token.');
+
+    const repoSlug = slugify(projectName);
     let createdRepo;
 
     try {
-      console.log(`Attempting to create repository '${repoSlug}' for installation ID: ${installationId}`);
-      
-      if (accountType === 'Organization') {
-        console.log(`Creating repository under Organization: ${accountLogin} (using installation-authed Octokit)`);
-        createdRepo = await octokit.rest.repos.createInOrg({
-          org: accountLogin,
-          name: repoSlug,
-          private: true, 
-          description: `Repository for FlowUp project: ${projectName}`,
-        });
-      } else { // Assumed User
-        console.log(`Creating repository under User: ${accountLogin} (using installation-authed Octokit)`);
-        createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
-          name: repoSlug,
-          private: true, 
-          description: `Repository for FlowUp project: ${projectName}`,
-        });
-      }
+      console.log(`Attempting to create repository '${repoSlug}' for authenticated user.`);
+      createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
+        name: repoSlug,
+        private: true, 
+        description: `Repository for FlowUp project: ${projectName}`,
+      });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data, apiError.documentation_url);
-      const permErrorMsg = `The FlowUp GitHub App installation on '${userGithubInstallation.github_account_login || 'your account'}' does not have the required "Repository Administration: Read & Write" permission to create repositories, or the specific operation is disallowed for the target account type. Please check the app's installation settings on GitHub.`;
       if (apiError.status === 403) {
-        return { error: `${permErrorMsg} GitHub details: ${apiError.message} - ${apiError.documentation_url}`};
+        return { error: `GitHub API Error (403): Permission denied. The authenticated GitHub user might not have permission to create repositories, or the 'repo' scope was not granted during OAuth. Details: ${apiError.message} - ${apiError.documentation_url}`};
       }
       if (apiError.status === 422) { 
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${apiError.message}` };
-      }
-      if (apiError.status === 404) { // Often means the 'org' doesn't exist or app can't access it
-         return { error: `Could not find or access the target GitHub account (${accountLogin}) to create the repository. Ensure the app is installed and has permissions for this entity. GitHub details: ${apiError.message}` };
       }
       return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message} ${apiError.response?.data?.message || ''} ${apiError.documentation_url || ''}` };
     }
@@ -1114,7 +1080,8 @@ export async function linkProjectToGithubAction(
     const repoUrl = createdRepo.data.html_url;
     const actualRepoName = createdRepo.data.name;
 
-    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName, installationId);
+    // We are not using installationId for this OAuth flow for repo creation
+    const updatedProject = await dbUpdateProjectGithubRepo(projectUuid, repoUrl, actualRepoName, null);
     
     if (!updatedProject) {
         return { error: "Failed to save GitHub repository details to FlowUp project after creation on GitHub." };

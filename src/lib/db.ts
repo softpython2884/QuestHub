@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -266,6 +266,18 @@ export async function getDbConnection() {
       FOREIGN KEY (user_uuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS user_github_oauth_tokens (
+      userUuid TEXT PRIMARY KEY,
+      accessToken TEXT NOT NULL,
+      refreshToken TEXT,
+      expiresIn INTEGER,
+      scopes TEXT NOT NULL,
+      tokenType TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
@@ -509,6 +521,39 @@ export async function getUserGithubInstallation(userUuid: string): Promise<UserG
         userUuid
     );
     return row || null;
+}
+
+export async function storeUserGithubOAuthToken(
+  userUuid: string,
+  accessToken: string,
+  scopes: string,
+  tokenType: string,
+  refreshToken?: string,
+  expiresIn?: number
+): Promise<void> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  await connection.run(
+    `INSERT INTO user_github_oauth_tokens (userUuid, accessToken, refreshToken, expiresIn, scopes, tokenType, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(userUuid) DO UPDATE SET
+       accessToken = excluded.accessToken,
+       refreshToken = excluded.refreshToken,
+       expiresIn = excluded.expiresIn,
+       scopes = excluded.scopes,
+       tokenType = excluded.tokenType,
+       updatedAt = excluded.updatedAt`,
+    userUuid, accessToken, refreshToken, expiresIn, scopes, tokenType, now, now
+  );
+}
+
+export async function getUserGithubOAuthToken(userUuid: string): Promise<UserGithubOAuthToken | null> {
+  const connection = await getDbConnection();
+  const row = await connection.get<UserGithubOAuthToken>(
+    'SELECT userUuid, accessToken, refreshToken, expiresIn, scopes, tokenType, createdAt, updatedAt FROM user_github_oauth_tokens WHERE userUuid = ?',
+    userUuid
+  );
+  return row || null;
 }
 
 
@@ -1131,3 +1176,4 @@ export async function deleteProjectAnnouncement(announcementUuid: string): Promi
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
+

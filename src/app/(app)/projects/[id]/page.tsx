@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles, Settings2 } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, FileUp, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Sparkles, Settings2, Unlink } from 'lucide-react';
 import Link from 'next/link';
-import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubInstallation } from '@/types';
+import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
@@ -57,8 +57,7 @@ import {
   type DeleteProjectAnnouncementFormState,
   linkProjectToGithubAction,
   type LinkProjectToGithubFormState,
-  fetchUserGithubAccessDetailsAction,
-  type UserGithubAccessDetails,
+  fetchUserGithubOAuthTokenAction,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -162,7 +161,8 @@ function ProjectDetailPageContent() {
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocumentType[]>([]);
   const [projectAnnouncements, setProjectAnnouncements] = useState<ProjectAnnouncementType[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole | null>(null);
-  const [userGithubAccess, setUserGithubAccess] = useState<UserGithubAccessDetails | null>(null);
+  const [userGithubOAuthToken, setUserGithubOAuthToken] = useState<UserGithubOAuthToken | null>(null);
+  const [isLoadingGithubAuth, setIsLoadingGithubAuth] = useState(true);
 
 
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -210,7 +210,50 @@ function ProjectDetailPageContent() {
     if (tabFromUrl && ['tasks', 'readme', 'documents', 'announcements', 'codespace', 'settings'].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
-  }, [searchParams]);
+    const oauthStatus = searchParams.get('oauth_status');
+    if (oauthStatus === 'success') {
+      toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
+      // Refresh OAuth token state
+      loadUserGithubOAuth();
+      // Clean URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('oauth_status');
+      newUrl.searchParams.delete('code'); // also remove code if present from github redirect
+      newUrl.searchParams.delete('state'); // also remove state
+      router.replace(newUrl.toString(), { scroll: false });
+    } else if (oauthStatus === 'error' || searchParams.get('error')) {
+       toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
+       const newUrl = new URL(window.location.href);
+       newUrl.searchParams.delete('oauth_status');
+       newUrl.searchParams.delete('error');
+       newUrl.searchParams.delete('error_description');
+       newUrl.searchParams.delete('message');
+       router.replace(newUrl.toString(), { scroll: false });
+    }
+
+  }, [searchParams, router, toast]); // Add toast and router to dependencies
+
+
+  const loadUserGithubOAuth = useCallback(async () => {
+    if (user) {
+      setIsLoadingGithubAuth(true);
+      try {
+        const token = await fetchUserGithubOAuthTokenAction();
+        setUserGithubOAuthToken(token);
+      } catch (error) {
+        console.error("Error fetching GitHub OAuth token:", error);
+        setUserGithubOAuthToken(null);
+        toast({ variant: "destructive", title: "Error", description: "Could not load GitHub connection status." });
+      } finally {
+        setIsLoadingGithubAuth(false);
+      }
+    }
+  }, [user, toast]);
+
+  useEffect(() => {
+    loadUserGithubOAuth();
+  }, [loadUserGithubOAuth]);
+
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
@@ -334,21 +377,6 @@ function ProjectDetailPageContent() {
     }
   }, [projectUuid, toast]);
 
-  const loadUserGithubAccess = useCallback(async () => {
-    if (user) {
-      try {
-        const accessDetails = await fetchUserGithubAccessDetailsAction();
-        setUserGithubAccess(accessDetails);
-        if (accessDetails.error) {
-            console.warn("Error fetching GitHub access details:", accessDetails.error);
-        }
-      } catch (error) {
-        console.error("Exception fetching GitHub access details:", error);
-        setUserGithubAccess({ installationId: null, accountLogin: null, error: "Failed to fetch GitHub integration details." });
-      }
-    }
-  }, [user]);
-
 
  useEffect(() => {
     const performLoadProjectData = async () => {
@@ -383,7 +411,7 @@ function ProjectDetailPageContent() {
                     await loadProjectTagsData();
                     await loadProjectDocuments();
                     await loadProjectAnnouncements();
-                    await loadUserGithubAccess();
+                    await loadUserGithubOAuth(); 
 
                 } else {
                     setAccessDenied(true);
@@ -403,7 +431,7 @@ function ProjectDetailPageContent() {
         }
     };
       performLoadProjectData();
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubAccess]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubOAuth]);
 
 
   useEffect(() => {
@@ -646,14 +674,14 @@ function ProjectDetailPageContent() {
         toast({ title: "Success", description: linkGithubState.message });
         if (linkGithubState.project) {
           setProject(linkGithubState.project);
-          loadUserGithubAccess();
+          loadUserGithubOAuth();
         }
       }
       if (linkGithubState.error) {
         toast({ variant: "destructive", title: "GitHub Link Error", description: linkGithubState.error });
       }
     }
-  }, [linkGithubState, isLinkGithubPending, toast, loadUserGithubAccess]);
+  }, [linkGithubState, isLinkGithubPending, toast, loadUserGithubOAuth]);
 
 
   useEffect(() => {
@@ -1080,35 +1108,23 @@ function ProjectDetailPageContent() {
   const handleLinkOrInstallGithub = async () => {
     if (!project || !user) return;
 
-    const accessDetails = await fetchUserGithubAccessDetailsAction();
-    setUserGithubAccess(accessDetails);
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('projectName', project.name);
+    ReactStartTransition(() => {
+      linkProjectToGithubFormAction(formData);
+    });
+  };
 
-    if (accessDetails.error) {
-      toast({ variant: "destructive", title: "GitHub Error", description: accessDetails.error });
-      return;
-    }
-
-    if (!accessDetails.installationId) {
-      const githubAppName = process.env.NEXT_PUBLIC_GITHUB_APP_NAME;
-      if (!githubAppName) {
-        toast({ variant: "destructive", title: "Configuration Error", description: "GitHub App name is not configured." });
-        return;
-      }
-      const stateParam = encodeURIComponent(`projectUuid=${projectUuid}&redirectTo=/projects/${projectUuid}?tab=codespace`);
-      const installUrl = `https://github.com/apps/${githubAppName}/installations/new?state=${stateParam}`;
-      window.location.href = installUrl;
-    } else {
-      const formData = new FormData();
-      formData.append('projectUuid', project.uuid);
-      formData.append('projectName', project.name);
-      ReactStartTransition(() => {
-        linkProjectToGithubFormAction(formData);
-      });
-    }
+  const handleInitiateGithubOAuth = () => {
+    if (!project) return;
+    const redirectTo = `/projects/${project.uuid}?tab=codespace`;
+    // Redirect to our own API route that will then redirect to GitHub
+    window.location.href = `/api/auth/github/oauth/login?redirectTo=${encodeURIComponent(redirectTo)}&projectUuid=${project.uuid}`;
   };
 
 
-  if (authLoading || isLoadingData) {
+  if (authLoading || isLoadingData || isLoadingGithubAuth) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-36 mb-4" />
@@ -1906,41 +1922,42 @@ function ProjectDetailPageContent() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center"><FolderGit2 className="mr-2 h-5 w-5 text-primary"/>CodeSpace & GitHub</CardTitle>
-              <CardDescription>Manage your project's code by linking it to a GitHub repository via the FlowUp GitHub App.</CardDescription>
+              <CardDescription>Manage your project's code by linking it to a GitHub repository.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!project.githubRepoUrl ? (
-                <>
-                  <div className="p-4 border-dashed border-2 rounded-md text-center">
-                    <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                    <h3 className="text-lg font-semibold mb-1">Link this project to GitHub</h3>
-                     {!userGithubAccess?.installationId ? (
-                        <>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            To link this project, you first need to install and authorize the FlowUp GitHub App on your GitHub account or organization.
-                        </p>
-                         <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
-                            {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            <Settings2 className="mr-2 h-4 w-4" /> Install/Authorize FlowUp GitHub App
-                        </Button>
-                        </>
-                     ) : (
-                        <>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            The FlowUp GitHub App is installed on {userGithubAccess.accountLogin ? `the '${userGithubAccess.accountLogin}' account/org` : 'your account'}.
-                            Click below to create a new GitHub repository for this FlowUp project and link them.
-                        </p>
-                        <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
-                            {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            <Github className="mr-2 h-4 w-4" /> Create and Link Repository
-                        </Button>
-                        </>
-                     )}
-                    {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
-                     {userGithubAccess?.error && !userGithubAccess.installationId && <p className="text-sm text-destructive mt-2">{userGithubAccess.error}</p>}
-                  </div>
-                </>
-              ) : (
+              {isLoadingGithubAuth && (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="ml-2">Loading GitHub connection status...</p>
+                </div>
+              )}
+              {!isLoadingGithubAuth && !project.githubRepoUrl && !userGithubOAuthToken && (
+                <div className="p-4 border-dashed border-2 rounded-md text-center">
+                  <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                  <h3 className="text-lg font-semibold mb-1">Connect to GitHub</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    To link this project and create a repository, you first need to connect your GitHub account to FlowUp.
+                  </p>
+                  <Button onClick={handleInitiateGithubOAuth} disabled={!canManageCodeSpace}>
+                    <Github className="mr-2 h-4 w-4" /> Connect GitHub Account
+                  </Button>
+                </div>
+              )}
+               {!isLoadingGithubAuth && !project.githubRepoUrl && userGithubOAuthToken && (
+                <div className="p-4 border-dashed border-2 rounded-md text-center">
+                  <Github className="h-12 w-12 mx-auto text-primary mb-3" />
+                   <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Your GitHub account is linked. You can now create a repository for this FlowUp project.
+                  </p>
+                  <Button onClick={handleLinkOrInstallGithub} disabled={!canManageCodeSpace || isLinkGithubPending}>
+                    {isLinkGithubPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Github className="mr-2 h-4 w-4" /> Create and Link Repository
+                  </Button>
+                   {linkGithubState?.error && <p className="text-sm text-destructive mt-2">{linkGithubState.error}</p>}
+                </div>
+              )}
+              {!isLoadingGithubAuth && project.githubRepoUrl && (
                 <div className="space-y-4">
                   <div className="p-4 border rounded-md bg-muted/30">
                     <div className="flex items-center gap-2 mb-2">
@@ -1948,7 +1965,7 @@ function ProjectDetailPageContent() {
                         <h3 className="text-lg font-semibold">Project Linked to GitHub!</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      This project is linked to the following GitHub repository (Installation ID: {project.githubInstallationId || userGithubAccess?.installationId || 'N/A'}):
+                      This project is linked to the following GitHub repository:
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                         <Github className="h-4 w-4" />
@@ -1963,6 +1980,7 @@ function ProjectDetailPageContent() {
                         <Link2 className="h-4 w-4 text-muted-foreground" />
                     </div>
                      <p className="text-sm text-muted-foreground mt-1">Repository Name: <span className="font-medium">{project.githubRepoName}</span></p>
+                     {/* TODO: Add Unlink button/functionality if desired */}
                   </div>
 
                   <Button variant="outline" disabled>
@@ -2228,3 +2246,4 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
+
