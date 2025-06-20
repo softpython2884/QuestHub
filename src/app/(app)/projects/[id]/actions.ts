@@ -40,6 +40,7 @@ import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
 import { generateProjectScaffold, type GenerateProjectScaffoldInput, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
+import { editFileContentWithAI, type EditFileContentAIInput, type EditFileContentAIOutput } from '@/ai/flows/edit-file-content-ai';
 
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -1213,7 +1214,7 @@ export async function fetchGithubUserDetailsAction(targetUserUuid?: string): Pro
 }
 
 
-export async function disconnectGithubAction(formData?: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+export async function disconnectGithubAction(prevState: { success: boolean; error?: string; message?: string }, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
   const session = await auth();
   if (!session?.user?.uuid) {
     return { success: false, error: "Authentication required." };
@@ -1760,5 +1761,35 @@ export async function generateProjectFilesWithAIAction(
   } catch (error: any) {
     console.error("Error generating project files with AI:", error);
     return { error: `AI Generation Failed: ${error.message || "An unexpected error occurred."}` };
+  }
+}
+
+export async function editFileWithAIAction(
+  projectUuid: string,
+  currentContent: string,
+  userPrompt: string
+): Promise<EditFileContentAIOutput | { error: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { error: "Project not found or not linked to GitHub." };
+  }
+
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { error: "You do not have permission to edit files in this project using AI." };
+  }
+
+  try {
+    const aiInput: EditFileContentAIInput = { currentContent, userPrompt };
+    const aiOutput = await editFileContentWithAI(aiInput);
+    return aiOutput;
+  } catch (error: any) {
+    console.error("Error editing file with AI:", error);
+    return { error: `AI file editing failed: ${error.message || "An unexpected error occurred."}` };
   }
 }

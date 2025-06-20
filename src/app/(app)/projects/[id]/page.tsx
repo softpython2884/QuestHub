@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2 } from 'lucide-react';
 import Link from 'next/link';
@@ -13,8 +13,8 @@ import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, Pr
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, startTransition as ReactStartTransition, useRef, Suspense } from 'react';
-import { useActionState } from 'react';
+import { useEffect, useState, useCallback, startTransition, useRef, Suspense } from 'react'; // Corrected import
+import { useActionState } from 'react'; // Corrected import
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -733,7 +733,7 @@ function ProjectDetailPageContent() {
     formData.append('name', values.name);
     formData.append('description', values.description || '');
     formData.append('projectUuid', project.uuid);
-    ReactStartTransition(() => {
+    startTransition(() => {
       updateProjectFormAction(formData);
     });
   };
@@ -744,7 +744,7 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('emailToInvite', values.emailToInvite);
     formData.append('roleToInvite', values.roleToInvite);
-    ReactStartTransition(() => {
+    startTransition(() => {
       inviteUserFormAction(formData);
     });
   };
@@ -762,7 +762,7 @@ function ProjectDetailPageContent() {
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     formData.append('todoListMarkdown', values.todoListMarkdown || '');
 
-    ReactStartTransition(() => {
+    startTransition(() => {
       createTaskFormAction(formData);
     });
   };
@@ -782,7 +782,7 @@ function ProjectDetailPageContent() {
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
 
-    ReactStartTransition(() => {
+    startTransition(() => {
       updateTaskFormAction(formData);
     });
   };
@@ -811,7 +811,7 @@ function ProjectDetailPageContent() {
     if (currentTagsString) formData.append('tagsString', currentTagsString);
 
 
-    ReactStartTransition(() => {
+    startTransition(() => {
       updateTaskFormAction(formData);
     });
   };
@@ -839,7 +839,7 @@ function ProjectDetailPageContent() {
       const currentTagsString = taskToUpdate.tags.map(t => t.name).join(', ');
       if (currentTagsString) formData.append('tagsString', currentTagsString);
 
-      ReactStartTransition(() => {
+      startTransition(() => {
         updateTaskFormAction(formData);
       });
     }, 750);
@@ -864,7 +864,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('taskUuid', taskToDelete.uuid);
     formData.append('projectUuid', project.uuid);
-    ReactStartTransition(() => {
+    startTransition(() => {
       deleteTaskFormAction(formData);
     });
   };
@@ -883,7 +883,7 @@ function ProjectDetailPageContent() {
     }
 
 
-    ReactStartTransition(() => {
+    startTransition(() => {
         updateTaskFormAction(formData);
     });
   };
@@ -891,7 +891,7 @@ function ProjectDetailPageContent() {
 
   const handleRemoveMember = async (memberUuidToRemove: string) => {
     if (!project) return;
-    ReactStartTransition(async () => {
+    startTransition(async () => {
       const result = await removeUserFromProjectAction(project.uuid, memberUuidToRemove);
       if (result.success) {
           toast({ title: "Success", description: result.message });
@@ -907,7 +907,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('readmeContent', projectReadmeContent);
-    ReactStartTransition(() => {
+    startTransition(() => {
       saveReadmeFormAction(formData);
     });
   };
@@ -917,7 +917,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('isUrgent', String(checked));
-    ReactStartTransition(() => {
+    startTransition(() => {
       toggleUrgencyFormAction(formData);
     });
   };
@@ -927,7 +927,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('isPrivate', String(checked));
-    ReactStartTransition(() => {
+    startTransition(() => {
       toggleVisibilityFormAction(formData);
     });
   };
@@ -938,7 +938,7 @@ function ProjectDetailPageContent() {
     formData.append('taskUuid', taskUuid);
     formData.append('projectUuid', project.uuid);
     formData.append('isPinned', String(!currentPinStatus));
-    ReactStartTransition(() => {
+    startTransition(() => {
         toggleTaskPinFormAction(formData);
     });
   };
@@ -1095,7 +1095,7 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('tagName', values.tagName);
     formData.append('tagColor', values.tagColor);
-    ReactStartTransition(() => {
+    startTransition(() => {
       createProjectTagFormAction(formData);
     });
   };
@@ -1105,7 +1105,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('tagUuid', tagToDelete.uuid);
-    ReactStartTransition(() => {
+    startTransition(() => {
         deleteProjectTagFormAction(formData);
     });
   };
@@ -1120,7 +1120,7 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('documentUuid', documentToDelete.uuid);
     formData.append('projectUuid', project.uuid);
-    ReactStartTransition(() => {
+    startTransition(() => {
       deleteDocumentFormAction(formData);
     });
   };
@@ -1131,7 +1131,7 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('title', values.title);
     formData.append('content', values.content);
-    ReactStartTransition(() => {
+    startTransition(() => {
       createProjectAnnouncementFormAction(formData);
     });
   };
@@ -1142,7 +1142,7 @@ function ProjectDetailPageContent() {
     formData.append('announcementUuid', announcementToDelete.uuid);
     formData.append('projectUuid', project.uuid);
     formData.append('authorUuid', announcementToDelete.authorUuid);
-    ReactStartTransition(() => {
+    startTransition(() => {
       deleteProjectAnnouncementFormAction(formData);
     });
   };
@@ -1156,7 +1156,7 @@ function ProjectDetailPageContent() {
     if (!values.useDefaultRepoName && values.githubRepoName) {
       formData.append('githubRepoName', values.githubRepoName);
     }
-    ReactStartTransition(() => {
+    startTransition(() => {
       linkProjectToGithubFormAction(formData);
     });
   };

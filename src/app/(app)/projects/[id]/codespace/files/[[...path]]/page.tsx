@@ -27,6 +27,7 @@ import {
   deleteGithubFileAction,
   generateProjectFilesWithAIAction,
   type GenerateProjectFilesAIFormState,
+  editFileWithAIAction, // Added new action
 } from '@/app/(app)/projects/[id]/actions';
 import type { GithubRepoContentItem, Project } from '@/types';
 import ReactMarkdown from 'react-markdown';
@@ -34,7 +35,7 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import NextImage from 'next/image';
 import { useForm } from 'react-hook-form'; 
-import { useActionState, startTransition } from 'react';
+import { useActionState, startTransition } from 'react'; // Corrected import
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -59,6 +60,11 @@ const aiScaffoldFormSchema = z.object({
   prompt: z.string().min(10, "Prompt must be at least 10 characters.").max(2000, "Prompt is too long."),
 });
 type AiScaffoldFormValues = z.infer<typeof aiScaffoldFormSchema>;
+
+const aiEditFileFormSchema = z.object({
+  aiEditPrompt: z.string().min(5, "Prompt must be at least 5 characters.").max(1000, "Prompt is too long."),
+});
+type AiEditFileFormValues = z.infer<typeof aiEditFileFormSchema>;
 
 
 function getFileExtension(filename: string): string {
@@ -100,27 +106,28 @@ function FileExplorerContent() {
   const aiScaffoldForm = useForm<AiScaffoldFormValues>({ resolver: zodResolver(aiScaffoldFormSchema), defaultValues: { prompt: ''}});
   const [aiScaffoldState, aiScaffoldFormAction, isAiScaffolding] = useActionState(generateProjectFilesWithAIAction, { message: "", error: ""});
 
+  const [isAiEditFileModalOpen, setIsAiEditFileModalOpen] = useState(false);
+  const aiEditFileForm = useForm<AiEditFileFormValues>({ resolver: zodResolver(aiEditFileFormSchema), defaultValues: { aiEditPrompt: ''}});
+  const [isAiEditingFile, setIsAiEditingFile] = useState(false);
+
 
   const newFileForm = useForm<NewFileFormValues>({ resolver: zodResolver(newFileFormSchema), defaultValues: { fileName: '', initialContent: ''}});
   const newFolderForm = useForm<NewFolderFormValues>({ resolver: zodResolver(newFolderFormSchema), defaultValues: { folderName: ''}});
 
   const loadContent = useCallback(async (pathToLoad: string) => {
     if (!project || !project.githubRepoName || authLoading || isLoadingProject) {
-      console.log("loadContent: Aborting, pre-conditions not met.", { projectExists: !!project, githubRepoName: project?.githubRepoName, authLoading, isLoadingProject });
       return;
     }
-    console.log(`loadContent: Loading content for path: ${pathToLoad}`);
     setIsLoadingPathContent(true);
     setError(null);
-    setFileData(null); // Reset file data when navigating to a new path
-    setIsViewingFile(false); // Reset viewing state
+    setFileData(null); 
+    setIsViewingFile(false); 
 
     try {
       const extension = pathToLoad.includes('.') ? getFileExtension(pathToLoad.split('/').pop()!) : null;
-      const isFileCandidate = !!extension && !pathToLoad.endsWith('/'); // More robust check
+      const isFileCandidate = !!extension && !pathToLoad.endsWith('/'); 
       
       if (isFileCandidate) {
-        console.log(`loadContent: Path is a file candidate: ${pathToLoad}`);
         const fetchedFileData = await getFileContentAction(projectUuid, pathToLoad);
         if ('content' in fetchedFileData && fetchedFileData.sha) {
           let fileDisplayType: 'md' | 'image' | 'html' | 'text' | 'other' = 'other';
@@ -140,14 +147,11 @@ function FileExplorerContent() {
           });
           setEditingContent(fetchedFileData.content);
           setIsViewingFile(true);
-          console.log(`loadContent: Successfully loaded file: ${pathToLoad}, type: ${fileDisplayType}`);
         } else {
           setError(fetchedFileData.error || "Failed to load file content.");
           setIsViewingFile(false);
-           console.error(`loadContent: Error loading file content for ${pathToLoad}:`, fetchedFileData.error);
         }
-      } else { // Is a directory or root
-        console.log(`loadContent: Path is a directory candidate: ${pathToLoad}`);
+      } else { 
         const dirData = await getRepoContentsAction(projectUuid, pathToLoad);
         if (Array.isArray(dirData)) {
           setContents(dirData.sort((a, b) => {
@@ -155,28 +159,22 @@ function FileExplorerContent() {
             if (a.type !== 'dir' && b.type === 'dir') return 1;
             return a.name.localeCompare(b.name);
           }));
-          console.log(`loadContent: Successfully loaded directory contents for ${pathToLoad}:`, dirData.length, "items");
         } else {
           setError(dirData.error || "Failed to fetch repository contents.");
-          console.error(`loadContent: Error loading directory contents for ${pathToLoad}:`, dirData.error);
         }
       }
     } catch (e: any) {
       setError(e.message || 'An unexpected error occurred while loading content.');
       toast({ variant: 'destructive', title: 'Error', description: e.message });
-      console.error(`loadContent: Exception for path ${pathToLoad}:`, e);
     } finally {
       setIsLoadingPathContent(false);
-      console.log(`loadContent: Finished loading for path: ${pathToLoad}`);
     }
   }, [projectUuid, project, authLoading, isLoadingProject, toast]);
 
 
   useEffect(() => {
-    console.log("Project/Auth Effect: Triggered", { projectUuid, authLoading, user: !!user });
     if (!projectUuid || authLoading) return;
     if (!user) {
-        console.log("Project/Auth Effect: No user, redirecting to login.");
         router.push('/login');
         return;
     }
@@ -186,39 +184,31 @@ function FileExplorerContent() {
         if (!fetchedProject) {
           setError("Project not found or access denied.");
           setProject(null);
-          console.log("Project/Auth Effect: Project not found.");
         } else {
           setProject(fetchedProject);
-          console.log("Project/Auth Effect: Project loaded:", fetchedProject.name);
           if (!fetchedProject.githubRepoName) {
             setError("Project is not linked to a GitHub repository.");
             setIsLoadingPathContent(false); 
-            console.log("Project/Auth Effect: Project not linked to GitHub.");
           }
         }
       })
       .catch(err => {
-        console.error("Project/Auth Effect: Error fetching project:", err);
         setError("Failed to load project details.");
         setProject(null);
       })
       .finally(() => {
         setIsLoadingProject(false);
-        console.log("Project/Auth Effect: Finished loading project details.");
       });
   }, [projectUuid, user, authLoading, router]);
 
 
   useEffect(() => {
-    console.log("Path/Content Effect: Triggered", { projectExists: !!project, githubLinked: !!project?.githubRepoName, isLoadingProject, currentPath });
     if (project && project.githubRepoName && !isLoadingProject) {
         loadContent(currentPath);
     } else if (project && !project.githubRepoName && !isLoadingProject) {
-      console.log("Path/Content Effect: Project exists but not linked to GitHub. Skipping content load.");
-      // setError("Project is not linked to a GitHub repository."); // Already set in project load effect
       setIsLoadingPathContent(false);
     }
-  }, [project, isLoadingProject, currentPath, loadContent]); // loadContent is now stable due to useCallback
+  }, [project, isLoadingProject, currentPath, loadContent]);
 
 
   const handleSaveFile = async () => {
@@ -311,6 +301,25 @@ function FileExplorerContent() {
     }
   }, [aiScaffoldState, isAiScaffolding, toast, loadContent, currentPath, aiScaffoldForm]);
 
+  const handleAiEditFile = async (values: AiEditFileFormValues) => {
+    if (!project || !fileData || !editingContent) return;
+    setIsAiEditingFile(true);
+    try {
+      const result = await editFileWithAIAction(project.uuid, editingContent, values.aiEditPrompt);
+      if (result.newContent) {
+        setEditingContent(result.newContent);
+        toast({ title: "AI Edit Success", description: "Content updated by AI." });
+        setIsAiEditFileModalOpen(false);
+        aiEditFileForm.reset();
+      } else {
+        toast({ variant: "destructive", title: "AI Edit Error", description: result.error || "AI failed to edit content." });
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "AI Edit Error", description: error.message || "An unexpected error occurred." });
+    } finally {
+      setIsAiEditingFile(false);
+    }
+  };
 
   const getBreadcrumbs = () => {
     const crumbs = [{ name: project?.githubRepoName || 'Repository Root', path: '', isRoot: true }];
@@ -497,8 +506,8 @@ function FileExplorerContent() {
                 </AlertDescription>
               </Alert>
           ) : isViewingFile && fileData ? (
-             <div className="flex flex-col"> {/* Flex column for the entire file view section */}
-                <div className="flex justify-between items-center mb-4 flex-shrink-0"> {/* Header: Title and Buttons. flex-shrink-0 is important here. */}
+            <div className="flex flex-col h-full"> {/* Main container for file view */}
+                <div className="flex justify-between items-center mb-4 flex-shrink-0"> {/* Header: Title and Buttons */}
                     <h3 className="text-xl font-semibold truncate">{fileData.name}</h3>
                     <div className="flex items-center gap-2">
                         {canEditCurrentFile && (
@@ -524,61 +533,59 @@ function FileExplorerContent() {
                 </div>
 
                 {/* Content area that will scroll if needed */}
-                {fileData.type === 'md' && (
-                    <div className="overflow-x-auto">
+                <div className="overflow-auto flex-grow"> {/* This div handles scrolling for its children */}
+                    {fileData.type === 'md' && (
                         <div className="prose dark:prose-invert max-w-none p-4 border rounded-md bg-muted/30 min-w-max">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileData.content}</ReactMarkdown>
                         </div>
-                    </div>
-                )}
-                {fileData.type === 'image' && fileData.encoding === 'base64' && (
-                    <div className="p-4 border rounded-md bg-muted/30 flex justify-center items-center max-h-[70vh] overflow-auto">
-                        <NextImage
-                            src={`data:image/${getFileExtension(fileData.name)};base64,${fileData.content}`}
-                            alt={fileData.name}
-                            width={0}
-                            height={0}
-                            sizes="100vw"
-                            style={{ width: 'auto', height: 'auto', maxHeight: '65vh', maxWidth: '100%' }}
-                            className="rounded-md object-contain"
-                            data-ai-hint="code image"
-                        />
-                    </div>
-                )}
-                {fileData.type === 'html' && (
-                     <div className="p-4 border rounded-md bg-muted/30 overflow-x-auto">
-                        <h4 className="text-sm font-semibold mb-2">HTML Preview:</h4>
-                        <iframe 
-                            srcDoc={fileData.content} 
-                            title={`Preview of ${fileData.name}`}
-                            className="w-full h-[50vh] border rounded-md bg-white min-w-[600px]"
-                            sandbox="allow-scripts" 
-                        />
-                    </div>
-                )}
-                {fileData.type === 'text' && (
-                    <div className="overflow-x-auto">
-                        <pre className="p-4 border rounded-md bg-muted/30 text-sm max-h-[60vh] min-w-max">
+                    )}
+                    {fileData.type === 'image' && fileData.encoding === 'base64' && (
+                        <div className="p-4 border rounded-md bg-muted/30 flex justify-center items-center max-h-[70vh]">
+                            <NextImage
+                                src={`data:image/${getFileExtension(fileData.name)};base64,${fileData.content}`}
+                                alt={fileData.name}
+                                width={0}
+                                height={0}
+                                sizes="100vw"
+                                style={{ width: 'auto', height: 'auto', maxHeight: '65vh', maxWidth: '100%' }}
+                                className="rounded-md object-contain"
+                                data-ai-hint="code image"
+                            />
+                        </div>
+                    )}
+                    {fileData.type === 'html' && (
+                         <div className="p-4 border rounded-md bg-muted/30">
+                            <h4 className="text-sm font-semibold mb-2">HTML Preview:</h4>
+                            <iframe 
+                                srcDoc={fileData.content} 
+                                title={`Preview of ${fileData.name}`}
+                                className="w-full h-[50vh] border rounded-md bg-white min-w-[600px]"
+                                sandbox="allow-scripts" 
+                            />
+                        </div>
+                    )}
+                    {fileData.type === 'text' && (
+                        <pre className="p-4 border rounded-md bg-muted/30 text-sm max-h-[60vh] min-w-max overflow-x-auto">
                             <code>{fileData.content}</code>
                         </pre>
-                    </div>
-                )}
-                {fileData.type === 'other' && (
-                     <Alert>
-                        <ImageIcon className="h-4 w-4" />
-                        <AlertTitle>Cannot Display File</AlertTitle>
-                        <AlertDescription>
-                            This file type ({getFileExtension(fileData.name) || 'unknown'}) cannot be displayed directly.
-                            {fileData.downloadUrl && (
-                                <Button asChild variant="link" className="p-0 h-auto ml-1">
-                                    <a href={fileData.downloadUrl} target="_blank" rel="noopener noreferrer">
-                                        Download file <Download className="ml-1 h-3 w-3" />
-                                    </a>
-                                </Button>
-                            )}
-                        </AlertDescription>
-                    </Alert>
-                )}
+                    )}
+                    {fileData.type === 'other' && (
+                         <Alert>
+                            <ImageIcon className="h-4 w-4" />
+                            <AlertTitle>Cannot Display File</AlertTitle>
+                            <AlertDescription>
+                                This file type ({getFileExtension(fileData.name) || 'unknown'}) cannot be displayed directly.
+                                {fileData.downloadUrl && (
+                                    <Button asChild variant="link" className="p-0 h-auto ml-1">
+                                        <a href={fileData.downloadUrl} target="_blank" rel="noopener noreferrer">
+                                            Download file <Download className="ml-1 h-3 w-3" />
+                                        </a>
+                                    </Button>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                </div>
             </div>
           ) : !isViewingFile && contents.length > 0 ? (
             <Table>
@@ -605,7 +612,7 @@ function FileExplorerContent() {
                   </TableRow>
                 )}
                 {contents.map((item) => (
-                  <TableRow key={item.path}>
+                  <TableRow key={item.path}> {/* Changed key to item.path */}
                     <TableCell>
                       <Link
                         href={`/projects/${projectUuid}/codespace/files/${item.path}`}
@@ -678,11 +685,41 @@ function FileExplorerContent() {
         <DialogContent className="sm:max-w-[70vw] md:max-w-[60vw] lg:max-w-[50vw] h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Edit: {fileData?.name}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="flex justify-between items-center">
               Modify the content of the file. Your changes will be committed to GitHub.
-              <Button variant="outline" size="sm" className="ml-auto mt-2" disabled>
-                <Sparkles className="mr-2 h-4 w-4 text-primary" /> Assist with AI (Soon)
-              </Button>
+              <Dialog open={isAiEditFileModalOpen} onOpenChange={setIsAiEditFileModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={!canEditCurrentFile || isSavingFile}>
+                      <Sparkles className="mr-2 h-4 w-4 text-primary" /> Assist with AI
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary"/>Edit File Content with AI</DialogTitle>
+                    <DialogDescription>
+                        Describe the changes you want the AI to make to the current file content.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={aiEditFileForm.handleSubmit(handleAiEditFile)} className="space-y-4 py-2">
+                    <div>
+                      <Label htmlFor="aiEditPrompt">Your Prompt</Label>
+                      <Textarea
+                          id="aiEditPrompt"
+                          placeholder="e.g., 'Refactor this function to be asynchronous', 'Add error handling for XYZ case', 'Explain this code block'"
+                          {...aiEditFileForm.register("aiEditPrompt")}
+                          rows={5}
+                      />
+                      {aiEditFileForm.formState.errors.aiEditPrompt && <p className="text-sm text-destructive">{aiEditFileForm.formState.errors.aiEditPrompt.message}</p>}
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="ghost" disabled={isAiEditingFile}>Cancel</Button></DialogClose>
+                        <Button type="submit" disabled={isAiEditingFile || !aiEditFileForm.formState.isValid}>
+                            {isAiEditingFile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Apply AI Edit
+                        </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -690,10 +727,11 @@ function FileExplorerContent() {
             onChange={(e) => setEditingContent(e.target.value)}
             className="flex-grow font-mono text-sm resize-none h-full min-h-[300px]"
             placeholder="Enter file content..."
+            disabled={!canEditCurrentFile}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} disabled={isSavingFile}>Cancel</Button>
-            <Button onClick={handleSaveFile} disabled={isSavingFile}>
+            <Button onClick={handleSaveFile} disabled={isSavingFile || !canEditCurrentFile}>
               {isSavingFile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
             </Button>
