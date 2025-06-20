@@ -33,7 +33,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import NextImage from 'next/image';
-import { useForm, useActionState as useReactActionState } from 'react-hook-form'; 
+import { useForm } from 'react-hook-form'; 
+import { useActionState as useReactActionState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -520,6 +521,7 @@ function FileExplorerContent() {
                             sizes="100vw"
                             style={{ width: 'auto', height: 'auto', maxHeight: '65vh', maxWidth: '100%' }}
                             className="rounded-md object-contain"
+                            data-ai-hint="code image"
                         />
                     </div>
                 )}
