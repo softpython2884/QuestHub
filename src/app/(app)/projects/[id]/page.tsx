@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -7,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -117,8 +118,13 @@ type ProjectAnnouncementFormValues = z.infer<typeof projectAnnouncementFormSchem
 const linkGithubFormSchema = z.object({
   githubRepoName: z.string().optional(),
   useDefaultRepoName: z.boolean().default(true),
-}).refine(data => data.useDefaultRepoName || (data.githubRepoName && data.githubRepoName.trim() !== ''), {
-  message: "Custom repository name cannot be empty if not using default.",
+}).refine(data => {
+  if (!data.useDefaultRepoName) { // If custom name is chosen
+    return data.githubRepoName && data.githubRepoName.trim() !== ''; // Then it must be non-empty
+  }
+  return true; // Otherwise (default name is chosen), validation passes
+}, {
+  message: "Custom repository name cannot be empty if you are not using the default name.",
   path: ["githubRepoName"],
 });
 type LinkGithubFormValues = z.infer<typeof linkGithubFormSchema>;
@@ -231,13 +237,13 @@ function ProjectDetailPageContent() {
     const oauthStatus = searchParams.get('oauth_status');
     if (oauthStatus === 'success') {
       toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
-      loadUserGithubOAuth();
+      loadUserGithubOAuth(); // Reload token after successful OAuth
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('oauth_status');
-      newUrl.searchParams.delete('code');
+      newUrl.searchParams.delete('code'); // Also remove code and state if they exist
       newUrl.searchParams.delete('state');
       router.replace(newUrl.toString(), { scroll: false });
-    } else if (oauthStatus === 'error' || searchParams.get('error')) {
+    } else if (oauthStatus === 'error' || searchParams.get('error')) { // Handle error state from OAuth
        toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
        const newUrl = new URL(window.location.href);
        newUrl.searchParams.delete('oauth_status');
@@ -247,7 +253,7 @@ function ProjectDetailPageContent() {
        router.replace(newUrl.toString(), { scroll: false });
     }
 
-  }, [searchParams, router, toast]);
+  }, [searchParams, router, toast]); // toast added to dependency array
 
 
   const loadUserGithubOAuth = useCallback(async () => {
@@ -1127,10 +1133,10 @@ function ProjectDetailPageContent() {
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('flowUpProjectName', project.name);
+    formData.append('useDefaultRepoName', values.useDefaultRepoName.toString());
     if (!values.useDefaultRepoName && values.githubRepoName) {
       formData.append('githubRepoName', values.githubRepoName);
     }
-    // project.isPrivate will be used by the server action
     ReactStartTransition(() => {
       linkProjectToGithubFormAction(formData);
     });
@@ -1140,6 +1146,7 @@ function ProjectDetailPageContent() {
   const handleInitiateGithubOAuth = () => {
     if (!project) return;
     const redirectTo = `/projects/${project.uuid}?tab=codespace`;
+    // Pass projectUuid in state for the callback to use
     window.location.href = `/api/auth/github/oauth/login?redirectTo=${encodeURIComponent(redirectTo)}&projectUuid=${project.uuid}`;
   };
 
@@ -1664,7 +1671,7 @@ function ProjectDetailPageContent() {
                 <CardDescription>
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
                   {project?.githubRepoUrl && (
-                     <span className="block text-xs mt-1 text-green-600">This README is synced with GitHub.</span>
+                     <span className="block text-xs mt-1 text-green-600">This README is synced with GitHub. Changes saved here will be pushed.</span>
                   )}
                 </CardDescription>
               </div>
@@ -1977,7 +1984,7 @@ function ProjectDetailPageContent() {
                    <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
                   <p className="text-sm text-muted-foreground mb-4">
                     Your GitHub account is linked. You can now create a repository for this FlowUp project.
-                    The repository will be {project.isPrivate ? 'private' : 'public'} by default, matching your project's visibility setting.
+                    The repository will be {project.isPrivate ? 'private' : 'public'}, matching your project's visibility.
                   </p>
                    <Dialog open={isLinkGithubDialogOpen} onOpenChange={setIsLinkGithubDialogOpen}>
                     <DialogTrigger asChild>
@@ -2099,8 +2106,8 @@ function ProjectDetailPageContent() {
 
                   <Card>
                       <CardHeader>
-                          <CardTitle className="flex items-center"><Code2 className="mr-2 h-5 w-5"/>File Management (Coming Soon)</CardTitle>
-                          <CardDescription>Soon you'll be able to browse, view, and edit your repository files directly within FlowUp.</CardDescription>
+                          <CardTitle className="flex items-center"><Code2 className="mr-2 h-5 w-5"/>File Management (Placeholder)</CardTitle>
+                          <CardDescription>Future: Browse, view, and edit your repository files directly within FlowUp.</CardDescription>
                       </CardHeader>
                       <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                           <GitBranch className="mx-auto h-10 w-10 mb-3 opacity-50" />
@@ -2110,8 +2117,8 @@ function ProjectDetailPageContent() {
                   </Card>
                     <Card>
                       <CardHeader>
-                          <CardTitle className="flex items-center"><Terminal className="mr-2 h-5 w-5"/>Discord Logs (Coming Soon)</CardTitle>
-                           <CardDescription>Integrate with Discord to send commit logs or other notifications.</CardDescription>
+                          <CardTitle className="flex items-center"><MessageSquare className="mr-2 h-5 w-5"/>Discord Logs (Placeholder)</CardTitle>
+                           <CardDescription>Future: Integrate with Discord to send commit logs or other notifications.</CardDescription>
                       </CardHeader>
                        <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12c0 1.99.586 3.823 1.589 5.34L2.056 22l4.603-1.534A9.956 9.956 0 0 0 12 22z"></path><path d="M8 12.5c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2zm8 0c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2z"></path></svg>
@@ -2121,8 +2128,8 @@ function ProjectDetailPageContent() {
                   </Card>
                   <Card>
                       <CardHeader>
-                          <CardTitle className="flex items-center"><DownloadCloud className="mr-2 h-5 w-5"/>Desktop Application (Coming Soon)</CardTitle>
-                           <CardDescription>Access FlowUp more easily with a dedicated desktop application.</CardDescription>
+                          <CardTitle className="flex items-center"><DownloadCloud className="mr-2 h-5 w-5"/>Desktop Application (Placeholder)</CardTitle>
+                           <CardDescription>Future: Access FlowUp more easily with a dedicated desktop application.</CardDescription>
                       </CardHeader>
                        <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -2385,3 +2392,4 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
+
