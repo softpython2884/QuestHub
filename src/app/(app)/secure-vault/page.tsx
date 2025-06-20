@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
+// import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks'; // Removed
 import { ShieldCheck, PlusCircle, KeyRound, Eye, EyeOff, Copy, Trash2, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
@@ -33,7 +33,6 @@ export default function SecureVaultPage() {
   const [newSecretName, setNewSecretName] = useState('');
   const [newSecretValue, setNewSecretValue] = useState('');
   const [newSecretType, setNewSecretType] = useState<'API Key' | 'Password' | 'Note'>('API Key');
-  const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
   const { toast } = useToast();
 
   const toggleShowValue = (id: string) => {
@@ -45,29 +44,6 @@ export default function SecureVaultPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied!", description: "Secret value copied to clipboard." });
-  };
-
-  const handleSecretValueChange = async (value: string) => {
-    setNewSecretValue(value);
-    if(value.trim().length > 5) { 
-      try {
-        const riskResult = await flagApiKeyRisks({ text: value });
-        if (riskResult.flagged) {
-          setApiKeyRisk(riskResult.reason || "This value looks like a sensitive key. Good job using the vault!");
-           toast({
-            variant: "default",
-            title: "Heads Up!",
-            description: riskResult.reason || "This value looks like a sensitive key. Good job using the vault!",
-          });
-        } else {
-          setApiKeyRisk(null);
-        }
-      } catch (error) {
-        console.error("Error flagging API key risks:", error);
-      }
-    } else {
-      setApiKeyRisk(null);
-    }
   };
   
   const handleAddSecret = () => {
@@ -85,7 +61,6 @@ export default function SecureVaultPage() {
     setSecrets(prev => [newSecret, ...prev]);
     setNewSecretName('');
     setNewSecretValue('');
-    setApiKeyRisk(null);
     toast({ title: "Success", description: "New secret added to the vault." });
   };
 
@@ -119,10 +94,8 @@ export default function SecureVaultPage() {
               id="secret-value" 
               placeholder="Enter the secret key, password, or note" 
               value={newSecretValue}
-              onChange={(e) => handleSecretValueChange(e.target.value)}
-              className={apiKeyRisk ? "border-blue-500 ring-2 ring-blue-500" : ""} 
+              onChange={(e) => setNewSecretValue(e.target.value)}
             />
-             {apiKeyRisk && <p className="text-sm text-blue-600 mt-1 flex items-center"><AlertTriangle className="h-4 w-4 mr-1 text-blue-600"/>{apiKeyRisk}</p>}
           </div>
           <div>
             <Label htmlFor="secret-type">Type</Label>
@@ -185,3 +158,4 @@ export default function SecureVaultPage() {
     </div>
   );
 }
+

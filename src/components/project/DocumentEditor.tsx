@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import type { ProjectDocumentType } from '@/types';
-import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks';
+// import { flagApiKeyRisks } from '@/ai/flows/flag-api-key-risks'; // Removed
 import { generateDocumentContent, type GenerateDocumentContentInput } from '@/ai/flows/generate-document-content';
 import { AlertTriangle, Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,6 @@ export function DocumentEditor({
   onCancel,
 }: DocumentEditorProps) {
   const { toast } = useToast();
-  const [apiKeyRisk, setApiKeyRisk] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -77,29 +76,6 @@ export function DocumentEditor({
     }
   }, [document, form]);
 
-  const handleContentChangeForAI = async (newContent: string) => {
-    if (newContent.trim().length > 10) {
-      try {
-        const riskResult = await flagApiKeyRisks({ text: newContent });
-        if (riskResult.flagged) {
-          setApiKeyRisk(riskResult.reason || "Potential API key or secret detected.");
-          toast({
-            variant: "destructive",
-            title: "Security Alert",
-            description: riskResult.reason || "Potential API key or secret detected in the content. Please use the Secure Vault.",
-          });
-        } else {
-          setApiKeyRisk(null);
-        }
-      } catch (error) {
-        console.error("Error flagging API key risks:", error);
-        setApiKeyRisk(null);
-      }
-    } else {
-      setApiKeyRisk(null);
-    }
-  };
-
   const applyMarkdownSyntax = (
     syntaxStart: string,
     syntaxEnd: string = '',
@@ -122,7 +98,6 @@ export function DocumentEditor({
     
     const newValue = value.substring(0, selectionStart) + newText + value.substring(selectionEnd);
     form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
-    handleContentChangeForAI(newValue);
 
     setTimeout(() => {
       if (textareaRef.current) {
@@ -200,7 +175,6 @@ export function DocumentEditor({
         const result = await generateDocumentContent({ prompt: aiPrompt });
         if (result.markdownContent) {
             form.setValue('content', result.markdownContent, { shouldValidate: true, shouldDirty: true });
-            handleContentChangeForAI(result.markdownContent); // Also run security check
             toast({ title: 'Success', description: 'AI generated content populated.' });
             setIsAiDialogOpen(false);
             setAiPrompt('');
@@ -303,14 +277,12 @@ export function DocumentEditor({
                 textareaRef.current = e; 
               }}
               onChange={(e) => {
-                contentField.onChange(e); 
-                handleContentChangeForAI(e.target.value); 
+                contentField.onChange(e);
               }}
               rows={20}
-              className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none", apiKeyRisk && "border-destructive ring-2 ring-destructive")}
+              className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none")}
               placeholder="Write your Markdown here..."
             />
-            {apiKeyRisk && <p className="text-sm text-destructive mt-1 flex items-center"><AlertTriangle className="h-4 w-4 mr-1"/>{apiKeyRisk}</p>}
             {form.formState.errors.content && (
               <p className="text-sm text-destructive mt-1">{form.formState.errors.content.message}</p>
             )}
@@ -340,3 +312,4 @@ export function DocumentEditor({
     </>
   );
 }
+

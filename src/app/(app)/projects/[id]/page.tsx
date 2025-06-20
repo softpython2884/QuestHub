@@ -674,14 +674,14 @@ function ProjectDetailPageContent() {
         toast({ title: "Success", description: linkGithubState.message });
         if (linkGithubState.project) {
           setProject(linkGithubState.project);
-          loadUserGithubOAuth();
+          // loadUserGithubOAuth(); No, GitHub App installation is separate from OAuth for user
         }
       }
       if (linkGithubState.error) {
         toast({ variant: "destructive", title: "GitHub Link Error", description: linkGithubState.error });
       }
     }
-  }, [linkGithubState, isLinkGithubPending, toast, loadUserGithubOAuth]);
+  }, [linkGithubState, isLinkGithubPending, toast]); // Removed loadUserGithubOAuth
 
 
   useEffect(() => {
@@ -1931,7 +1931,7 @@ function ProjectDetailPageContent() {
                   <p className="ml-2">Loading GitHub connection status...</p>
                 </div>
               )}
-              {!isLoadingGithubAuth && !project.githubRepoUrl && !userGithubOAuthToken && (
+              {!isLoadingGithubAuth && !userGithubOAuthToken && (
                 <div className="p-4 border-dashed border-2 rounded-md text-center">
                   <Github className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <h3 className="text-lg font-semibold mb-1">Connect to GitHub</h3>
@@ -1943,7 +1943,7 @@ function ProjectDetailPageContent() {
                   </Button>
                 </div>
               )}
-               {!isLoadingGithubAuth && !project.githubRepoUrl && userGithubOAuthToken && (
+               {!isLoadingGithubAuth && userGithubOAuthToken && !project.githubRepoUrl && (
                 <div className="p-4 border-dashed border-2 rounded-md text-center">
                   <Github className="h-12 w-12 mx-auto text-primary mb-3" />
                    <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
@@ -1980,7 +1980,6 @@ function ProjectDetailPageContent() {
                         <Link2 className="h-4 w-4 text-muted-foreground" />
                     </div>
                      <p className="text-sm text-muted-foreground mt-1">Repository Name: <span className="font-medium">{project.githubRepoName}</span></p>
-                     {/* TODO: Add Unlink button/functionality if desired */}
                   </div>
 
                   <Button variant="outline" disabled>
@@ -2246,4 +2245,5 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
+
 
