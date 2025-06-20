@@ -1,4 +1,3 @@
-
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation } from '@/types';
@@ -1040,7 +1039,7 @@ export async function linkProjectToGithubAction(
   }
 
   const projectUuid = formData.get('projectUuid') as string;
-  const projectName = formData.get('projectName') as string;
+  const projectName = formData.get('projectName') as string; // This is the FlowUp project name
 
   if (!projectUuid || !projectName) {
     return { error: "Project UUID and Name are required." };
@@ -1061,50 +1060,55 @@ export async function linkProjectToGithubAction(
     const octokit = await getInstallationOctokit(installationId);
     console.log('[linkProjectToGithubAction] Octokit instance obtained for installation.');
 
-
-    const repoSlug = slugify(projectName);
+    const appOctokit = await getAppAuthOctokit();
+    const installationDetails = await appOctokit.request('GET /app/installations/{installation_id}', {
+      installation_id: installationId,
+    });
     
+    const accountType = installationDetails.data.account?.type; 
+    const accountLogin = installationDetails.data.account?.login;
+
+    if (!accountLogin) {
+      return { error: "Could not determine the GitHub account login for the installation." };
+    }
+
+    const repoSlug = slugify(projectName); // Use FlowUp project name to generate repo slug
     let createdRepo;
+
     try {
       console.log(`Attempting to create repository '${repoSlug}' for installation ID: ${installationId}`);
       
-      const appOctokit = await getAppAuthOctokit();
-      const installationDetails = await appOctokit.request('GET /app/installations/{installation_id}', {
-        installation_id: installationId,
-      });
-      
-      const accountType = installationDetails.data.account?.type; 
-      const accountLogin = installationDetails.data.account?.login;
-
-      if (!accountLogin) {
-        return { error: "Could not determine the GitHub account login for the installation." };
+      if (accountType === 'Organization') {
+        console.log(`Creating repository under Organization: ${accountLogin} (using installation-authed Octokit)`);
+        createdRepo = await octokit.rest.repos.createInOrg({
+          org: accountLogin,
+          name: repoSlug,
+          private: true, 
+          description: `Repository for FlowUp project: ${projectName}`,
+        });
+      } else { // Assumed User
+        console.log(`Creating repository under User: ${accountLogin} (using installation-authed Octokit)`);
+        createdRepo = await octokit.rest.repos.createForAuthenticatedUser({
+          name: repoSlug,
+          private: true, 
+          description: `Repository for FlowUp project: ${projectName}`,
+        });
       }
-
-      console.log(`Creating repository under ${accountType}: ${accountLogin} (using installation-authed Octokit)`);
-      
-      createdRepo = await octokit.rest.repos.createInOrg({
-        org: accountLogin, // For User type, this will be their username. For Org type, it's the org login.
-        name: repoSlug,
-        private: true, 
-        description: `Repository for FlowUp project: ${projectName}`,
-      });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data, apiError.documentation_url);
-      if (apiError.status === 403 && apiError.message?.includes("Resource not accessible by integration")) {
-        return { error: `The FlowUp GitHub App installation on '${userGithubInstallation.github_account_login || 'your account'}' does not have the required "Repository Administration: Read & Write" permission to create repositories. Please check the installation settings on GitHub, or re-install the app with the correct permissions. GitHub details: ${apiError.message} - ${apiError.documentation_url}`};
+      const permErrorMsg = `The FlowUp GitHub App installation on '${userGithubInstallation.github_account_login || 'your account'}' does not have the required "Repository Administration: Read & Write" permission to create repositories, or the specific operation is disallowed for the target account type. Please check the app's installation settings on GitHub.`;
+      if (apiError.status === 403) {
+        return { error: `${permErrorMsg} GitHub details: ${apiError.message} - ${apiError.documentation_url}`};
       }
-       if (apiError.status === 422) { 
+      if (apiError.status === 422) { 
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${apiError.message}` };
       }
-      if (apiError.status === 404 && apiError.message?.includes("Resource not accessible by integration")) { // Less likely for createInOrg if accountLogin is correct
-         return { error: `The FlowUp GitHub App may not have access to the specific organization or user account (${userGithubInstallation.github_account_login || 'unknown'}) targeted for repository creation. Please ensure the app is installed and has permissions for that entity. GitHub details: ${apiError.message}` };
+      if (apiError.status === 404) { // Often means the 'org' doesn't exist or app can't access it
+         return { error: `Could not find or access the target GitHub account (${accountLogin}) to create the repository. Ensure the app is installed and has permissions for this entity. GitHub details: ${apiError.message}` };
       }
-      if (apiError instanceof TypeError && apiError.message.includes("Cannot read properties of undefined (reading 'repos')")) {
-        return { error: `GitHub API client error: Failed to access repository functions. Please ensure the GitHub App is configured correctly. Details: ${apiError.message}`};
-      }
-      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message} - ${apiError.documentation_url || ''}` };
+      return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${apiError.message} ${apiError.response?.data?.message || ''} ${apiError.documentation_url || ''}` };
     }
     
     const repoUrl = createdRepo.data.html_url;
@@ -1123,6 +1127,4 @@ export async function linkProjectToGithubAction(
     return { error: error.message || "An unexpected error occurred while linking to GitHub." };
   }
 }
-
-
     
