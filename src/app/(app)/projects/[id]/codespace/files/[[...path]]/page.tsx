@@ -34,7 +34,7 @@ import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import NextImage from 'next/image';
 import { useForm } from 'react-hook-form'; 
-import { useActionState } from 'react';
+import { useActionState, startTransition } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -104,23 +104,22 @@ function FileExplorerContent() {
   const newFileForm = useForm<NewFileFormValues>({ resolver: zodResolver(newFileFormSchema), defaultValues: { fileName: '', initialContent: ''}});
   const newFolderForm = useForm<NewFolderFormValues>({ resolver: zodResolver(newFolderFormSchema), defaultValues: { folderName: ''}});
 
-
-  const forceReloadContent = useCallback(async (newPath?: string) => {
-    const pathToLoad = newPath !== undefined ? newPath : currentPath;
+  const loadContent = useCallback(async (pathToLoad: string) => {
     if (!project || !project.githubRepoName || authLoading || isLoadingProject) {
-        return;
+      return;
     }
     setIsLoadingPathContent(true);
     setError(null);
-    
+    setFileData(null);
+    setIsViewingFile(false);
+
     try {
-      const isFileViewCandidate = (newPath ? newPath.includes('.') : (filePathArray.length > 0 && (isViewingFile || filePathArray[filePathArray.length-1].includes('.')))) && (!newPath || !newPath.endsWith('/'));
+      const extension = pathToLoad.includes('.') ? getFileExtension(pathToLoad.split('/').pop()!) : null;
+      const isFileCandidate = extension && !pathToLoad.endsWith('/');
       
-      if (isFileViewCandidate && (fileData || newPath?.includes('.'))) { 
-        const actualFilePath = newPath || fileData!.path;
-        const fetchedFileData = await getFileContentAction(projectUuid, actualFilePath);
+      if (isFileCandidate) {
+        const fetchedFileData = await getFileContentAction(projectUuid, pathToLoad);
         if ('content' in fetchedFileData && fetchedFileData.sha) {
-          const extension = getFileExtension(actualFilePath.split('/').pop()!);
           let fileDisplayType: 'md' | 'image' | 'html' | 'text' | 'other' = 'other';
           if (MARKDOWN_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'md';
           else if (IMAGE_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'image';
@@ -128,8 +127,8 @@ function FileExplorerContent() {
           else if (TEXT_EXTENSIONS.includes(`.${extension}`) || fetchedFileData.encoding === 'utf-8' || !fetchedFileData.encoding) fileDisplayType = 'text';
           
           setFileData({
-            name: actualFilePath.split('/').pop()!,
-            path: actualFilePath,
+            name: pathToLoad.split('/').pop()!,
+            path: pathToLoad,
             content: fetchedFileData.content,
             type: fileDisplayType,
             downloadUrl: fetchedFileData.download_url,
@@ -138,15 +137,11 @@ function FileExplorerContent() {
           });
           setEditingContent(fetchedFileData.content);
           setIsViewingFile(true);
-          if (newPath) router.push(`/projects/${projectUuid}/codespace/files/${newPath}`);
         } else {
-          setError(fetchedFileData.error || "Failed to refresh file content.");
+          setError(fetchedFileData.error || "Failed to load file content.");
           setIsViewingFile(false);
-          setFileData(null);
         }
-      } else { 
-        setIsViewingFile(false); 
-        setFileData(null);
+      } else { // Is a directory or root
         const dirData = await getRepoContentsAction(projectUuid, pathToLoad);
         if (Array.isArray(dirData)) {
           setContents(dirData.sort((a, b) => {
@@ -154,18 +149,17 @@ function FileExplorerContent() {
             if (a.type !== 'dir' && b.type === 'dir') return 1;
             return a.name.localeCompare(b.name);
           }));
-          if (newPath !== undefined && newPath !== currentPath) router.push(`/projects/${projectUuid}/codespace/files${newPath ? '/' + newPath : ''}`);
         } else {
           setError(dirData.error || "Failed to fetch repository contents.");
         }
       }
     } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred while reloading content.');
+      setError(e.message || 'An unexpected error occurred while loading content.');
       toast({ variant: 'destructive', title: 'Error', description: e.message });
     } finally {
       setIsLoadingPathContent(false);
     }
-  }, [project, currentPath, projectUuid, authLoading, isLoadingProject, toast, filePathArray, isViewingFile, fileData, router]);
+  }, [project, projectUuid, authLoading, isLoadingProject, toast]);
 
 
   useEffect(() => {
@@ -184,6 +178,7 @@ function FileExplorerContent() {
           setProject(fetchedProject);
           if (!fetchedProject.githubRepoName) {
             setError("Project is not linked to a GitHub repository.");
+            setIsLoadingPathContent(false); 
           }
         }
       })
@@ -197,13 +192,12 @@ function FileExplorerContent() {
       });
   }, [projectUuid, user, authLoading, router]);
 
+
   useEffect(() => {
-    if (project && project.githubRepoName && !authLoading && !isLoadingProject) {
-        forceReloadContent(currentPath);
-    } else if (project && !project.githubRepoName && !isLoadingProject) {
-        setIsLoadingPathContent(false);
+    if (project && project.githubRepoName && !isLoadingProject) {
+        loadContent(currentPath);
     }
-  }, [project, authLoading, isLoadingProject, currentPath, forceReloadContent]);
+  }, [project, isLoadingProject, currentPath, loadContent]);
 
 
   const handleSaveFile = async () => {
@@ -230,7 +224,7 @@ function FileExplorerContent() {
       toast({ title: "File Created", description: `${values.fileName} created successfully.`});
       setIsCreateFileModalOpen(false);
       newFileForm.reset();
-      await forceReloadContent();
+      loadContent(currentPath); 
     } else {
       toast({ variant: "destructive", title: "Creation Error", description: result.error || "Failed to create file."});
     }
@@ -246,7 +240,7 @@ function FileExplorerContent() {
       toast({ title: "Folder Created", description: `${values.folderName} created successfully.`});
       setIsCreateFolderModalOpen(false);
       newFolderForm.reset();
-      await forceReloadContent();
+      loadContent(currentPath); 
     } else {
       toast({ variant: "destructive", title: "Creation Error", description: result.error || "Failed to create folder."});
     }
@@ -262,10 +256,10 @@ function FileExplorerContent() {
       setContentToDelete(null);
       if (isViewingFile && fileData?.path === contentToDelete.path) { 
         const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
-        await forceReloadContent(parentPath);
         router.push(`/projects/${projectUuid}/codespace/files${parentPath ? '/' + parentPath : ''}`);
+        // loadContent will be called by useEffect due to currentPath change
       } else {
-        await forceReloadContent();
+        loadContent(currentPath); 
       }
     } else {
       toast({ variant: "destructive", title: "Deletion Error", description: result.error || "Failed to delete file."});
@@ -278,7 +272,7 @@ function FileExplorerContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('prompt', values.prompt);
     formData.append('basePath', currentPath);
-    ReactStartTransition(() => {
+    startTransition(() => {
         aiScaffoldFormAction(formData);
     });
   };
@@ -289,13 +283,13 @@ function FileExplorerContent() {
             toast({ title: "AI Scaffold Success", description: aiScaffoldState.message });
             setIsAiScaffoldModalOpen(false);
             aiScaffoldForm.reset();
-            forceReloadContent(); 
+            loadContent(currentPath); 
         }
         if (aiScaffoldState.error) {
             toast({ variant: "destructive", title: "AI Scaffold Error", description: aiScaffoldState.error });
         }
     }
-  }, [aiScaffoldState, isAiScaffolding, toast, forceReloadContent, aiScaffoldForm]);
+  }, [aiScaffoldState, isAiScaffolding, toast, loadContent, currentPath, aiScaffoldForm]);
 
 
   const getBreadcrumbs = () => {
@@ -310,9 +304,10 @@ function FileExplorerContent() {
 
   const breadcrumbs = getBreadcrumbs();
   const canEditCurrentFile = fileData && (fileData.type === 'text' || fileData.type === 'md' || fileData.type === 'html');
-  const isLoading = authLoading || isLoadingProject || isLoadingPathContent;
+  const isLoadingPage = authLoading || isLoadingProject || isLoadingPathContent;
 
-  if (isLoading) {
+
+  if (isLoadingPage && !error && !project?.githubRepoName) { // Initial loading state before project details are known
     return (
       <div className="space-y-6">
          <div className="flex justify-between items-center">
@@ -345,7 +340,7 @@ function FileExplorerContent() {
         <div className="flex items-center gap-2 flex-wrap">
             <Dialog open={isCreateFileModalOpen} onOpenChange={setIsCreateFileModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
+                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName || isLoadingPathContent}>
                         <FilePlus className="mr-2 h-4 w-4" /> Create File
                     </Button>
                 </DialogTrigger>
@@ -372,7 +367,7 @@ function FileExplorerContent() {
             </Dialog>
             <Dialog open={isCreateFolderModalOpen} onOpenChange={setIsCreateFolderModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
+                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName || isLoadingPathContent}>
                         <FolderPlus className="mr-2 h-4 w-4" /> Create Folder
                     </Button>
                 </DialogTrigger>
@@ -396,7 +391,7 @@ function FileExplorerContent() {
             </Dialog>
             <Dialog open={isAiScaffoldModalOpen} onOpenChange={setIsAiScaffoldModalOpen}>
                 <DialogTrigger asChild>
-                     <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
+                     <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName || isLoadingPathContent}>
                         <Sparkles className="mr-2 h-4 w-4 text-primary" /> Scaffold with AI
                     </Button>
                 </DialogTrigger>
@@ -420,7 +415,7 @@ function FileExplorerContent() {
                     </form>
                 </DialogContent>
             </Dialog>
-             <Button variant="outline" size="sm" onClick={() => forceReloadContent()} title="Refresh content" disabled={isLoadingPathContent || !project?.githubRepoName}>
+             <Button variant="outline" size="sm" onClick={() => loadContent(currentPath)} title="Refresh content" disabled={isLoadingPathContent || !project?.githubRepoName}>
                 {isLoadingPathContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4" />} Refresh
             </Button>
         </div>
@@ -442,7 +437,7 @@ function FileExplorerContent() {
           {project?.githubRepoName && (
             <div className="flex items-center space-x-1 text-sm text-muted-foreground mt-2 overflow-x-auto whitespace-nowrap pb-1 border-t pt-2">
               {breadcrumbs.map((crumb, index) => (
-                <span key={index} className="inline-flex items-center">
+                <span key={crumb.path} className="inline-flex items-center">
                   {index > 0 && <ChevronRight className="h-4 w-4 inline-block mx-1 flex-shrink-0" />}
                   { (index === breadcrumbs.length - 1 && (isViewingFile || currentPath === crumb.path)) ? (
                       <span className="font-medium text-foreground flex items-center">
@@ -460,14 +455,17 @@ function FileExplorerContent() {
           )}
         </CardHeader>
         <CardContent>
-          {error && (
+          {isLoadingPathContent && !error ? (
+            <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : error ? (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Error Loading Content</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          )}
-          {!error && !project?.githubRepoName && (
+          ) : !project?.githubRepoName ? (
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Repository Not Linked</AlertTitle>
@@ -478,8 +476,7 @@ function FileExplorerContent() {
                   </Button>
                 </AlertDescription>
               </Alert>
-          )}
-          {!error && project?.githubRepoName && isViewingFile && fileData && (
+          ) : isViewingFile && fileData ? (
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold">{fileData.name}</h3>
@@ -557,8 +554,7 @@ function FileExplorerContent() {
                     </Alert>
                 )}
             </div>
-          )}
-          {!error && project?.githubRepoName && !isViewingFile && contents.length > 0 && (
+          ) : !isViewingFile && contents.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -609,7 +605,7 @@ function FileExplorerContent() {
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </AlertDialogTrigger>
-                                    {contentToDelete?.sha === item.sha && (
+                                    {contentToDelete?.path === item.path && ( // Check path instead of sha for key consistency
                                         <AlertDialogContent>
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Delete File: "{contentToDelete.name}"?</AlertDialogTitle>
@@ -636,21 +632,19 @@ function FileExplorerContent() {
                 ))}
               </TableBody>
             </Table>
-          )}
-           {!error && project?.githubRepoName && !isViewingFile && contents.length === 0 && !currentPath && (
+          ) : !isViewingFile && contents.length === 0 && !currentPath ? (
             <Alert>
                 <FileCode className="h-4 w-4" />
                 <AlertTitle>Empty Repository</AlertTitle>
-                <AlertDescription>This repository ('{project.githubRepoName}') appears to be empty. You can create files or folders using the buttons above.</AlertDescription>
+                <AlertDescription>This repository ('{project?.githubRepoName || 'Unknown'}') appears to be empty. You can create files or folders using the buttons above.</AlertDescription>
             </Alert>
-          )}
-          {!error && project?.githubRepoName && !isViewingFile && contents.length === 0 && currentPath && (
+          ) : !isViewingFile && contents.length === 0 && currentPath ? (
              <Alert>
                 <Folder className="h-4 w-4" />
                 <AlertTitle>Empty Directory</AlertTitle>
                 <AlertDescription>This directory ('/{currentPath}') is empty. You can create files or folders here using the buttons above.</AlertDescription>
             </Alert>
-          )}
+          ) : null }
         </CardContent>
       </Card>
 
@@ -692,3 +686,4 @@ export default function GitHubFilesPage() {
     )
 }
 
+    
