@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, Suspense, useCallback } from 'react';
+import { useEffect, useState, Suspense, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,11 +12,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, PlusCircle, Trash2 } from 'lucide-react';
-import { getRepoContentsAction, getFileContentAction, fetchProjectAction, saveFileContentAction } from '@/app/(app)/projects/[id]/actions'; 
+import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw } from 'lucide-react';
+import { getRepoContentsAction, getFileContentAction, fetchProjectAction, saveFileContentAction } from '@/app/(app)/projects/[id]/actions';
 import type { GithubRepoContentItem, Project } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -39,132 +37,130 @@ function FileExplorerContent() {
   const { toast } = useToast();
 
   const projectUuid = params.id as string;
-  const filePathArray = (params.path || []) as string[];
-  const currentPath = filePathArray.join('/');
+  
+  const filePathArray = useMemo(() => (params.path || []) as string[], [params.path]);
+  const currentPath = useMemo(() => filePathArray.join('/'), [filePathArray]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [contents, setContents] = useState<GithubRepoContentItem[]>([]);
   const [fileData, setFileData] = useState<{ name: string; path: string; content: string; type: 'md' | 'image' | 'text' | 'other'; downloadUrl?: string | null, encoding?: string, sha: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  const [isLoadingProject, setIsLoadingProject] = useState(true);
+  const [isLoadingPathContent, setIsLoadingPathContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewingFile, setViewingFile] = useState(false);
+  const [isViewingFile, setIsViewingFile] = useState(false);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingContent, setEditingContent] = useState('');
   const [isSavingFile, setIsSavingFile] = useState(false);
 
-
-  const loadProjectData = useCallback(async () => {
-      if (!projectUuid) return;
-      const fetchedProject = await fetchProjectAction(projectUuid);
-      if (!fetchedProject) {
-        setError("Project not found.");
-        setIsLoading(false);
+  // Load project data
+  useEffect(() => {
+    if (!projectUuid || authLoading) return;
+    if (!user) {
+        router.push('/login');
         return;
-      }
-      setProject(fetchedProject);
-      return fetchedProject;
-  }, [projectUuid]);
-
-
-  const loadPathContent = useCallback(async (currentProject: Project | null) => {
-    if (!user || !projectUuid || !currentProject) {
-      if (!authLoading && !user) router.push('/login');
-      return;
     }
-    setIsLoading(true);
+    setIsLoadingProject(true);
+    fetchProjectAction(projectUuid)
+      .then((fetchedProject) => {
+        if (!fetchedProject) {
+          setError("Project not found or access denied.");
+          setProject(null);
+        } else {
+          setProject(fetchedProject);
+          if (!fetchedProject.githubRepoName) {
+            setError("Project is not linked to a GitHub repository.");
+          }
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching project:", err);
+        setError("Failed to load project details.");
+        setProject(null);
+      })
+      .finally(() => {
+        setIsLoadingProject(false);
+      });
+  }, [projectUuid, user, authLoading, router]);
+
+  // Load path content (files/folders or file content)
+  useEffect(() => {
+    if (!project || !project.githubRepoName || authLoading || isLoadingProject) {
+        if (project && !project.githubRepoName && !isLoadingProject) { // Project loaded but no repo
+            setIsLoadingPathContent(false);
+        }
+        return;
+    }
+
+    setIsLoadingPathContent(true);
     setError(null);
-    setViewingFile(false);
+    setIsViewingFile(false);
     setFileData(null);
 
-    if (!currentProject.githubRepoName) {
-      setError("Project is not linked to a GitHub repository.");
-      setIsLoading(false);
-      return;
-    }
+    const loadContent = async () => {
+      try {
+        const isFileViewCandidate = filePathArray.length > 0 && filePathArray[filePathArray.length-1].includes('.');
 
-    try {
-      const isFileView = filePathArray.length > 0 && (
-          TEXT_EXTENSIONS.some(ext => filePathArray[filePathArray.length - 1].toLowerCase().endsWith(ext)) ||
-          MARKDOWN_EXTENSIONS.some(ext => filePathArray[filePathArray.length - 1].toLowerCase().endsWith(ext)) ||
-          IMAGE_EXTENSIONS.some(ext => filePathArray[filePathArray.length - 1].toLowerCase().endsWith(ext)) ||
-          (filePathArray.length > 0 && !currentPath.endsWith('/') && filePathArray[filePathArray.length-1].includes('.'))
-      );
+        if (isFileViewCandidate) {
+          const fetchedFileData = await getFileContentAction(projectUuid, currentPath);
+          if ('content' in fetchedFileData && fetchedFileData.sha) {
+            const extension = getFileExtension(filePathArray[filePathArray.length - 1]);
+            let fileDisplayType: 'md' | 'image' | 'text' | 'other' = 'other';
 
-      if (isFileView) {
-        const fetchedFileData = await getFileContentAction(projectUuid, currentPath);
-        if ('content' in fetchedFileData && fetchedFileData.sha) {
-          const extension = getFileExtension(filePathArray[filePathArray.length - 1]);
-          let fileDisplayType: 'md' | 'image' | 'text' | 'other' = 'other';
-
-          if (MARKDOWN_EXTENSIONS.includes(`.${extension}`)) {
-            fileDisplayType = 'md';
-          } else if (IMAGE_EXTENSIONS.includes(`.${extension}`)) {
-            fileDisplayType = 'image';
-          } else if (TEXT_EXTENSIONS.includes(`.${extension}`)) {
-            fileDisplayType = 'text';
-          } else if (fetchedFileData.encoding === 'base64' && !IMAGE_EXTENSIONS.includes(`.${extension}`)){
-              fileDisplayType = 'other';
-          } else if (fetchedFileData.encoding === 'utf-8' || !fetchedFileData.encoding) { // Default to text if utf-8 or no encoding specified
-              fileDisplayType = 'text';
-          }
-
-          setFileData({
-            name: filePathArray[filePathArray.length - 1],
-            path: currentPath,
-            content: fetchedFileData.content,
-            type: fileDisplayType,
-            downloadUrl: fetchedFileData.download_url,
-            encoding: fetchedFileData.encoding,
-            sha: fetchedFileData.sha,
-          });
-          setEditingContent(fetchedFileData.content); // For edit modal
-          setViewingFile(true);
-          setContents([]);
-        } else {
-          setError(fetchedFileData.error || "Failed to fetch file content. It might be a directory or an error occurred.");
-          const dirData = await getRepoContentsAction(projectUuid, currentPath);
+            if (MARKDOWN_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'md';
+            else if (IMAGE_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'image';
+            else if (TEXT_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'text';
+            else if (fetchedFileData.encoding === 'base64' && !IMAGE_EXTENSIONS.includes(`.${extension}`)) fileDisplayType = 'other';
+            else if (fetchedFileData.encoding === 'utf-8' || !fetchedFileData.encoding) fileDisplayType = 'text';
+            
+            setFileData({
+              name: filePathArray[filePathArray.length - 1],
+              path: currentPath,
+              content: fetchedFileData.content,
+              type: fileDisplayType,
+              downloadUrl: fetchedFileData.download_url,
+              encoding: fetchedFileData.encoding,
+              sha: fetchedFileData.sha,
+            });
+            setEditingContent(fetchedFileData.content);
+            setIsViewingFile(true);
+            setContents([]);
+          } else {
+            // If getFileContentAction fails, it might be a directory with a dot in its name. Try listing as directory.
+            const dirData = await getRepoContentsAction(projectUuid, currentPath);
             if (Array.isArray(dirData)) {
                 setContents(dirData.sort((a, b) => {
                     if (a.type === 'dir' && b.type !== 'dir') return -1;
                     if (a.type !== 'dir' && b.type === 'dir') return 1;
                     return a.name.localeCompare(b.name);
                 }));
-                setViewingFile(false);
-                setError(null); // Clear previous error if directory listing succeeds
+                setIsViewingFile(false);
             } else {
-                 setError(dirData.error || "Failed to fetch repository contents or file.");
+                 setError(fetchedFileData.error || dirData.error || "Failed to fetch file or directory content.");
             }
+          }
+        } else { // Directory view
+          const dirData = await getRepoContentsAction(projectUuid, currentPath);
+          if (Array.isArray(dirData)) {
+            setContents(dirData.sort((a, b) => {
+              if (a.type === 'dir' && b.type !== 'dir') return -1;
+              if (a.type !== 'dir' && b.type === 'dir') return 1;
+              return a.name.localeCompare(b.name);
+            }));
+          } else {
+            setError(dirData.error || "Failed to fetch repository contents.");
+          }
         }
-      } else { // Directory view
-        const dirData = await getRepoContentsAction(projectUuid, currentPath);
-        if (Array.isArray(dirData)) {
-          setContents(dirData.sort((a, b) => {
-            if (a.type === 'dir' && b.type !== 'dir') return -1;
-            if (a.type !== 'dir' && b.type === 'dir') return 1;
-            return a.name.localeCompare(b.name);
-          }));
-        } else {
-          setError(dirData.error || "Failed to fetch repository contents.");
-        }
+      } catch (e: any) {
+        setError(e.message || 'An unexpected error occurred while loading content.');
+        toast({ variant: 'destructive', title: 'Error', description: e.message });
+      } finally {
+        setIsLoadingPathContent(false);
       }
-    } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred.');
-      toast({ variant: 'destructive', title: 'Error', description: e.message });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectUuid, currentPath, user, authLoading, router, toast, filePathArray]);
-
-  useEffect(() => {
-    async function loadInitialData() {
-        const fetchedProject = await loadProjectData();
-        if (fetchedProject) {
-            await loadPathContent(fetchedProject);
-        }
-    }
-    if (!authLoading) loadInitialData();
-  }, [authLoading, loadProjectData, loadPathContent]);
+    };
+    loadContent();
+  }, [project, currentPath, projectUuid, authLoading, isLoadingProject, toast, filePathArray]);
 
 
   const handleSaveFile = async () => {
@@ -182,7 +178,7 @@ function FileExplorerContent() {
   };
   
   const getBreadcrumbs = () => {
-    const crumbs = [{ name: project?.githubRepoName || 'Root', path: '', isRoot: true }];
+    const crumbs = [{ name: project?.githubRepoName || 'Repository Root', path: '', isRoot: true }];
     let currentCrumbPath = '';
     filePathArray.forEach(segment => {
       currentCrumbPath += (currentCrumbPath ? '/' : '') + segment;
@@ -193,38 +189,78 @@ function FileExplorerContent() {
 
   const breadcrumbs = getBreadcrumbs();
   const canEditCurrentFile = fileData && (fileData.type === 'text' || fileData.type === 'md');
+  const isLoading = authLoading || isLoadingProject || isLoadingPathContent;
 
-  if (authLoading || (!project && isLoading)) { // Show loading spinner if auth is loading OR initial project data is loading
+  if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <div className="space-y-6">
+         <div className="flex justify-between items-center">
+             <Skeleton className="h-9 w-48" /> {/* Back button */}
+        </div>
+        <Card>
+            <CardHeader>
+                <Skeleton className="h-8 w-1/2 mb-2" /> {/* Title */}
+                <Skeleton className="h-5 w-3/4" /> {/* Description */}
+                <div className="mt-2 flex space-x-1 pb-1 border-t pt-2"> {/* Breadcrumbs */}
+                    <Skeleton className="h-5 w-16" /> <Skeleton className="h-5 w-4" /> <Skeleton className="h-5 w-20" />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                </div>
+            </CardContent>
+        </Card>
       </div>
     );
   }
-
+  
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <Button variant="outline" onClick={() => router.push(`/projects/${projectUuid}?tab=codespace`)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to CodeSpace Overview
         </Button>
+        <div className="flex items-center gap-2">
+             {/* Placeholder for future actions like Create File/Folder */}
+             <Button variant="outline" size="sm" disabled>
+                <FilePlus className="mr-2 h-4 w-4" /> Create File
+            </Button>
+             <Button variant="outline" size="sm" disabled>
+                <FolderPlus className="mr-2 h-4 w-4" /> Create Folder
+            </Button>
+             <Button variant="outline" size="sm" onClick={() => {
+                // Trigger a re-fetch, e.g., by briefly changing a dummy state or re-calling load functions
+                // For simplicity, we can force a reload of project and path content:
+                setIsLoadingProject(true); // This will re-trigger the project load useEffect
+                // To specifically reload path content if project is already loaded:
+                if(project) {
+                    setIsLoadingPathContent(true);
+                     // This re-triggers the second useEffect:
+                    setProject(p => p ? ({...p}) : null ); // Force re-trigger if path hasn't changed
+                }
+
+             }} title="Refresh content">
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileCode className="h-6 w-6 text-primary" />
-                Repository Browser
+                Repository: {project?.githubRepoName || 'N/A'}
               </CardTitle>
-              <CardDescription>
-                Browse files and folders in {project?.githubRepoName || 'your linked repository'}.
+               <CardDescription>
+                {isViewingFile ? `Viewing: ${fileData?.name}` : `Path: /${currentPath || ''}`}
               </CardDescription>
             </div>
              {project?.githubRepoUrl && (
                 <Button variant="outline" size="sm" asChild>
-                    <a href={`${project.githubRepoUrl}${currentPath ? ( viewingFile ? '/blob/main/' : '/tree/main/') + currentPath : ''}`} target="_blank" rel="noopener noreferrer">
+                    <a href={`${project.githubRepoUrl}${currentPath ? ( isViewingFile ? '/blob/main/' : '/tree/main/') + currentPath : ''}`} target="_blank" rel="noopener noreferrer">
                         View on GitHub <ExternalLink className="ml-2 h-4 w-4"/>
                     </a>
                 </Button>
@@ -234,14 +270,14 @@ function FileExplorerContent() {
             {breadcrumbs.map((crumb, index) => (
               <span key={index} className="inline-flex items-center">
                 {index > 0 && <ChevronRight className="h-4 w-4 inline-block mx-1 flex-shrink-0" />}
-                 { (crumb.isRoot && !viewingFile && filePathArray.length === 0) || (index === breadcrumbs.length - 1) ? (
+                 { (index === breadcrumbs.length - 1) ? (
                      <span className="font-medium text-foreground flex items-center">
-                         {crumb.isRoot && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />}
+                         {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />}
                          {crumb.name}
                     </span>
                 ): (
                      <Link href={`/projects/${projectUuid}/codespace/files${crumb.path ? '/' + crumb.path : ''}`} className="hover:underline flex items-center">
-                        {crumb.isRoot && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />} {crumb.name}
+                        {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />} {crumb.name}
                     </Link>
                 )}
               </span>
@@ -249,11 +285,6 @@ function FileExplorerContent() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading && (
-            <div className="space-y-2">
-              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-            </div>
-          )}
           {error && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -261,7 +292,7 @@ function FileExplorerContent() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          {!isLoading && !error && viewingFile && fileData && (
+          {!error && isViewingFile && fileData && (
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold">{fileData.name}</h3>
@@ -271,6 +302,13 @@ function FileExplorerContent() {
                                 <Edit className="mr-2 h-4 w-4"/> Edit File
                             </Button>
                         )}
+                         {fileData.downloadUrl && (
+                             <Button variant="outline" size="sm" asChild>
+                                <a href={fileData.downloadUrl} target="_blank" rel="noopener noreferrer">
+                                    <Download className="mr-2 h-4 w-4"/> Download
+                                </a>
+                            </Button>
+                         )}
                         <Badge variant="secondary">{fileData.path}</Badge>
                     </div>
                 </div>
@@ -315,7 +353,7 @@ function FileExplorerContent() {
                 )}
             </div>
           )}
-          {!isLoading && !error && !viewingFile && contents.length > 0 && (
+          {!error && !isViewingFile && contents.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -334,7 +372,7 @@ function FileExplorerContent() {
                           ? `/projects/${projectUuid}/codespace/files/${filePathArray.slice(0, -1).join('/')}`
                           : `/projects/${projectUuid}/codespace/files`
                       } className="flex items-center text-primary hover:underline py-2">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> .. (Parent Directory)
+                        <Folder className="mr-2 h-4 w-4 opacity-70" /> .. (Parent Directory)
                       </Link>
                     </TableCell>
                   </TableRow>
@@ -365,18 +403,18 @@ function FileExplorerContent() {
               </TableBody>
             </Table>
           )}
-           {!isLoading && !error && !viewingFile && contents.length === 0 && !currentPath && (
+           {!error && !isViewingFile && contents.length === 0 && !currentPath && project && project.githubRepoName && (
             <Alert>
                 <FileCode className="h-4 w-4" />
                 <AlertTitle>Empty Repository</AlertTitle>
-                <AlertDescription>This repository appears to be empty or could not be accessed. You might need to initialize it with a README or some files on GitHub.</AlertDescription>
+                <AlertDescription>This repository ('{project.githubRepoName}') appears to be empty. You might need to initialize it with a README or some files on GitHub, or create them here.</AlertDescription>
             </Alert>
           )}
-          {!isLoading && !error && !viewingFile && contents.length === 0 && currentPath && (
+          {!error && !isViewingFile && contents.length === 0 && currentPath && project && project.githubRepoName && (
              <Alert>
                 <Folder className="h-4 w-4" />
                 <AlertTitle>Empty Directory</AlertTitle>
-                <AlertDescription>This directory is empty.
+                <AlertDescription>This directory ('/{currentPath}') is empty.
                     {/* Future: <Button variant="link" size="sm" className="p-0 h-auto ml-1">Create a file here</Button> */}
                 </AlertDescription>
             </Alert>
@@ -408,11 +446,9 @@ function FileExplorerContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
-
 
 export default function GitHubFilesPage() {
     return (
@@ -421,4 +457,3 @@ export default function GitHubFilesPage() {
         </Suspense>
     )
 }
-
