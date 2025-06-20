@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -118,10 +118,10 @@ const linkGithubFormSchema = z.object({
   githubRepoName: z.string().optional(),
   useDefaultRepoName: z.boolean().default(true),
 }).refine(data => {
-  if (!data.useDefaultRepoName) { 
-    return data.githubRepoName && data.githubRepoName.trim() !== ''; 
+  if (!data.useDefaultRepoName) {
+    return data.githubRepoName && data.githubRepoName.trim() !== '';
   }
-  return true; 
+  return true;
 }, {
   message: "Custom repository name cannot be empty if not using the default.",
   path: ["githubRepoName"],
@@ -238,11 +238,11 @@ function ProjectDetailPageContent() {
     const oauthStatus = searchParams.get('oauth_status');
     if (oauthStatus === 'success') {
       toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
-      loadUserGithubOAuth(); // Reload OAuth token state
+      loadUserGithubOAuth(); 
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('oauth_status');
-      newUrl.searchParams.delete('code'); // if GitHub adds it
-      newUrl.searchParams.delete('state'); // if GitHub adds it
+      newUrl.searchParams.delete('code'); 
+      newUrl.searchParams.delete('state'); 
       router.replace(newUrl.toString(), { scroll: false });
     } else if (oauthStatus === 'error' || searchParams.get('error')) {
        toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
@@ -803,9 +803,6 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('todoListMarkdown', newTodoListMarkdown);
 
-    // Pass other existing fields to satisfy schema, but they won't be "updated" by this action
-    // if the updateTaskAction is smart enough to only update provided fields.
-    // Assuming updateTaskAction only updates fields present in formData or changed.
     formData.append('title', taskToManageSubtasks.title);
     formData.append('status', taskToManageSubtasks.status);
     if (taskToManageSubtasks.description) formData.append('description', taskToManageSubtasks.description);
@@ -829,13 +826,12 @@ function ProjectDetailPageContent() {
     }
 
     debounceTimers.current[taskUuid] = setTimeout(() => {
-      lastSubmitSourceRef.current = null; // Not from main edit dialog or subtask dialog
+      lastSubmitSourceRef.current = null; 
       const formData = new FormData();
       formData.append('taskUuid', taskUuid);
       formData.append('projectUuid', project.uuid);
       formData.append('todoListMarkdown', newTodoListMarkdown);
 
-      // Pass other existing fields
       formData.append('title', taskToUpdate.title);
       formData.append('status', taskToUpdate.status);
       if (taskToUpdate.description) formData.append('description', taskToUpdate.description);
@@ -881,10 +877,9 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('status', newStatus as string);
 
-    // Pass other fields to satisfy schema for updateTaskAction
     const taskToUpdate = tasks.find(t => t.uuid === taskUuid);
     if (taskToUpdate) {
-        formData.append('title', taskToUpdate.title); // Required by schema if not optional
+        formData.append('title', taskToUpdate.title); 
     }
 
 
@@ -979,11 +974,10 @@ function ProjectDetailPageContent() {
       if (grouped[task.status]) {
         grouped[task.status].push(task);
       } else {
-        grouped['Archived'].push(task); // Default to Archived if status is unexpected
+        grouped['Archived'].push(task); 
       }
     });
 
-    // Sort tasks within each status group: pinned first, then by updatedAt descending
     for (const status in grouped) {
         grouped[status as TaskStatus].sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
@@ -1003,29 +997,27 @@ function ProjectDetailPageContent() {
 
   const handleTagsStringInputChange = (
     event: React.ChangeEvent<HTMLInputElement>,
-    fieldApi: any, // ControllerRenderProps from react-hook-form
-    formApi: any // UseFormReturn
+    fieldApi: any, 
+    formApi: any 
   ) => {
     const inputValue = event.currentTarget.value;
-    fieldApi.onChange(inputValue); // Update form state
+    fieldApi.onChange(inputValue); 
 
     const fragment = getCurrentTagFragment(inputValue);
-    setActiveTagInputName(fieldApi.name as "tagsString"); // Ensure type safety
+    setActiveTagInputName(fieldApi.name as "tagsString"); 
 
     if (fragment) {
         const lowerFragment = fragment.toLowerCase();
-        // Filter out tags already fully entered in the input
         const currentTagsInInput = inputValue.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
         const filtered = projectTags
             .filter(tag =>
                 tag.name.toLowerCase().startsWith(lowerFragment) &&
-                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) // Exclude already "committed" tags
+                !currentTagsInInput.slice(0, -1).includes(tag.name.toLowerCase()) 
             )
-            .slice(0, 5); // Limit suggestions
+            .slice(0, 5); 
         setTagSuggestions(filtered);
         setShowTagSuggestions(filtered.length > 0);
 
-        // Reset active suggestion if the typed fragment changes significantly (not just adding a character)
         if (fragment !== lastTypedFragmentRef.current) {
              setActiveSuggestionIndex(-1);
         }
@@ -1042,15 +1034,15 @@ function ProjectDetailPageContent() {
 
   const handleTagSuggestionClick = (
     suggestion: TagType,
-    fieldApi: any, // ControllerRenderProps
-    formApi: any // UseFormReturn
+    fieldApi: any, 
+    formApi: any 
   ) => {
     const currentFieldValue = fieldApi.value || "";
     const parts = currentFieldValue.split(',');
-    parts[parts.length - 1] = suggestion.name; // Replace current fragment with full tag name
+    parts[parts.length - 1] = suggestion.name; 
 
     let newValue = parts.join(',');
-    if (!newValue.endsWith(', ')) { // Add a comma and space for the next tag
+    if (!newValue.endsWith(', ')) { 
          newValue += ', ';
     }
 
@@ -1058,14 +1050,14 @@ function ProjectDetailPageContent() {
     setTagSuggestions([]);
     setShowTagSuggestions(false);
     setActiveSuggestionIndex(-1);
-    lastTypedFragmentRef.current = ""; // Clear last fragment
-    setTimeout(() => tagInputRef.current?.focus(), 0); // Refocus input
+    lastTypedFragmentRef.current = ""; 
+    setTimeout(() => tagInputRef.current?.focus(), 0); 
   };
 
   const handleTagInputKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>,
-    fieldApi: any, // ControllerRenderProps
-    formApi: any // UseFormReturn
+    fieldApi: any, 
+    formApi: any 
   ) => {
     if (showTagSuggestions && tagSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
@@ -1075,10 +1067,10 @@ function ProjectDetailPageContent() {
         event.preventDefault();
         setActiveSuggestionIndex(prev => Math.max(prev - 1, 0));
       } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
-        event.preventDefault(); // Prevent form submission or tabbing away
-        event.stopPropagation(); // Stop event from bubbling
+        event.preventDefault(); 
+        event.stopPropagation(); 
         handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
-        return; // Important to return to prevent further processing
+        return; 
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -1088,7 +1080,6 @@ function ProjectDetailPageContent() {
         return;
       }
     } else {
-      // If suggestions are not shown, still allow escape to clear things if needed
       if (event.key === 'Escape') {
         setShowTagSuggestions(false);
         setActiveSuggestionIndex(-1);
@@ -1160,7 +1151,7 @@ function ProjectDetailPageContent() {
     if (!project || !user) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
-    formData.append('flowUpProjectName', project.name); // Pass FlowUp project name
+    formData.append('flowUpProjectName', project.name); 
     formData.append('useDefaultRepoName', values.useDefaultRepoName.toString());
     if (!values.useDefaultRepoName && values.githubRepoName) {
       formData.append('githubRepoName', values.githubRepoName);
@@ -1173,9 +1164,8 @@ function ProjectDetailPageContent() {
 
   const handleInitiateGithubOAuth = () => {
     if (!project) return;
-    // Construct state with redirectTo and projectUuid
     const statePayload = new URLSearchParams({
-        redirectTo: `/projects/${project.uuid}?tab=codespace`, // Ensure redirect back to codespace
+        redirectTo: `/projects/${project.uuid}?tab=codespace`, 
         projectUuid: project.uuid,
     }).toString();
     window.location.href = `/api/auth/github/oauth/login?state=${encodeURIComponent(statePayload)}`;
@@ -1190,11 +1180,11 @@ function ProjectDetailPageContent() {
   if (authLoading || isLoadingData || isLoadingGithubAuth) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-9 w-36 mb-4" /> {/* Back button */}
+        <Skeleton className="h-9 w-36 mb-4" /> 
         <Card className="shadow-lg">
           <CardHeader>
-            <Skeleton className="h-8 w-1/2" /> {/* Project Name */}
-            <Skeleton className="h-5 w-3/4 mt-2" /> {/* Description */}
+            <Skeleton className="h-8 w-1/2" /> 
+            <Skeleton className="h-5 w-3/4 mt-2" /> 
              <div className="mt-3 flex flex-wrap gap-2">
                 <Skeleton className="h-6 w-20 rounded-full" />
                 <Skeleton className="h-6 w-24 rounded-full" />
@@ -1209,14 +1199,13 @@ function ProjectDetailPageContent() {
             </div>
           </CardContent>
         </Card>
-        <Skeleton className="h-10 w-full" /> {/* Tabs List */}
-        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card> {/* Tab Content */}
+        <Skeleton className="h-10 w-full" /> 
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card> 
       </div>
     );
   }
 
   if (accessDenied || !project || !user) {
-    // This should ideally not be reached if routing logic in useEffect is correct, but good fallback.
     return (
         <div className="space-y-6 text-center flex flex-col items-center justify-center min-h-[calc(100vh-12rem)]">
             <Button variant="outline" onClick={() => router.push('/projects')} className="mb-4 self-start">
@@ -1234,7 +1223,7 @@ function ProjectDetailPageContent() {
 
   return (
     <div className="space-y-6">
-      <Button variant="outline" onClick={() => router.back()} className="mb-0"> {/* Changed from router.push('/projects') to router.back() */}
+      <Button variant="outline" onClick={() => router.back()} className="mb-0"> 
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
@@ -1257,14 +1246,13 @@ function ProjectDetailPageContent() {
                 <CardDescription className="mt-1">No description provided.</CardDescription>
               )}
               <div className="mt-2 flex flex-wrap gap-2">
-                {projectTags.slice(0, 5).map(tag => ( // Only show a few tags initially
+                {projectTags.slice(0, 5).map(tag => ( 
                   <Badge key={tag.uuid} style={{ backgroundColor: tag.color }} className="text-white text-xs">{tag.name}</Badge>
                 ))}
                 {projectTags.length > 5 && <Badge variant="outline">+{projectTags.length - 5} more</Badge>}
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              {/* Edit Project Dialog */}
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" disabled={!canManageProjectSettings}>
@@ -1320,7 +1308,6 @@ function ProjectDetailPageContent() {
                   </Form>
                 </DialogContent>
               </Dialog>
-              {/* Delete Project Alert Dialog (Placeholder) */}
               <AlertDialog>
                   <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm" disabled={currentUserRole !== 'owner'}>
@@ -1365,7 +1352,6 @@ function ProjectDetailPageContent() {
           <TabsTrigger value="settings"><Settings2 className="mr-2 h-4 w-4"/>Team & Settings</TabsTrigger>
         </TabsList>
 
-        {/* TASKS TAB */}
         <TabsContent value="tasks" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1698,7 +1684,6 @@ function ProjectDetailPageContent() {
             </Dialog>
         </TabsContent>
 
-        {/* README TAB */}
         <TabsContent value="readme" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1734,7 +1719,6 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
-        {/* DOCUMENTS TAB */}
         <TabsContent value="documents" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1881,7 +1865,6 @@ function ProjectDetailPageContent() {
             </DialogContent>
         </Dialog>
 
-        {/* ANNOUNCEMENTS TAB */}
         <TabsContent value="announcements" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
@@ -1989,7 +1972,6 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
-        {/* CODESPACE TAB */}
         <TabsContent value="codespace" className="mt-4">
           <Card>
             <CardHeader>
@@ -2044,12 +2026,12 @@ function ProjectDetailPageContent() {
                                     control={linkGithubForm.control}
                                     name="useDefaultRepoName"
                                     render={({ field }) => (
-                                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-background/50">
+                                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-background/50">
                                             <FormControl>
                                                 <Checkbox
                                                     checked={field.value}
                                                     onCheckedChange={(checked) => {
-                                                        field.onChange(Boolean(checked)); // Ensure it's a boolean
+                                                        field.onChange(Boolean(checked)); 
                                                         if (Boolean(checked)) {
                                                             linkGithubForm.setValue('githubRepoName', '');
                                                             linkGithubForm.clearErrors('githubRepoName');
@@ -2111,28 +2093,24 @@ function ProjectDetailPageContent() {
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <p className="text-sm">
-                          This project is linked to the GitHub repository:
-                        </p>
-                        <div className="flex items-center gap-2 p-3 bg-background/50 rounded-md border">
-                            <Github className="h-5 w-5 text-foreground" />
+                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                           <p className="text-sm">
+                            This project is linked to:
                             <a
-                              href={project.githubRepoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-sm text-primary hover:underline break-all"
+                                href={project.githubRepoUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-sm text-primary hover:underline break-all block sm:inline ml-1"
                             >
-                              {project.githubRepoName || project.githubRepoUrl}
+                                {project.githubRepoName || project.githubRepoUrl}
                             </a>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => copyToClipboard(project.githubRepoUrl!, 'Repository URL')}><Link2 className="h-4 w-4"/></Button>
-                        </div>
-                         {canManageCodeSpace && (
-                            <Button size="lg" className="w-full mt-4 shadow-sm" asChild>
+                            </p>
+                            <Button size="lg" className="w-full sm:w-auto shadow-sm" asChild>
                                 <Link href={`/projects/${projectUuid}/codespace/files`}>
                                     <FileCode className="mr-2 h-5 w-5"/> Browse & Edit Repository Files
                                 </Link>
                             </Button>
-                        )}
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-4">
                             <div>
                                 <Label htmlFor="git-https-url" className="text-xs text-muted-foreground">HTTPS Clone URL</Label>
@@ -2183,7 +2161,6 @@ function ProjectDetailPageContent() {
           </Card>
         </TabsContent>
 
-        {/* TEAM & SETTINGS TAB */}
          <TabsContent value="settings" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
