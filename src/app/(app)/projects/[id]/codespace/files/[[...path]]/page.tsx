@@ -205,7 +205,7 @@ function FileExplorerContent() {
   // Deliberately not including forceReloadContent or currentPath in deps to avoid loops.
   // forceReloadContent is called explicitly or when project data changes.
   // currentPath changes trigger URL navigation, which leads to this effect running again via param changes.
-  }, [project, authLoading, isLoadingProject]);
+  }, [project, authLoading, isLoadingProject, currentPath]); // Removed forceReloadContent from here
 
 
   const handleSaveFile = async () => {
@@ -345,7 +345,7 @@ function FileExplorerContent() {
         <div className="flex items-center gap-2 flex-wrap">
             <Dialog open={isCreateFileModalOpen} onOpenChange={setIsCreateFileModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isViewingFile}>
+                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
                         <FilePlus className="mr-2 h-4 w-4" /> Create File
                     </Button>
                 </DialogTrigger>
@@ -372,7 +372,7 @@ function FileExplorerContent() {
             </Dialog>
             <Dialog open={isCreateFolderModalOpen} onOpenChange={setIsCreateFolderModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isViewingFile}>
+                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
                         <FolderPlus className="mr-2 h-4 w-4" /> Create Folder
                     </Button>
                 </DialogTrigger>
@@ -396,7 +396,7 @@ function FileExplorerContent() {
             </Dialog>
             <Dialog open={isAiScaffoldModalOpen} onOpenChange={setIsAiScaffoldModalOpen}>
                 <DialogTrigger asChild>
-                     <Button variant="outline" size="sm" disabled={isViewingFile}>
+                     <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName}>
                         <Sparkles className="mr-2 h-4 w-4 text-primary" /> Scaffold with AI
                     </Button>
                 </DialogTrigger>
@@ -420,7 +420,7 @@ function FileExplorerContent() {
                     </form>
                 </DialogContent>
             </Dialog>
-             <Button variant="outline" size="sm" onClick={() => forceReloadContent()} title="Refresh content" disabled={isLoadingPathContent}>
+             <Button variant="outline" size="sm" onClick={() => forceReloadContent()} title="Refresh content" disabled={isLoadingPathContent || !project?.githubRepoName}>
                 {isLoadingPathContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4" />} Refresh
             </Button>
         </div>
@@ -432,30 +432,32 @@ function FileExplorerContent() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileCode className="h-6 w-6 text-primary" />
-                Repository: {project?.githubRepoName || 'N/A'}
+                Repository: {project?.githubRepoName || <span className="text-muted-foreground italic">Not Linked</span>}
               </CardTitle>
                <CardDescription>
                 {isViewingFile ? `Viewing: ${fileData?.name}` : `Path: /${currentPath || ''}`}
               </CardDescription>
             </div>
           </div>
-          <div className="flex items-center space-x-1 text-sm text-muted-foreground mt-2 overflow-x-auto whitespace-nowrap pb-1 border-t pt-2">
-            {breadcrumbs.map((crumb, index) => (
-              <span key={index} className="inline-flex items-center">
-                {index > 0 && <ChevronRight className="h-4 w-4 inline-block mx-1 flex-shrink-0" />}
-                 { (index === breadcrumbs.length - 1 && (isViewingFile || currentPath === crumb.path)) ? (
-                     <span className="font-medium text-foreground flex items-center">
-                         {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />}
-                         {crumb.name}
-                    </span>
-                ): (
-                     <Link href={`/projects/${projectUuid}/codespace/files${crumb.path ? '/' + crumb.path : ''}`} className="hover:underline flex items-center">
-                        {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />} {crumb.name}
-                    </Link>
-                )}
-              </span>
-            ))}
-          </div>
+          {project?.githubRepoName && (
+            <div className="flex items-center space-x-1 text-sm text-muted-foreground mt-2 overflow-x-auto whitespace-nowrap pb-1 border-t pt-2">
+              {breadcrumbs.map((crumb, index) => (
+                <span key={index} className="inline-flex items-center">
+                  {index > 0 && <ChevronRight className="h-4 w-4 inline-block mx-1 flex-shrink-0" />}
+                  { (index === breadcrumbs.length - 1 && (isViewingFile || currentPath === crumb.path)) ? (
+                      <span className="font-medium text-foreground flex items-center">
+                          {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />}
+                          {crumb.name}
+                      </span>
+                  ): (
+                      <Link href={`/projects/${projectUuid}/codespace/files${crumb.path ? '/' + crumb.path : ''}`} className="hover:underline flex items-center">
+                          {crumb.isRoot && index === 0 && <Home className="h-4 w-4 mr-1 inline-block flex-shrink-0" />} {crumb.name}
+                      </Link>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {error && (
@@ -465,7 +467,19 @@ function FileExplorerContent() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          {!error && isViewingFile && fileData && (
+          {!error && !project?.githubRepoName && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Repository Not Linked</AlertTitle>
+                <AlertDescription>
+                  This project is not linked to a GitHub repository. Please link it first from the main CodeSpace tab.
+                  <Button asChild variant="link" className="ml-1 p-0 h-auto">
+                    <Link href={`/projects/${projectUuid}?tab=codespace`}>Go to CodeSpace Setup</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+          )}
+          {!error && project?.githubRepoName && isViewingFile && fileData && (
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold">{fileData.name}</h3>
@@ -516,7 +530,7 @@ function FileExplorerContent() {
                             srcDoc={fileData.content} 
                             title={`Preview of ${fileData.name}`}
                             className="w-full h-[50vh] border rounded-md bg-white"
-                            sandbox="allow-scripts" // Be careful with scripts from untrusted sources
+                            sandbox="allow-scripts" 
                         />
                     </div>
                 )}
@@ -543,7 +557,7 @@ function FileExplorerContent() {
                 )}
             </div>
           )}
-          {!error && !isViewingFile && contents.length > 0 && (
+          {!error && project?.githubRepoName && !isViewingFile && contents.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -568,7 +582,7 @@ function FileExplorerContent() {
                   </TableRow>
                 )}
                 {contents.map((item) => (
-                  <TableRow key={item.sha}>
+                  <TableRow key={item.path}>
                     <TableCell>
                       <Link
                         href={`/projects/${projectUuid}/codespace/files/${item.path}`}
@@ -622,14 +636,14 @@ function FileExplorerContent() {
               </TableBody>
             </Table>
           )}
-           {!error && !isViewingFile && contents.length === 0 && !currentPath && project && project.githubRepoName && (
+           {!error && project?.githubRepoName && !isViewingFile && contents.length === 0 && !currentPath && (
             <Alert>
                 <FileCode className="h-4 w-4" />
                 <AlertTitle>Empty Repository</AlertTitle>
                 <AlertDescription>This repository ('{project.githubRepoName}') appears to be empty. You can create files or folders using the buttons above.</AlertDescription>
             </Alert>
           )}
-          {!error && !isViewingFile && contents.length === 0 && currentPath && project && project.githubRepoName && (
+          {!error && project?.githubRepoName && !isViewingFile && contents.length === 0 && currentPath && (
              <Alert>
                 <Folder className="h-4 w-4" />
                 <AlertTitle>Empty Directory</AlertTitle>
