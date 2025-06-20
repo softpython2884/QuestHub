@@ -2,7 +2,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/authEdge';
 import { storeUserGithubInstallation } from '@/lib/db';
-import { getOctokitApp } from '@/lib/githubAppClient';
+import { getAppAuthOctokit } from '@/lib/githubAppClient';
 
 
 export async function GET(request: NextRequest) {
@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
 
   let accountLogin: string | undefined;
   try {
-    const app = await getOctokitApp();
-    const installationDetails = await app.octokit.request('GET /app/installations/{installation_id}', {
+    const appOctokit = await getAppAuthOctokit(); // Utiliser getAppAuthOctokit ici
+    const installationDetails = await appOctokit.request('GET /app/installations/{installation_id}', {
       installation_id: parseInt(installationId, 10),
     });
     accountLogin = installationDetails.data.account?.login;
