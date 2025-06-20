@@ -44,6 +44,8 @@ export interface GithubRepoContentItem {
     git: string;
     html: string;
   };
+  content?: string; // Added for files, base64 encoded
+  encoding?: 'base64' | 'utf-8'; // Added for files
 }
 
 export interface Tag {
@@ -107,7 +109,7 @@ export interface Project {
   isUrgent?: boolean;
   githubRepoUrl?: string;
   githubRepoName?: string;
-  githubInstallationId?: number;
+  githubInstallationId?: number; // Kept for potential future use with App-specific actions
 }
 
 export interface Announcement {
@@ -123,3 +125,4 @@ export interface Announcement {
   createdAt: string;
   updatedAt: string;
 }
+
