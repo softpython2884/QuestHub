@@ -11,13 +11,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const EditFileContentAIInputSchema = z.object({
+const EditFileContentAIInputSchema = z.object({
   currentContent: z.string().describe('The current content of the file.'),
   userPrompt: z.string().describe('A prompt from the user describing the desired changes.'),
 });
 export type EditFileContentAIInput = z.infer<typeof EditFileContentAIInputSchema>;
 
-export const EditFileContentAIOutputSchema = z.object({
+const EditFileContentAIOutputSchema = z.object({
   newContent: z
     .string()
     .describe('The complete, new content of the file after applying the edits.'),
@@ -62,8 +62,11 @@ const editFileContentAIFlow = ai.defineFlow(
         // Fallback or error handling if AI doesn't return expected output
         console.error("AI did not return the expected new content for file editing.");
         // Optionally, return original content or throw an error
+        // For now, returning original content to avoid breaking the file completely if AI fails.
+        // A more robust solution might involve user feedback or retries.
         return { newContent: input.currentContent }; 
     }
     return output;
   }
 );
+
