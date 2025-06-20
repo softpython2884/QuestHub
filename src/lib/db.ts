@@ -556,6 +556,15 @@ export async function getUserGithubOAuthToken(userUuid: string): Promise<UserGit
   return row || null;
 }
 
+export async function deleteUserGithubOAuthToken(userUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  const result = await connection.run(
+    'DELETE FROM user_github_oauth_tokens WHERE userUuid = ?',
+    userUuid
+  );
+  return result.changes ? result.changes > 0 : false;
+}
+
 
 export async function createProject(name: string, description: string | undefined, ownerUuid: string): Promise<Project> {
   const connection = await getDbConnection();
@@ -819,6 +828,24 @@ export async function getProjectTags(projectUuid: string): Promise<Tag[]> {
   const connection = await getDbConnection();
   return connection.all<Tag[]>('SELECT * FROM project_tags WHERE projectUuid = ? ORDER BY name ASC', projectUuid);
 }
+
+export async function deleteProjectTag(projectUuid: string, tagUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  await connection.run('BEGIN TRANSACTION');
+  try {
+    // First, remove associations from task_tags
+    await connection.run('DELETE FROM task_tags WHERE tagUuid = ? AND taskUuid IN (SELECT uuid FROM tasks WHERE projectUuid = ?)', tagUuid, projectUuid);
+    // Then, delete the tag itself
+    const result = await connection.run('DELETE FROM project_tags WHERE uuid = ? AND projectUuid = ?', tagUuid, projectUuid);
+    await connection.run('COMMIT');
+    return result.changes ? result.changes > 0 : false;
+  } catch (error) {
+    await connection.run('ROLLBACK');
+    console.error("Error deleting project tag:", error);
+    throw error;
+  }
+}
+
 
 export async function linkTagToTask(taskUuid: string, tagUuid: string): Promise<void> {
   const connection = await getDbConnection();
@@ -1176,4 +1203,3 @@ export async function deleteProjectAnnouncement(announcementUuid: string): Promi
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
-

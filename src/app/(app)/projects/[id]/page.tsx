@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Settings2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +35,10 @@ import {
   deleteTaskAction,
   type DeleteTaskFormState,
   fetchProjectTagsAction,
+  createProjectTagAction,
+  type CreateProjectTagFormState,
+  deleteProjectTagAction,
+  type DeleteProjectTagFormState,
   saveProjectReadmeAction,
   type SaveProjectReadmeFormState,
   toggleProjectUrgencyAction,
@@ -43,8 +47,6 @@ import {
   type ToggleProjectVisibilityFormState,
   toggleTaskPinAction,
   type ToggleTaskPinState,
-  createProjectTagAction,
-  type CreateProjectTagFormState,
   fetchDocumentsAction,
   deleteDocumentAction,
   type DeleteDocumentFormState,
@@ -208,6 +210,8 @@ function ProjectDetailPageContent() {
 
 
   const [isAddProjectTagDialogOpen, setIsAddProjectTagDialogOpen] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<TagType | null>(null);
+
 
   const [documentToView, setDocumentToView] = useState<ProjectDocumentType | null>(null);
   const [isViewDocumentDialogOpen, setIsViewDocumentDialogOpen] = useState(false);
@@ -234,11 +238,11 @@ function ProjectDetailPageContent() {
     const oauthStatus = searchParams.get('oauth_status');
     if (oauthStatus === 'success') {
       toast({title: "GitHub Connected!", description: "Your GitHub account has been successfully linked."});
-      loadUserGithubOAuth();
+      loadUserGithubOAuth(); // Reload OAuth token state
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('oauth_status');
-      newUrl.searchParams.delete('code');
-      newUrl.searchParams.delete('state');
+      newUrl.searchParams.delete('code'); // if GitHub adds it
+      newUrl.searchParams.delete('state'); // if GitHub adds it
       router.replace(newUrl.toString(), { scroll: false });
     } else if (oauthStatus === 'error' || searchParams.get('error')) {
        toast({variant: "destructive", title: "GitHub Connection Error", description: searchParams.get('message') || searchParams.get('error_description') || "Failed to connect GitHub account."});
@@ -315,6 +319,7 @@ function ProjectDetailPageContent() {
   const [toggleVisibilityState, toggleVisibilityFormAction, isToggleVisibilityPending] = useActionState(toggleProjectVisibilityAction, { message: "", error: "" });
   const [toggleTaskPinState, toggleTaskPinFormAction, isToggleTaskPinPending] = useActionState(toggleTaskPinAction, { message: "", error: "" });
   const [createProjectTagState, createProjectTagFormAction, isCreateProjectTagPending] = useActionState(createProjectTagAction, { message: "", error: "" });
+  const [deleteProjectTagState, deleteProjectTagFormAction, isDeleteProjectTagPending] = useActionState(deleteProjectTagAction, { success: false });
   const [deleteDocumentState, deleteDocumentFormAction, isDeleteDocumentPending] = useActionState(deleteDocumentAction, { message: "", error: "" });
   const [createAnnouncementState, createProjectAnnouncementFormAction, isCreateAnnouncementPending] = useActionState(createProjectAnnouncementAction, { message: "", error: "" });
   const [deleteAnnouncementState, deleteProjectAnnouncementFormAction, isDeleteAnnouncementPending] = useActionState(deleteProjectAnnouncementAction, { message: "", error: ""});
@@ -634,6 +639,19 @@ function ProjectDetailPageContent() {
       }
     }
   }, [createProjectTagState, isCreateProjectTagPending, toast, projectTagForm, loadProjectTagsData]);
+
+  useEffect(() => {
+    if (!isDeleteProjectTagPending && deleteProjectTagState) {
+      if (deleteProjectTagState.success && deleteProjectTagState.message) {
+        toast({ title: "Success", description: deleteProjectTagState.message });
+        setTagToDelete(null);
+        loadProjectTagsData();
+      }
+      if (deleteProjectTagState.error) {
+        toast({ variant: "destructive", title: "Tag Deletion Error", description: deleteProjectTagState.error });
+      }
+    }
+  }, [deleteProjectTagState, isDeleteProjectTagPending, toast, loadProjectTagsData]);
 
   useEffect(() => {
     if (!isDeleteDocumentPending && deleteDocumentState) {
@@ -1091,6 +1109,16 @@ function ProjectDetailPageContent() {
     });
   };
 
+  const handleDeleteProjectTagConfirm = () => {
+    if (!tagToDelete || !project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('tagUuid', tagToDelete.uuid);
+    ReactStartTransition(() => {
+        deleteProjectTagFormAction(formData);
+    });
+  };
+
   const openViewDocumentDialog = (doc: ProjectDocumentType) => {
     setDocumentToView(doc);
     setIsViewDocumentDialogOpen(true);
@@ -1147,7 +1175,7 @@ function ProjectDetailPageContent() {
     if (!project) return;
     // Construct state with redirectTo and projectUuid
     const statePayload = new URLSearchParams({
-        redirectTo: `/projects/${project.uuid}?tab=codespace`,
+        redirectTo: `/projects/${project.uuid}?tab=codespace`, // Ensure redirect back to codespace
         projectUuid: project.uuid,
     }).toString();
     window.location.href = `/api/auth/github/oauth/login?state=${encodeURIComponent(statePayload)}`;
@@ -1993,7 +2021,7 @@ function ProjectDetailPageContent() {
                   <Github className="h-12 w-12 mx-auto text-primary mb-3" />
                    <h3 className="text-lg font-semibold mb-1">GitHub Account Connected!</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    You can now create a new GitHub repository for this FlowUp project or link an existing one (linking existing not yet supported).
+                    You can now create a new GitHub repository for this FlowUp project.
                     The repository will be {project.isPrivate ? 'private' : 'public'}, matching your project's visibility.
                   </p>
                    <Dialog open={isLinkGithubDialogOpen} onOpenChange={setIsLinkGithubDialogOpen}>
@@ -2021,8 +2049,8 @@ function ProjectDetailPageContent() {
                                                 <Checkbox
                                                     checked={field.value}
                                                     onCheckedChange={(checked) => {
-                                                        field.onChange(checked);
-                                                        if (checked) {
+                                                        field.onChange(Boolean(checked)); // Ensure it's a boolean
+                                                        if (Boolean(checked)) {
                                                             linkGithubForm.setValue('githubRepoName', '');
                                                             linkGithubForm.clearErrors('githubRepoName');
                                                         }
@@ -2098,7 +2126,14 @@ function ProjectDetailPageContent() {
                             </a>
                             <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => copyToClipboard(project.githubRepoUrl!, 'Repository URL')}><Link2 className="h-4 w-4"/></Button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                         {canManageCodeSpace && (
+                            <Button size="lg" className="w-full mt-4 shadow-sm" asChild>
+                                <Link href={`/projects/${projectUuid}/codespace/files`}>
+                                    <FileCode className="mr-2 h-5 w-5"/> Browse & Edit Repository Files
+                                </Link>
+                            </Button>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-4">
                             <div>
                                 <Label htmlFor="git-https-url" className="text-xs text-muted-foreground">HTTPS Clone URL</Label>
                                 <div className="flex items-center gap-1 mt-1">
@@ -2117,13 +2152,6 @@ function ProjectDetailPageContent() {
                         <p className="text-xs text-muted-foreground mt-2">
                             The project's README is synced with the `README.md` file in this repository.
                         </p>
-                         {canManageCodeSpace && (
-                            <Button size="lg" className="w-full mt-4 shadow-sm" asChild>
-                                <Link href={`/projects/${projectUuid}/codespace/files`}>
-                                    <FileCode className="mr-2 h-5 w-5"/> Manage Repository Files
-                                </Link>
-                            </Button>
-                        )}
                     </CardContent>
                   </Card>
 
@@ -2373,9 +2401,39 @@ function ProjectDetailPageContent() {
                     {projectTags.length === 0 && <p className="text-muted-foreground text-center py-2">No custom tags defined for this project yet.</p>}
                     <div className="flex flex-wrap gap-2">
                         {projectTags.map(tag => (
-                            <Badge key={tag.uuid} style={{ backgroundColor: tag.color, color: '#fff' }} className="text-sm px-3 py-1">
-                                {tag.name}
-                            </Badge>
+                            <div key={tag.uuid} className="group relative">
+                                <Badge style={{ backgroundColor: tag.color, color: '#fff' }} className="text-sm px-3 py-1">
+                                    {tag.name}
+                                </Badge>
+                                {canManageProjectSettings && (
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={() => setTagToDelete(tag)}
+                                            >
+                                                <XCircle className="h-3 w-3" />
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        {tagToDelete?.uuid === tag.uuid && (
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Delete Tag: "{tagToDelete.name}"?</AlertDialogTitle>
+                                                <AlertDialogDescription>This will remove the tag from all associated tasks. This action cannot be undone.</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel onClick={() => setTagToDelete(null)}>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={handleDeleteProjectTagConfirm} disabled={isDeleteProjectTagPending} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                                    {isDeleteProjectTagPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete Tag
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                        )}
+                                    </AlertDialog>
+                                )}
+                            </div>
                         ))}
                     </div>
                  </Card>
@@ -2405,4 +2463,3 @@ export default function ProjectDetailPage() {
     </Suspense>
   )
 }
-

@@ -21,6 +21,7 @@ import {
   updateProjectVisibility as dbUpdateProjectVisibility,
   toggleTaskPinStatus as dbToggleTaskPinStatus,
   createProjectTag as dbCreateProjectTag,
+  deleteProjectTag as dbDeleteProjectTag,
   createDocument as dbCreateDocument,
   getDocumentsForProject as dbGetDocumentsForProject,
   updateDocumentContent as dbUpdateDocumentContent,
@@ -31,6 +32,7 @@ import {
   deleteProjectAnnouncement as dbDeleteProjectAnnouncement,
   updateProjectGithubRepo as dbUpdateProjectGithubRepo,
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
+  deleteUserGithubOAuthToken as dbDeleteUserGithubOAuthToken,
   getTaskByUuid as dbGetTaskByUuid,
 } from '@/lib/db';
 import { z } from 'zod';
@@ -511,6 +513,41 @@ export async function createProjectTagAction(prevState: CreateProjectTagFormStat
     return { message: `Tag "${newTag.name}" created successfully!`, createdTag: newTag };
   } catch (error: any) {
     console.error("Error creating project tag:", error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export interface DeleteProjectTagFormState {
+  success?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function deleteProjectTagAction(prevState: DeleteProjectTagFormState, formData: FormData): Promise<DeleteProjectTagFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const projectUuid = formData.get('projectUuid') as string;
+  const tagUuid = formData.get('tagUuid') as string;
+
+  if (!projectUuid || !tagUuid) {
+    return { error: "Project UUID and Tag UUID are required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to delete tags for this project." };
+    }
+    const success = await dbDeleteProjectTag(projectUuid, tagUuid);
+    if (success) {
+      return { success: true, message: "Tag deleted successfully." };
+    }
+    return { error: "Failed to delete tag." };
+  } catch (error: any) {
+    console.error("Error deleting project tag:", error);
     return { error: error.message || "An unexpected error occurred." };
   }
 }
@@ -1084,6 +1121,50 @@ export async function fetchUserGithubOAuthTokenAction(): Promise<UserGithubOAuth
   }
 }
 
+export async function disconnectGithubAction(): Promise<{ success: boolean; error?: string; message?: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { success: false, error: "Authentication required." };
+  }
+  try {
+    const success = await dbDeleteUserGithubOAuthToken(session.user.uuid);
+    if (success) {
+      return { success: true, message: "GitHub account disconnected successfully." };
+    }
+    return { success: false, error: "Failed to disconnect GitHub account from database." };
+  } catch (error: any) {
+    console.error("[disconnectGithubAction] Error:", error);
+    return { success: false, error: error.message || "An unexpected error occurred." };
+  }
+}
+
+export async function fetchGithubUserDetailsAction(): Promise<{ login: string; avatar_url: string; html_url: string; name: string | null } | null> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    console.error("[fetchGithubUserDetailsAction] Authentication required.");
+    return null;
+  }
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken?.accessToken) {
+    console.log("[fetchGithubUserDetailsAction] No GitHub OAuth token found for user.");
+    return null;
+  }
+
+  try {
+    const octokit = new Octokit({ auth: oauthToken.accessToken });
+    const { data } = await octokit.rest.users.getAuthenticated();
+    return { login: data.login, avatar_url: data.avatar_url, html_url: data.html_url, name: data.name };
+  } catch (error: any) {
+    console.error("[fetchGithubUserDetailsAction] Error fetching GitHub user details:", error.status, error.message);
+    if (error.status === 401) { // Bad credentials, token might be revoked
+      await dbDeleteUserGithubOAuthToken(session.user.uuid); // Clean up bad token
+      console.warn("[fetchGithubUserDetailsAction] GitHub token was invalid (401), removed from DB.");
+    }
+    return null;
+  }
+}
+
+
 function sanitizeRepoName(name: string | null | undefined): string {
   if (!name) {
     return '';
@@ -1161,7 +1242,7 @@ export async function linkProjectToGithubAction(
 
     const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
     if (!oauthToken || !oauthToken.accessToken) {
-      return { error: "GitHub account not linked or token missing. Please connect your GitHub account via the CodeSpace tab." };
+      return { error: "GitHub account not linked or token missing. Please connect your GitHub account via your Profile page or the CodeSpace tab." };
     }
 
     const octokit = new Octokit({ auth: oauthToken.accessToken });
@@ -1202,10 +1283,10 @@ export async function linkProjectToGithubAction(
     } catch (apiError: any) {
       console.error(`GitHub API error creating repository: ${apiError.status} ${apiError.message}`, apiError.response?.data);
       const errorMessage = apiError.response?.data?.message || apiError.message || 'Unknown GitHub API error.';
-      if (apiError.status === 403) {
-          return { error: `GitHub Permission Denied: ${errorMessage}. Ensure your GitHub OAuth App has the 'repo' scope and necessary permissions.`};
+      if (apiError.status === 403) { // Forbidden - usually permission issue or token scope
+          return { error: `GitHub Permission Denied: ${errorMessage}. Ensure your GitHub OAuth token has the 'repo' scope.`};
       }
-      if (apiError.status === 422) {
+      if (apiError.status === 422) { // Unprocessable Entity - e.g., repo already exists
         return { error: `Failed to create GitHub repository '${repoSlug}'. It might already exist or there's a naming conflict. GitHub's message: ${errorMessage}` };
       }
       return { error: `GitHub API Error (${apiError.status || 'unknown'}): ${errorMessage} - ${apiError.documentation_url || ''}` };
@@ -1240,7 +1321,7 @@ export async function getRepoContentsAction(projectUuid: string, path: string = 
 
   const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
   if (!oauthToken || !oauthToken.accessToken) {
-    return { error: "GitHub account not linked or token missing. Please connect your GitHub account from the CodeSpace tab." };
+    return { error: "GitHub account not linked or token missing. Please connect your GitHub account from your Profile page or the CodeSpace tab." };
   }
 
   const [owner, repo] = project.githubRepoName.split('/');
@@ -1264,8 +1345,11 @@ export async function getRepoContentsAction(projectUuid: string, path: string = 
     let userMessage = "Failed to fetch repository contents.";
     if (error.status === 404) {
         userMessage = `Path '${path}' not found in repository '${project.githubRepoName}'.`;
-    } else if (error.status === 403) {
-        userMessage = `Access denied to repository '${project.githubRepoName}'. Check your GitHub token permissions.`;
+    } else if (error.status === 403) { // Forbidden
+        userMessage = `Access denied to repository '${project.githubRepoName}'. Check your GitHub token permissions (requires 'repo' scope) or the repository's existence and your access rights.`;
+    } else if (error.status === 401) { // Bad credentials
+        userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
+        await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
     } else if (error.message) {
         userMessage = error.message;
     }
@@ -1287,7 +1371,7 @@ export async function getFileContentAction(
 
     const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
     if (!oauthToken || !oauthToken.accessToken) {
-        return { error: "GitHub account not linked or token missing. Please connect your GitHub account from the CodeSpace tab." };
+        return { error: "GitHub account not linked or token missing. Please connect your GitHub account from your Profile page or the CodeSpace tab." };
     }
 
     const [owner, repo] = project.githubRepoName.split('/');
@@ -1317,6 +1401,9 @@ export async function getFileContentAction(
             userMessage = `File '${filePath}' not found in repository '${project.githubRepoName}'.`;
         } else if (error.status === 403) {
             userMessage = `Access denied to file '${filePath}' in repository '${project.githubRepoName}'. Check token permissions.`;
+        } else if (error.status === 401) { // Bad credentials
+            userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
+            await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
         } else if (error.response?.data?.message) {
             userMessage = error.response.data.message;
         } else if (error.message) {
@@ -1364,9 +1451,9 @@ export async function saveFileContentAction(
       message: commitMessage || `Update ${filePath} via FlowUp`,
       content: Buffer.from(content).toString('base64'),
       sha,
-      committer: { // Optional: use user's GitHub details if available
+      committer: { 
         name: session.user.name || 'FlowUp User',
-        email: session.user.email || 'user@flowup.app',
+        email: session.user.email || 'user@flowup.app', // GitHub might require a verified email for commits
       },
       author: {
         name: session.user.name || 'FlowUp User',
@@ -1384,33 +1471,16 @@ export async function saveFileContentAction(
     let userMessage = `Failed to save file: ${error.message || 'Unknown error'}`;
     if (error.status === 409) { // Conflict, SHA mismatch
         userMessage = "File has been modified since you opened it. Please refresh and try again.";
-    } else if (error.status === 403) {
-        userMessage = "Permission denied. Ensure you have write access to this repository.";
-    } else if (error.status === 404) {
+    } else if (error.status === 403) { // Forbidden
+        userMessage = "Permission denied. Ensure you have write access to this repository and your token has 'repo' scope.";
+    } else if (error.status === 404) { // Not found
         userMessage = "File not found. It might have been deleted or moved.";
+    } else if (error.status === 401) { // Bad credentials
+        userMessage = `GitHub authentication failed. Your token might be invalid or expired. Please try reconnecting your GitHub account.`;
+        await dbDeleteUserGithubOAuthToken(session.user.uuid); // Invalidate stored token
+    } else if (error.status === 422 && error.response?.data?.message?.includes("committer email is not associated with the committer")) {
+        userMessage = `Failed to save file: The committer email ('${session.user.email}') is not associated with your GitHub account or is not verified. Please ensure your FlowUp email matches a verified email on GitHub.`;
     }
     return { success: false, error: userMessage };
   }
 }
-
-
-// Placeholder for future GitHub App related auth, if needed
-// export async function fetchUserGithubAccessDetailsAction(): Promise<{
-//   installation: UserGithubInstallation | null;
-//   oauthToken: UserGithubOAuthToken | null;
-// } | { error: string }> {
-//   const session = await auth();
-//   if (!session?.user?.uuid) {
-//     return { error: "Authentication required." };
-//   }
-//   try {
-//     const installation = await dbGetUserGithubInstallation(session.user.uuid);
-//     const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
-//     return { installation, oauthToken };
-//   } catch (error: any) {
-//     return { error: "Failed to fetch GitHub access details: " + error.message };
-//   }
-// }
-
-
-

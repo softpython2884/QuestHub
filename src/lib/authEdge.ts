@@ -27,12 +27,21 @@ const getJwtSecretOrThrow = (): string => {
   return secret;
 };
 
+// Wrapper to ensure cookies() is accessed in a way Next.js might prefer for dynamic functions
+async function getCookieValue(name: string): Promise<string | undefined> {
+  // This await might help Next.js correctly sequence operations for dynamic functions.
+  // It's a bit of a workaround if the root cause is subtle context issues.
+  await Promise.resolve(); 
+  const cookieStore = cookies();
+  return cookieStore.get(name)?.value;
+}
+
 export async function auth(): Promise<Session | null> {
   console.log('[authEdge.auth] Attempting to get session.');
-  const cookieStore = cookies();
   const jwtSecret = getJwtSecretOrThrow(); 
 
-  const tokenCookieValue = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  // Use the new wrapper
+  const tokenCookieValue = await getCookieValue(AUTH_COOKIE_NAME);
 
   if (!tokenCookieValue) {
     console.log('[authEdge.auth] No auth token cookie found.');
@@ -48,6 +57,8 @@ export async function auth(): Promise<Session | null> {
     
     if (!userFromDb) {
       console.warn(`[authEdge.auth] User ${decoded.uuid} from JWT not found in DB. Invalidating session.`);
+      // Ensure cookies() is called in an async context if we modify it
+      const cookieStore = cookies();
       cookieStore.delete(AUTH_COOKIE_NAME);
       return null;
     }
@@ -61,6 +72,8 @@ export async function auth(): Promise<Session | null> {
 
   } catch (error: any) {
     console.warn('[authEdge.auth] JWT verification failed:', error.message ? error.message : error);
+    // Ensure cookies() is called in an async context if we modify it
+    const cookieStore = cookies();
     cookieStore.delete(AUTH_COOKIE_NAME);
     return null;
   }
