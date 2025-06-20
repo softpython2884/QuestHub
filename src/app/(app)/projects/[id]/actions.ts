@@ -34,13 +34,12 @@ import {
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
   deleteUserGithubOAuthToken as dbDeleteUserGithubOAuthToken,
   getTaskByUuid as dbGetTaskByUuid,
-  // Make sure this is exported if it's a new function or intended to be used
-  // getUserGithubLoginByUuid as dbGetUserGithubLoginByUuid 
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
+import { generateProjectScaffold, type GenerateProjectScaffoldInput, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -211,7 +210,7 @@ export async function inviteUserToProjectAction(
           try {
             let githubPermission: 'pull' | 'push' | 'admin' | 'maintain' | 'triage' = 'pull'; 
             if (role === 'editor' || role === 'co-owner') githubPermission = 'push'; 
-            if (role === 'owner' && project.ownerUuid !== userToInvite.uuid) githubPermission = 'admin'; // Only 'admin' for co-owner (actual repo owner is the one who created it)
+            if (role === 'owner' && project.ownerUuid !== userToInvite.uuid) githubPermission = 'admin'; 
             
             await octokit.rest.repos.addCollaborator({
               owner,
@@ -283,7 +282,6 @@ export async function removeUserFromProjectAction(projectUuid: string, userUuidT
 
         const success = await dbRemoveProjectMember(projectUuid, userUuidToRemove);
         if (success) {
-            // TODO: Optionally, try to remove from GitHub repo collaborators if conditions met
             return { success: true, message: "User removed from project successfully." };
         }
         return { error: "Failed to remove user from project." };
@@ -427,7 +425,7 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
   if (taskUpdateData.assigneeUuid === '__UNASSIGNED__') {
     finalAssigneeUuid = null;
   } else if (taskUpdateData.assigneeUuid === '') {
-    finalAssigneeUuid = undefined; // To not update if not provided
+    finalAssigneeUuid = undefined; 
   }
 
 
@@ -448,11 +446,10 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
         if (taskUpdateData.title !== undefined) dataToUpdate.title = taskUpdateData.title;
         if (taskUpdateData.description !== undefined) dataToUpdate.description = taskUpdateData.description || undefined;
         if (taskUpdateData.todoListMarkdown !== undefined) dataToUpdate.todoListMarkdown = taskUpdateData.todoListMarkdown || undefined;
-        if (finalAssigneeUuid !== undefined) dataToUpdate.assigneeUuid = finalAssigneeUuid; // Handles null for unassign
+        if (finalAssigneeUuid !== undefined) dataToUpdate.assigneeUuid = finalAssigneeUuid; 
         if (taskUpdateData.tagsString !== undefined) dataToUpdate.tagsString = taskUpdateData.tagsString || undefined;
     }
 
-    // Status can always be updated by any member
     if (taskUpdateData.status !== undefined) dataToUpdate.status = taskUpdateData.status;
 
 
@@ -616,7 +613,7 @@ export interface SaveProjectReadmeFormState {
 }
 
 async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: string, content: string, existingSha?: string | null) {
-  const paramsForUpdate: any = { // Explicitly type as any if Octokit types are too complex to satisfy immediately
+  const paramsForUpdate: any = { 
     owner,
     repo,
     path: 'README.md',
@@ -637,10 +634,8 @@ async function updateReadmeOnGithub(octokit: Octokit, owner: string, repo: strin
   } catch (error: any) {
      if (error.status === 404 && !existingSha) {
         console.log(`[updateReadmeOnGithub] README.md not found for ${owner}/${repo}, creating it.`);
-        // If README.md doesn't exist and we are trying to create it (no existingSha means it's a create attempt or first sync)
-        // We need to ensure paramsForUpdate doesn't have a 'sha' for a create operation
         const paramsForCreation = {...paramsForUpdate};
-        delete paramsForCreation.sha; // Ensure SHA is not present for creation
+        delete paramsForCreation.sha; 
         try {
             await octokit.rest.repos.createOrUpdateFileContents(paramsForCreation);
             console.log(`[updateReadmeOnGithub] README.md created successfully on GitHub for ${owner}/${repo} after initial 404.`);
@@ -711,9 +706,7 @@ export async function saveProjectReadmeAction(prevState: SaveProjectReadmeFormSt
         } catch (error: any) {
           if (error.status !== 404) {
             console.warn(`[saveProjectReadmeAction] Could not fetch existing README SHA for ${owner}/${repo}:`, error.message);
-            // Don't throw here, allow creation if SHA fetch fails for reasons other than 404
           }
-          // if 404, existingSha remains null, which is correct for creation.
         }
 
         await updateReadmeOnGithub(octokit, owner, repo, readmeContent, existingSha);
@@ -824,7 +817,6 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
                 return { message: `Project visibility set to ${isPrivate ? 'Private' : 'Public'} in FlowUp and on GitHub.`, project: updatedProjectInDb };
             } catch (githubError: any) {
                 console.error(`[toggleProjectVisibilityAction] Failed to update GitHub repository visibility for ${owner}/${repo}:`, githubError.status, githubError.message, githubError.response?.data);
-                // Provide more specific error if known, e.g., Not Found might mean repo name is wrong or token lacks access
                 let detailedError = githubError.message;
                 if (githubError.status === 404) detailedError = `Repository ${owner}/${repo} not found or access denied. Check repository name and token permissions.`;
                 else if (githubError.status === 403) detailedError = `Permission denied to update ${owner}/${repo}. Ensure your token has sufficient scopes.`;
@@ -1192,7 +1184,7 @@ export interface GithubUserDetails {
 }
 
 export async function fetchGithubUserDetailsAction(targetUserUuid?: string): Promise<GithubUserDetails | null> {
-  const session = await auth(); // Authenticates current user making the request
+  const session = await auth(); 
   const userUuidForToken = targetUserUuid || session?.user?.uuid;
 
   if (!userUuidForToken) {
@@ -1208,11 +1200,11 @@ export async function fetchGithubUserDetailsAction(targetUserUuid?: string): Pro
 
   try {
     const octokit = new Octokit({ auth: oauthToken.accessToken });
-    const { data } = await octokit.rest.users.getAuthenticated(); // This gets the details of the user to whom the token belongs
+    const { data } = await octokit.rest.users.getAuthenticated(); 
     return { login: data.login, avatar_url: data.avatar_url, html_url: data.html_url, name: data.name };
   } catch (error: any) {
     console.error(`[fetchGithubUserDetailsAction] Error fetching GitHub user details for user ${userUuidForToken}:`, error.status, error.message);
-    if (error.status === 401 && userUuidForToken === session?.user?.uuid) { // Bad credentials, token might be revoked, only delete if it's the current user's token
+    if (error.status === 401 && userUuidForToken === session?.user?.uuid) { 
       await dbDeleteUserGithubOAuthToken(session.user.uuid); 
       console.warn(`[fetchGithubUserDetailsAction] GitHub token was invalid (401) for current user ${session.user.uuid}, removed from DB.`);
     }
@@ -1252,10 +1244,10 @@ function sanitizeRepoName(name: string | null | undefined): string {
     .replace(/\s+/g, '-')
     .replace(/[^a-zA-Z0-9_.-]/g, '')
     .replace(/-+/g, '-')
-    .replace(/^\.+|\.$/g, '') // Remove leading/trailing dots
-    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+    .replace(/^\.+|\.$/g, '') 
+    .replace(/^-+|-+$/g, ''); 
 
-  return sanitized.substring(0, 100); // Max repo name length on GitHub
+  return sanitized.substring(0, 100); 
 }
 
 
@@ -1270,7 +1262,7 @@ export async function linkProjectToGithubAction(
   formData: FormData
 ): Promise<LinkProjectToGithubFormState> {
   const session = await auth();
-  if (!session?.user?.uuid || !session.user.name || !session.user.email) { // Ensure name and email for committer info
+  if (!session?.user?.uuid || !session.user.name || !session.user.email) { 
     return { error: "Authentication required, or user name/email missing in session." };
   }
 
@@ -1328,11 +1320,10 @@ export async function linkProjectToGithubAction(
         name: repoSlug,
         private: repoIsPrivate,
         description: `Repository for FlowUp project: ${projectFromDb.name}`,
-        auto_init: true, // Initialize with a README
+        auto_init: true, 
       });
       console.log(`Successfully created repository: ${createdRepo.data.html_url}`);
 
-      // Sync README content from FlowUp to GitHub if it exists
       if (projectFromDb.readmeContent && projectFromDb.readmeContent.trim() !== '') {
          let existingReadmeSha: string | undefined = undefined;
         try {
@@ -1564,7 +1555,7 @@ export async function saveFileContentAction(
 
 export async function createGithubFileAction(
   projectUuid: string,
-  filePath: string, // Full path including new file name
+  filePath: string, 
   initialContent: string,
   commitMessage?: string
 ): Promise<{ success: boolean; error?: string; file?: GithubRepoContentItem }> {
@@ -1589,15 +1580,13 @@ export async function createGithubFileAction(
   const octokit = new Octokit({ auth: oauthToken.accessToken });
 
   try {
-    // Check if file already exists to prevent accidental overwrite (createOrUpdateFileContents would update if sha is not provided but path exists)
     try {
       await octokit.rest.repos.getContent({ owner, repo, path: filePath });
       return { success: false, error: `File already exists at path: ${filePath}` };
     } catch (error: any) {
-      if (error.status !== 404) { // An error other than "not found"
-        throw error; // Re-throw other errors
+      if (error.status !== 404) { 
+        throw error; 
       }
-      // If 404, file doesn't exist, proceed with creation
     }
 
     const response = await octokit.rest.repos.createOrUpdateFileContents({
@@ -1606,12 +1595,11 @@ export async function createGithubFileAction(
       path: filePath,
       message: commitMessage || `Create ${filePath} via FlowUp`,
       content: Buffer.from(initialContent).toString('base64'),
-      // No SHA needed for creation
       committer: { name: session.user.name, email: session.user.email },
       author: { name: session.user.name, email: session.user.email },
     });
 
-    if (response.status === 201) { // 201 for created
+    if (response.status === 201) { 
       return { success: true, file: response.data.content as GithubRepoContentItem };
     }
     return { success: false, error: `GitHub API returned status ${response.status} for file creation.` };
@@ -1624,34 +1612,27 @@ export async function createGithubFileAction(
 
 export async function createGithubFolderAction(
   projectUuid: string,
-  folderPath: string, // Full path for the new folder
+  folderPath: string, 
   commitMessage?: string
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user?.uuid || !session.user.name || !session.user.email) {
     return { success: false, error: "Authentication required." };
   }
-  // Create a .gitkeep file within the folder to make GitHub recognize it
   const gitkeepPath = `${folderPath.replace(/\/$/, '')}/.gitkeep`;
   
-  // Re-use createGithubFileAction for this
   const result = await createGithubFileAction(
     projectUuid, 
     gitkeepPath, 
-    '', // Empty content for .gitkeep
+    '', 
     commitMessage || `Create folder ${folderPath} via FlowUp`
   );
 
   if (result.success) {
     return { success: true };
   } else {
-    // Check if error is because .gitkeep already exists (meaning folder might already exist)
     if (result.error?.includes("File already exists")) {
-        // Consider this a success if the .gitkeep (and thus folder) effectively exists
         console.warn(`[createGithubFolderAction] Attempted to create folder '${folderPath}' but it (or .gitkeep) might already exist. Error: ${result.error}`);
-        // To be more robust, one might list contents of parent to confirm folder's presence
-        // For now, if .gitkeep creation fails with "already exists", assume folder is there.
-        // Or, we can refine the error message.
         return { success: false, error: `Folder '${folderPath}' or its .gitkeep file might already exist. Original error: ${result.error}`};
     }
     return { success: false, error: result.error || "Failed to create .gitkeep file for folder." };
@@ -1695,7 +1676,7 @@ export async function deleteGithubFileAction(
       author: { name: session.user.name, email: session.user.email },
     });
 
-    if (response.status === 200) { // 200 for successful deletion
+    if (response.status === 200) { 
       return { success: true };
     }
     return { success: false, error: `GitHub API returned status ${response.status} for file deletion.` };
@@ -1706,8 +1687,78 @@ export async function deleteGithubFileAction(
 }
 
 
-// Note: Renaming and Deleting folders (especially non-empty ones) are more complex.
-// Renaming often involves creating new + deleting old.
-// Deleting non-empty folders requires recursive deletion of contents first.
-// These are deferred for now.
+export interface GenerateProjectFilesAIFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: { prompt?: string[] };
+  createdFiles?: string[];
+}
 
+const GenerateProjectFilesAISchema = z.object({
+  projectUuid: z.string().uuid("Invalid project UUID."),
+  prompt: z.string().min(10, "Prompt must be at least 10 characters.").max(2000),
+  basePath: z.string().optional(),
+});
+
+export async function generateProjectFilesWithAIAction(
+  prevState: GenerateProjectFilesAIFormState,
+  formData: FormData
+): Promise<GenerateProjectFilesAIFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const validatedFields = GenerateProjectFilesAISchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    prompt: formData.get('prompt'),
+    basePath: formData.get('basePath') || '',
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input for AI generation.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { projectUuid, prompt, basePath } = validatedFields.data;
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { error: "Project not found or not linked to GitHub." };
+  }
+
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { error: "You do not have permission to generate files in this project." };
+  }
+
+  try {
+    const aiInput: GenerateProjectScaffoldInput = { prompt };
+    const aiOutput: GenerateProjectScaffoldOutput = await generateProjectScaffold(aiInput);
+
+    if (!aiOutput.files || aiOutput.files.length === 0) {
+      return { error: "AI did not generate any files. Try a different prompt." };
+    }
+
+    const createdFiles: string[] = [];
+    for (const file of aiOutput.files) {
+      const fullFilePath = basePath ? `${basePath}/${file.filePath}`.replace(/\/\//g, '/') : file.filePath;
+      const result = await createGithubFileAction(
+        projectUuid,
+        fullFilePath,
+        file.content,
+        `AI Generated: ${file.filePath}`
+      );
+      if (result.success && result.file) {
+        createdFiles.push(result.file.path);
+      } else {
+        // Collect errors or stop on first error? For now, continue and report first error.
+        return { error: `Failed to create file '${fullFilePath}': ${result.error}. Some files may not have been created.` , createdFiles};
+      }
+    }
+    return { message: `${createdFiles.length} files generated successfully by AI.`, createdFiles };
+  } catch (error: any) {
+    console.error("Error generating project files with AI:", error);
+    return { error: `AI Generation Failed: ${error.message || "An unexpected error occurred."}` };
+  }
+}
