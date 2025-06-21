@@ -38,11 +38,13 @@ import {
   getTaskByUuid as dbGetTaskByUuid,
   updateProjectDiscordSettings as dbUpdateProjectDiscordSettings,
   deleteProject as dbDeleteProject,
+  updateProjectWebhookDetails as dbUpdateProjectWebhookDetails,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
+import crypto from 'crypto';
 import { generateProjectScaffold, type GenerateProjectScaffoldInput, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import { editFileContentWithAI, type EditFileContentAIInput, type EditFileContentAIOutput } from '@/ai/flows/edit-file-content-ai';
 import { sendDiscordNotification } from '@/lib/discord';
@@ -1975,7 +1977,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
@@ -2024,3 +2026,87 @@ export async function deleteProjectAction(
     return { error: error.message || "An unexpected error occurred." };
   }
 }
+
+export interface SetupGithubWebhookFormState {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+export async function setupGithubWebhookAction(
+  prevState: SetupGithubWebhookFormState,
+  formData: FormData
+): Promise<SetupGithubWebhookFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const projectUuid = formData.get('projectUuid') as string;
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+  
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+      return { error: "You do not have permission to set up webhooks for this project." };
+    }
+
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project || !project.githubRepoName) {
+      return { error: "Project not found or not linked to GitHub." };
+    }
+     if (project.githubWebhookId) {
+      return { error: "A webhook is already configured for this project." };
+    }
+
+    const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+    if (!oauthToken?.accessToken) {
+      return { error: "GitHub OAuth token not found. Please connect your account." };
+    }
+
+    const [owner, repo] = project.githubRepoName.split('/');
+    if (!owner || !repo) return { error: "Invalid GitHub repository name format." };
+    
+    const octokit = new Octokit({ auth: oauthToken.accessToken });
+    const webhookSecret = crypto.randomBytes(20).toString('hex');
+    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/github`;
+
+    const { data: newWebhook } = await octokit.rest.repos.createWebhook({
+      owner,
+      repo,
+      config: {
+        url: webhookUrl,
+        content_type: 'json',
+        secret: webhookSecret,
+      },
+      events: ['push', 'pull_request', 'issues'],
+      active: true,
+    });
+
+    const updatedProject = await dbUpdateProjectWebhookDetails(project.uuid, newWebhook.id, webhookSecret);
+    if (!updatedProject) {
+        return { error: "Webhook created on GitHub, but failed to save details in FlowUp." };
+    }
+    
+    return { success: true, message: `Webhook (ID: ${newWebhook.id}) successfully created on GitHub!`, project: updatedProject };
+
+  } catch (error: any) {
+    console.error("Error setting up GitHub webhook:", error);
+    let errorMessage = error.message || "An unexpected error occurred.";
+    if (error.status === 422) { // Unprocessable Entity
+        if(error.message.includes("Hook already exists")) {
+            errorMessage = "A webhook for this URL already exists on the repository. Please check your repository settings on GitHub.";
+        } else {
+             errorMessage = `Could not create webhook (422): ${error.message}. Check permissions and configuration.`;
+        }
+    } else if (error.status === 404) {
+        errorMessage = "Repository not found. Check that the linked repository exists and you have access.";
+    }
+    return { error: errorMessage };
+  }
+}
+
+    

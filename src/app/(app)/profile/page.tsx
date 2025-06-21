@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useEffect, useState, useActionState, startTransition } from 'react'; // Corrected import
+import { useEffect, useState, useActionState, startTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import * as authService from '@/lib/authService';
 import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUserDetailsAction, fetchDiscordUserDetailsAction, disconnectDiscordAction } from '@/app/(app)/projects/[id]/actions'; 
@@ -43,6 +43,8 @@ interface DiscordUserDetails {
     discriminator: string;
 }
 
+type AvatarSource = 'flowup' | 'github' | 'discord';
+
 
 export default function ProfilePage() {
   const { user, isLoading: authLoading, refreshUser } = useAuth();
@@ -57,6 +59,8 @@ export default function ProfilePage() {
 
   const [discordUserDetails, setDiscordUserDetails] = useState<DiscordUserDetails | null>(null);
   const [isLoadingDiscord, setIsLoadingDiscord] = useState(true);
+  
+  const [avatarSource, setAvatarSource] = useState<AvatarSource>('flowup');
 
   const [disconnectGithubState, disconnectGithubFormAction, isDisconnectGithubPending] = useActionState(disconnectGithubAction, { success: false });
   const [disconnectDiscordState, disconnectDiscordFormAction, isDisconnectDiscordPending] = useActionState(disconnectDiscordAction, { success: false });
@@ -106,6 +110,18 @@ export default function ProfilePage() {
     if (!authLoading) loadExternalData();
   }, [user, authLoading]);
   
+  useEffect(() => {
+    if (user && !isLoadingGithub && !isLoadingDiscord) {
+        let source: AvatarSource = 'flowup';
+        if (githubUserDetails?.avatar_url && user.avatar === githubUserDetails.avatar_url) {
+            source = 'github';
+        } else if (discordUserDetails?.avatar && user.avatar === `https://cdn.discordapp.com/avatars/${discordUserDetails.id}/${discordUserDetails.avatar}.png`) {
+            source = 'discord';
+        }
+        setAvatarSource(source);
+    }
+  }, [user, githubUserDetails, discordUserDetails, isLoadingGithub, isLoadingDiscord]);
+
   useEffect(() => {
     if (!isDisconnectGithubPending && disconnectGithubState) {
       if (disconnectGithubState.success && disconnectGithubState.message) {
@@ -195,6 +211,15 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarSourceChange = (source: AvatarSource) => {
+    setAvatarSource(source);
+    if (source === 'github' && githubUserDetails?.avatar_url) {
+      form.setValue('avatar', githubUserDetails.avatar_url, { shouldDirty: true });
+    } else if (source === 'discord' && discordUserDetails?.avatar) {
+      form.setValue('avatar', `https://cdn.discordapp.com/avatars/${discordUserDetails.id}/${discordUserDetails.avatar}.png`, { shouldDirty: true });
+    }
+  };
+
   const handleConnectGitHub = () => {
     window.location.href = `/api/auth/github/oauth/login?redirectTo=/profile`;
   };
@@ -265,13 +290,13 @@ export default function ProfilePage() {
                   <Label htmlFor="avatar">Avatar URL</Label>
                   <div className="relative">
                     <ImageIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input id="avatar" placeholder="https://example.com/avatar.png" {...form.register("avatar")} className="pl-10" />
+                    <Input id="avatar" placeholder="https://example.com/avatar.png" {...form.register("avatar")} className="pl-10" onFocus={() => setAvatarSource('flowup')} />
                   </div>
                   {form.formState.errors.avatar && <p className="text-sm text-destructive">{form.formState.errors.avatar.message}</p>}
                 </div>
                 <Card className="p-4 bg-muted/30">
-                  <h4 className="font-semibold mb-2">Avatar Source (Coming Soon)</h4>
-                   <RadioGroup defaultValue="flowup" disabled>
+                  <h4 className="font-semibold mb-2">Avatar Source</h4>
+                   <RadioGroup value={avatarSource} onValueChange={handleAvatarSourceChange}>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="flowup" id="r-flowup" />
                         <Label htmlFor="r-flowup">Use FlowUp Avatar URL</Label>
@@ -419,3 +444,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    

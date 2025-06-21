@@ -779,19 +779,19 @@ export async function updateProjectDiscordSettings(
     const now = new Date().toISOString();
     
     let setClauses = 'discordWebhookUrl = ?, discordNotificationsEnabled = ?, updatedAt = ?';
-    let params: (string | number | boolean | null | undefined)[] = [webhookUrl, enabled, now];
+    let params: (string | number | boolean | null | undefined)[] = [webhookUrl, enabled ? 1 : 0, now];
 
     if (notifyTasks !== undefined) {
         setClauses += ', discordNotifyTasks = ?';
-        params.push(notifyTasks);
+        params.push(notifyTasks ? 1 : 0);
     }
     if (notifyMembers !== undefined) {
         setClauses += ', discordNotifyMembers = ?';
-        params.push(notifyMembers);
+        params.push(notifyMembers ? 1 : 0);
     }
     if (notifyAnnouncements !== undefined) {
         setClauses += ', discordNotifyAnnouncements = ?';
-        params.push(notifyAnnouncements);
+        params.push(notifyAnnouncements ? 1 : 0);
     }
     params.push(projectUuid);
 
@@ -1328,3 +1328,5 @@ export async function deleteProjectAnnouncement(announcementUuid: string): Promi
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
 }
+
+    
