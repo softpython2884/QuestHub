@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -277,6 +277,20 @@ export async function getDbConnection() {
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
+    
+    CREATE TABLE IF NOT EXISTS user_discord_oauth (
+        userUuid TEXT PRIMARY KEY,
+        accessToken TEXT NOT NULL,
+        refreshToken TEXT NOT NULL,
+        expiresAt INTEGER NOT NULL,
+        scopes TEXT NOT NULL,
+        discordUserId TEXT NOT NULL,
+        discordUsername TEXT NOT NULL,
+        discordAvatar TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
 
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -289,7 +303,9 @@ export async function getDbConnection() {
       isUrgent BOOLEAN DEFAULT FALSE,
       githubRepoUrl TEXT,
       githubRepoName TEXT,
-      github_installation_id INTEGER,
+      githubInstallationId INTEGER,
+      githubWebhookId INTEGER,
+      githubWebhookSecret TEXT,
       discordWebhookUrl TEXT,
       discordNotificationsEnabled BOOLEAN DEFAULT TRUE,
       discordNotifyTasks BOOLEAN DEFAULT TRUE,
@@ -570,6 +586,54 @@ export async function deleteUserGithubOAuthToken(userUuid: string): Promise<bool
   return result.changes ? result.changes > 0 : false;
 }
 
+export async function storeUserDiscordToken(
+  userUuid: string,
+  tokenData: Omit<UserDiscordOAuthToken, 'userUuid'>
+): Promise<void> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  await connection.run(
+    `INSERT INTO user_discord_oauth (userUuid, accessToken, refreshToken, expiresAt, scopes, discordUserId, discordUsername, discordAvatar, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(userUuid) DO UPDATE SET
+       accessToken = excluded.accessToken,
+       refreshToken = excluded.refreshToken,
+       expiresAt = excluded.expiresAt,
+       scopes = excluded.scopes,
+       discordUsername = excluded.discordUsername,
+       discordAvatar = excluded.discordAvatar,
+       updatedAt = excluded.updatedAt`,
+    userUuid,
+    tokenData.accessToken,
+    tokenData.refreshToken,
+    tokenData.expiresAt,
+    tokenData.scopes,
+    tokenData.discordUserId,
+    tokenData.discordUsername,
+    tokenData.discordAvatar,
+    now,
+    now
+  );
+}
+
+export async function getUserDiscordToken(userUuid: string): Promise<UserDiscordOAuthToken | null> {
+  const connection = await getDbConnection();
+  const row = await connection.get<UserDiscordOAuthToken>(
+    'SELECT * FROM user_discord_oauth WHERE userUuid = ?',
+    userUuid
+  );
+  return row || null;
+}
+
+export async function deleteUserDiscordToken(userUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  const result = await connection.run(
+    'DELETE FROM user_discord_oauth WHERE userUuid = ?',
+    userUuid
+  );
+  return result.changes ? result.changes > 0 : false;
+}
+
 
 export async function createProject(name: string, description: string | undefined, ownerUuid: string): Promise<Project> {
   const connection = await getDbConnection();
@@ -579,8 +643,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null, null, true, true, true, true
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false
     );
 
     if (!result.lastID) {
@@ -685,11 +749,22 @@ export async function updateProjectGithubRepo(projectUuid: string, repoUrl: stri
   const connection = await getDbConnection();
   const now = new Date().toISOString();
   const result = await connection.run(
-    'UPDATE projects SET githubRepoUrl = ?, githubRepoName = ?, github_installation_id = ?, updatedAt = ? WHERE uuid = ?',
+    'UPDATE projects SET githubRepoUrl = ?, githubRepoName = ?, githubInstallationId = ?, updatedAt = ? WHERE uuid = ?',
     repoUrl, repoName, installationId, now, projectUuid
   );
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
+}
+
+export async function updateProjectWebhookDetails(projectUuid: string, webhookId: number, webhookSecret: string): Promise<Project | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    const result = await connection.run(
+        'UPDATE projects SET githubWebhookId = ?, githubWebhookSecret = ?, updatedAt = ? WHERE uuid = ?',
+        webhookId, webhookSecret, now, projectUuid
+    );
+    if (result.changes === 0) return null;
+    return getProjectByUuid(projectUuid);
 }
 
 export async function updateProjectDiscordSettings(
@@ -732,8 +807,7 @@ export async function updateProjectDiscordSettings(
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
   const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-    `SELECT p.uuid, p.name, p.description, p.ownerUuid, p.isPrivate, p.readmeContent, p.isUrgent, p.githubRepoUrl, p.githubRepoName, p.github_installation_id as githubInstallationId, p.createdAt, p.updatedAt
-     FROM projects p
+    `SELECT p.* FROM projects p
      JOIN project_members pm ON p.uuid = pm.projectUuid
      WHERE pm.userUuid = ?
      ORDER BY p.updatedAt DESC`,
@@ -749,7 +823,7 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
     const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
-      'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, createdAt, updatedAt FROM projects ORDER BY updatedAt DESC'
+      'SELECT * FROM projects ORDER BY updatedAt DESC'
     );
     return projectsData.map(p => ({
       ...p,

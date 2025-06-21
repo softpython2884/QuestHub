@@ -62,6 +62,8 @@ import {
   type UpdateProjectDiscordSettingsFormState,
   deleteProjectAction,
   type DeleteProjectFormState,
+  setupGithubWebhookAction,
+  type SetupGithubWebhookFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -345,6 +347,7 @@ function ProjectDetailPageContent() {
   const [linkGithubState, linkProjectToGithubFormAction, isLinkGithubPending] = useActionState(linkProjectToGithubAction, { message: "", error: "" });
   const [updateDiscordSettingsState, updateDiscordSettingsFormAction, isUpdateDiscordSettingsPending] = useActionState(updateProjectDiscordSettingsAction, { message: "", error: "" });
   const [deleteProjectState, deleteProjectFormAction, isDeleteProjectPending] = useActionState(deleteProjectAction, {success: false});
+  const [setupWebhookState, setupGithubWebhookFormAction, isSetupWebhookPending] = useActionState(setupGithubWebhookAction, { success: false });
 
 
   const loadTasks = useCallback(async () => {
@@ -762,6 +765,20 @@ function ProjectDetailPageContent() {
       }
     }
   }, [deleteProjectState, isDeleteProjectPending, toast, router]);
+
+  useEffect(() => {
+    if (!isSetupWebhookPending && setupWebhookState) {
+      if (setupWebhookState.success) {
+        toast({ title: "Success", description: setupWebhookState.message });
+        if (setupWebhookState.project) {
+            setProject(setupWebhookState.project);
+        }
+      }
+      if (setupWebhookState.error) {
+        toast({ variant: 'destructive', title: 'Webhook Error', description: setupWebhookState.error });
+      }
+    }
+  }, [setupWebhookState, isSetupWebhookPending, toast]);
 
 
   useEffect(() => {
@@ -1252,6 +1269,15 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     startTransition(() => {
       deleteProjectFormAction(formData);
+    });
+  };
+
+  const handleSetupWebhook = () => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    startTransition(() => {
+      setupGithubWebhookFormAction(formData);
     });
   };
 
@@ -2203,14 +2229,15 @@ function ProjectDetailPageContent() {
                         <CardTitle className="flex items-center"><GitBranch className="mr-2 h-5 w-5"/>Activity Logs</CardTitle>
                         <CardDescription>View recent commits and activity from the linked GitHub repository.</CardDescription>
                       </div>
-                      <Button variant="outline" size="sm" disabled>
-                        <Github className="mr-2 h-4 w-4" /> Setup Webhook (Coming Soon)
+                      <Button variant="outline" size="sm" onClick={handleSetupWebhook} disabled={!project.githubRepoUrl || !!project.githubWebhookId || isSetupWebhookPending || !canManageCodeSpace}>
+                        {isSetupWebhookPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        {project.githubWebhookId ? <><CheckCircle className="h-4 w-4 mr-2 text-green-500" />Webhook Active</> : <><Github className="mr-2 h-4 w-4" />Setup Webhook</>}
                       </Button>
                     </CardHeader>
                     <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                         <Terminal className="mx-auto h-12 w-12 opacity-50 mb-3" />
                         <p className="font-medium">GitHub Webhook Integration</p>
-                        <p className="text-xs">This feature is planned for a future update. Once implemented, commit history will appear here.</p>
+                        <p className="text-xs">Once the webhook is set up, commit history will appear here.</p>
                     </CardContent>
                 </Card>
             </CardContent>

@@ -15,7 +15,7 @@ import * as z from 'zod';
 import { useEffect, useState, useActionState, startTransition } from 'react'; // Corrected import
 import { useToast } from '@/hooks/use-toast';
 import * as authService from '@/lib/authService';
-import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUserDetailsAction } from '@/app/(app)/projects/[id]/actions'; 
+import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUserDetailsAction, fetchDiscordUserDetailsAction, disconnectDiscordAction } from '@/app/(app)/projects/[id]/actions'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -36,6 +36,14 @@ interface GithubUserDetails {
   name: string | null;
 }
 
+interface DiscordUserDetails {
+    id: string;
+    username: string;
+    avatar: string | null;
+    discriminator: string;
+}
+
+
 export default function ProfilePage() {
   const { user, isLoading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
@@ -47,7 +55,11 @@ export default function ProfilePage() {
   const [githubUserDetails, setGithubUserDetails] = useState<GithubUserDetails | null>(null);
   const [isLoadingGithub, setIsLoadingGithub] = useState(true);
 
-  const [disconnectState, disconnectFormAction, isDisconnectPending] = useActionState(disconnectGithubAction, { success: false });
+  const [discordUserDetails, setDiscordUserDetails] = useState<DiscordUserDetails | null>(null);
+  const [isLoadingDiscord, setIsLoadingDiscord] = useState(true);
+
+  const [disconnectGithubState, disconnectGithubFormAction, isDisconnectGithubPending] = useActionState(disconnectGithubAction, { success: false });
+  const [disconnectDiscordState, disconnectDiscordFormAction, isDisconnectDiscordPending] = useActionState(disconnectDiscordAction, { success: false });
 
 
   const form = useForm<ProfileFormValues>({
@@ -70,9 +82,11 @@ export default function ProfilePage() {
   }, [user, form]);
 
   useEffect(() => {
-    async function loadGithubData() {
+    async function loadExternalData() {
       if (user) {
         setIsLoadingGithub(true);
+        setIsLoadingDiscord(true);
+
         const tokenData = await fetchUserGithubOAuthTokenAction();
         if (tokenData?.accessToken) {
           setGithubToken(tokenData.accessToken);
@@ -83,22 +97,37 @@ export default function ProfilePage() {
           setGithubUserDetails(null);
         }
         setIsLoadingGithub(false);
+        
+        const discordDetails = await fetchDiscordUserDetailsAction();
+        setDiscordUserDetails(discordDetails);
+        setIsLoadingDiscord(false);
       }
     }
-    if (!authLoading) loadGithubData();
+    if (!authLoading) loadExternalData();
   }, [user, authLoading]);
   
   useEffect(() => {
-    if (!isDisconnectPending && disconnectState) {
-      if (disconnectState.success && disconnectState.message) { // Check for message
-        toast({ title: "Success", description: disconnectState.message });
+    if (!isDisconnectGithubPending && disconnectGithubState) {
+      if (disconnectGithubState.success && disconnectGithubState.message) {
+        toast({ title: "Success", description: disconnectGithubState.message });
         setGithubToken(null);
         setGithubUserDetails(null);
-      } else if (disconnectState.error) {
-        toast({ variant: "destructive", title: "Error", description: disconnectState.error });
+      } else if (disconnectGithubState.error) {
+        toast({ variant: "destructive", title: "Error", description: disconnectGithubState.error });
       }
     }
-  }, [disconnectState, isDisconnectPending, toast]);
+  }, [disconnectGithubState, isDisconnectGithubPending, toast]);
+
+  useEffect(() => {
+    if (!isDisconnectDiscordPending && disconnectDiscordState) {
+        if (disconnectDiscordState.success && disconnectDiscordState.message) {
+            toast({ title: "Success", description: disconnectDiscordState.message });
+            setDiscordUserDetails(null);
+        } else if (disconnectDiscordState.error) {
+            toast({ variant: "destructive", title: "Error", description: disconnectDiscordState.error });
+        }
+    }
+  }, [disconnectDiscordState, isDisconnectDiscordPending, toast]);
 
 
   if (authLoading) {
@@ -167,15 +196,25 @@ export default function ProfilePage() {
   };
 
   const handleConnectGitHub = () => {
-    // Redirect to the GitHub OAuth login flow
     window.location.href = `/api/auth/github/oauth/login?redirectTo=/profile`;
   };
 
   const handleDisconnectGitHub = () => {
-     const dummyFormData = new FormData(); // useActionState requires FormData
-     startTransition(() => { // Corrected usage
-        disconnectFormAction(dummyFormData);
+     const dummyFormData = new FormData();
+     startTransition(() => {
+        disconnectGithubFormAction(dummyFormData);
      });
+  };
+
+  const handleConnectDiscord = () => {
+    window.location.href = `/api/auth/discord/oauth/login?redirectTo=/profile`;
+  };
+
+  const handleDisconnectDiscord = () => {
+      const dummyFormData = new FormData();
+      startTransition(() => {
+          disconnectDiscordFormAction(dummyFormData);
+      });
   };
 
 
@@ -243,8 +282,9 @@ export default function ProfilePage() {
                          {githubUserDetails && <Avatar className="h-5 w-5 inline-block"><AvatarImage src={githubUserDetails.avatar_url} /></Avatar>}
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="discord" id="r-discord" disabled />
-                        <Label htmlFor="r-discord" className="text-muted-foreground">Use Discord Profile Picture</Label>
+                        <RadioGroupItem value="discord" id="r-discord" disabled={!discordUserDetails} />
+                        <Label htmlFor="r-discord" className={!discordUserDetails ? "text-muted-foreground" : ""}>Use Discord Profile Picture</Label>
+                        {discordUserDetails?.avatar && <Avatar className="h-5 w-5 inline-block"><AvatarImage src={`https://cdn.discordapp.com/avatars/${discordUserDetails.id}/${discordUserDetails.avatar}.png`} /></Avatar>}
                       </div>
                    </RadioGroup>
                 </Card>
@@ -324,8 +364,8 @@ export default function ProfilePage() {
               {isLoadingGithub ? (
                  <Skeleton className="h-9 w-24" />
               ) : githubToken ? (
-                <Button variant="outline" onClick={handleDisconnectGitHub} disabled={isDisconnectPending}>
-                  {isDisconnectPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
+                <Button variant="outline" onClick={handleDisconnectGitHub} disabled={isDisconnectGithubPending}>
+                  {isDisconnectGithubPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
                   Disconnect
                 </Button>
               ) : (
@@ -336,19 +376,42 @@ export default function ProfilePage() {
             </div>
           </Card>
 
-          {/* Discord Connection (Placeholder) */}
+          {/* Discord Connection */}
            <Card className="p-4 bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <MessageSquare className="h-8 w-8 text-indigo-500" />
                 <div>
                   <h4 className="font-semibold">Discord</h4>
-                  <p className="text-sm text-muted-foreground">Connect to receive notifications (Coming Soon).</p>
+                  {isLoadingDiscord ? (
+                      <Skeleton className="h-4 w-32 mt-1" />
+                  ) : discordUserDetails ? (
+                     <div className="text-sm text-muted-foreground">
+                        Connected as: <span className="font-medium text-primary">{discordUserDetails.username}#{discordUserDetails.discriminator}</span>
+                        {discordUserDetails.avatar && (
+                            <Avatar className="h-5 w-5 inline-block ml-2 align-middle">
+                                <AvatarImage src={`https://cdn.discordapp.com/avatars/${discordUserDetails.id}/${discordUserDetails.avatar}.png`} alt={discordUserDetails.username} data-ai-hint="discord avatar" />
+                                <AvatarFallback>{getInitials(discordUserDetails.username)}</AvatarFallback>
+                            </Avatar>
+                        )}
+                     </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Not Connected. Connect to enable DM notifications.</p>
+                  )}
                 </div>
               </div>
-              <Button disabled>
-                <MessageSquare className="mr-2 h-4 w-4" /> Connect (Soon)
-              </Button>
+               {isLoadingDiscord ? (
+                 <Skeleton className="h-9 w-24" />
+              ) : discordUserDetails ? (
+                <Button variant="outline" onClick={handleDisconnectDiscord} disabled={isDisconnectDiscordPending}>
+                  {isDisconnectDiscordPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
+                  Disconnect
+                </Button>
+              ) : (
+                <Button onClick={handleConnectDiscord}>
+                  <MessageSquare className="mr-2 h-4 w-4" /> Connect
+                </Button>
+              )}
             </div>
           </Card>
         </CardContent>

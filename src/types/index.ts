@@ -30,6 +30,18 @@ export interface UserGithubOAuthToken {
   updatedAt: string;
 }
 
+export interface UserDiscordOAuthToken {
+  userUuid: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // Store as timestamp
+  scopes: string;
+  discordUserId: string;
+  discordUsername: string;
+  discordAvatar?: string;
+}
+
+
 export interface GithubRepoContentItem {
   type: 'file' | 'dir' | 'symlink' | 'submodule';
   name: string;
@@ -108,9 +120,11 @@ export interface Project {
   isPrivate?: boolean;
   readmeContent?: string;
   isUrgent?: boolean;
-  githubRepoUrl?: string;
-  githubRepoName?: string;
+  githubRepoUrl?: string | null;
+  githubRepoName?: string | null;
   githubInstallationId?: number; // Kept for potential future use with App-specific actions
+  githubWebhookId?: number | null;
+  githubWebhookSecret?: string | null;
   discordWebhookUrl?: string | null;
   discordNotificationsEnabled?: boolean;
   discordNotifyTasks?: boolean;
