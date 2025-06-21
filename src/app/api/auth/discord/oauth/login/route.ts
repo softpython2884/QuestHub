@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
   discordAuthUrl.searchParams.append('redirect_uri', `${NEXT_PUBLIC_APP_URL}/api/auth/discord/oauth/callback`);
   discordAuthUrl.searchParams.append('response_type', 'code');
   // Requesting 'identify' and 'email' for basic user profile information.
-  // The 'bot' scope should be requested in a separate flow if DM permissions are needed later.
   discordAuthUrl.searchParams.append('scope', 'identify email'); 
   discordAuthUrl.searchParams.append('state', state);
+  discordAuthUrl.searchParams.append('prompt', 'consent'); // Always ask for consent, useful for testing
 
   console.log('[Discord OAuth Login] Redirecting to Discord:', discordAuthUrl.toString());
   return NextResponse.redirect(discordAuthUrl.toString());

@@ -400,38 +400,33 @@ export async function getDbConnection() {
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@flowup.com');
   if (!adminUser) {
     const defaultAdminUUID = '00000000-0000-0000-0000-000000000001';
-    const defaultAdminPassword = await bcrypt.hash('adminpassword', 10);
-    await db.run(
-      'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
-      defaultAdminUUID,
+    await createUser(
       'Admin FlowUp',
       'admin@flowup.com',
-      defaultAdminPassword,
-      'admin',
-      `https://placehold.co/100x100.png?text=AF`
+      'adminpassword',
+      'admin'
     );
   }
 
   const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@flowup.com');
   if (!memberUser) {
-    const defaultMemberUUID = uuidv4();
-    const defaultMemberPassword = await bcrypt.hash('memberpassword', 10);
-    await db.run(
-      'INSERT INTO users (uuid, name, email, hashedPassword, role, avatar) VALUES (?, ?, ?, ?, ?, ?)',
-      defaultMemberUUID,
+    await createUser(
       'Member FlowUp',
       'member@flowup.com',
-      defaultMemberPassword,
-      'member',
-      `https://placehold.co/100x100.png?text=MF`
+      'memberpassword',
+      'member'
     );
   }
   return db;
 }
 
-export async function createUser(name: string, email: string, password: string, role: UserRole = 'member'): Promise<Omit<User, 'hashedPassword'>> {
+export async function createUser(name: string, email: string, password?: string, role: UserRole = 'member'): Promise<Omit<User, 'hashedPassword'>> {
   const connection = await getDbConnection();
-  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  const hashedPassword = password 
+    ? await bcrypt.hash(password, 10) 
+    : await bcrypt.hash(uuidv4(), 10); // Create a secure random hash for social logins
+
   const userUuid = uuidv4();
   const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
   const avatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;

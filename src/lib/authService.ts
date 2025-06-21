@@ -6,6 +6,8 @@ import * as bcrypt from 'bcryptjs';
 import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid } from './db';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import { auth } from '@/lib/authEdge';
+
 
 const AUTH_COOKIE_NAME = 'flowup_auth_token'; 
 
@@ -18,7 +20,7 @@ const getJwtSecretOrThrow = (): string => {
   return secret;
 };
 
-const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
+export const createSessionForUser = async (user: Omit<User, 'hashedPassword'>) => {
   const JWT_SECRET = getJwtSecretOrThrow();
   const tokenPayload = {
     uuid: user.uuid,
@@ -33,11 +35,13 @@ const generateTokenAndSetCookie = (user: Omit<User, 'hashedPassword'>) => {
       maxAge: 60 * 60 * 24 * 7, // 7 days
       sameSite: 'lax',
     });
-    console.log(`[authService.generateTokenAndSetCookie] Token generated and cookie set for user UUID: ${user.uuid}. Secure flag: ${process.env.NODE_ENV === 'production'}`);
+    console.log(`[authService.createSessionForUser] Session created for user UUID: ${user.uuid}.`);
   } catch (error) {
-     console.error("[authService.generateTokenAndSetCookie] Error setting cookie:", error);
+     console.error("[authService.createSessionForUser] Error setting cookie:", error);
+     throw new Error("Could not create user session.");
   }
 };
+
 
 export const login = async (email: string, password?: string): Promise<User | null> => {
   console.log('[authService.login] Attempting login for email:', email);
@@ -54,7 +58,7 @@ export const login = async (email: string, password?: string): Promise<User | nu
     const isValidPassword = await bcrypt.compare(password, userFromDb.hashedPassword);
     if (isValidPassword) {
       const { hashedPassword, ...userToReturn } = userFromDb;
-      generateTokenAndSetCookie(userToReturn);
+      await createSessionForUser(userToReturn);
       console.log('[authService.login] Login SUCCESSFUL for email:', email);
       return userToReturn;
     }
@@ -81,7 +85,7 @@ export const signup = async (name: string, email: string, password?: string, rol
     const newUser = await dbCreateUser(name, email, password, role);
     if (newUser) {
         const { hashedPassword, ...userToReturn } = newUser;
-        generateTokenAndSetCookie(userToReturn);
+        await createSessionForUser(userToReturn);
         console.log('[authService.signup] Signup SUCCESSFUL for email:', email, 'UUID:', userToReturn.uuid);
         return userToReturn;
     }
@@ -116,7 +120,7 @@ export const updateUserProfile = async (uuid: string, name: string, email: strin
         const session = await auth(); 
         if (session?.user?.uuid === userToReturn.uuid) {
             console.log('[authService.updateUserProfile] User data changed, re-issuing token for UUID:', userToReturn.uuid);
-            generateTokenAndSetCookie(userToReturn);
+            await createSessionForUser(userToReturn);
         }
         return userToReturn;
     }
@@ -138,6 +142,3 @@ export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] No active session found via auth().');
   return null;
 };
-
-import { auth } from '@/lib/authEdge';
-
