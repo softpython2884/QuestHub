@@ -1375,9 +1375,10 @@ function ProjectDetailPageContent() {
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              {canManageProjectSettings && (
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!canManageProjectSettings}>
+                  <Button variant="outline" size="sm">
                     <Edit3 className="mr-2 h-4 w-4" /> Edit
                   </Button>
                 </DialogTrigger>
@@ -1430,6 +1431,7 @@ function ProjectDetailPageContent() {
                   </Form>
                 </DialogContent>
               </Dialog>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -2439,6 +2441,7 @@ function ProjectDetailPageContent() {
                  {toggleVisibilityState?.error && <p className="text-sm text-destructive">{toggleVisibilityState.error}</p>}
               </div>
 
+              {canManageProjectSettings && (
                <div>
                 <h4 className="font-semibold mb-2 text-lg">Discord Integration</h4>
                 <Card className="border p-4">
@@ -2524,6 +2527,7 @@ function ProjectDetailPageContent() {
                     </Form>
                 </Card>
                </div>
+              )}
 
               <div>
                 <div className="flex justify-between items-center mb-2">

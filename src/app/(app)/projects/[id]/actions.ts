@@ -1748,6 +1748,11 @@ export async function saveFileContentAction(
   if (!project || !project.githubRepoName) {
     return { success: false, error: "Project not found or not linked to GitHub." };
   }
+  
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { success: false, error: "You do not have permission to save files in this project." };
+  }
 
   const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
   if (!oauthToken || !oauthToken.accessToken) {
@@ -1819,6 +1824,11 @@ export async function createGithubFileAction(
   const project = await dbGetProjectByUuid(projectUuid);
   if (!project || !project.githubRepoName) {
     return { success: false, error: "Project not found or not linked to GitHub." };
+  }
+  
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { success: false, error: "You do not have permission to create files in this project." };
   }
 
   const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
@@ -1907,6 +1917,11 @@ export async function deleteGithubFileAction(
     return { success: false, error: "Project not found or not linked to GitHub." };
   }
 
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { success: false, error: "You do not have permission to delete files in this project." };
+  }
+  
   const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
   if (!oauthToken || !oauthToken.accessToken) {
     return { success: false, error: "GitHub account not linked or token missing." };
@@ -2096,7 +2111,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };

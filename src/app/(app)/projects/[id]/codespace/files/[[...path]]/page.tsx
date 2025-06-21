@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles } from 'lucide-react';
+import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles, ShieldAlert } from 'lucide-react';
 import {
   getRepoContentsAction,
   getFileContentAction,
@@ -29,8 +29,9 @@ import {
   type GenerateProjectFilesAIFormState,
   editFileWithAIAction,
   type EditFileContentAIOutput,
+  fetchProjectMemberRoleAction,
 } from '@/app/(app)/projects/[id]/actions';
-import type { GithubRepoContentItem, Project } from '@/types';
+import type { GithubRepoContentItem, Project, ProjectMemberRole } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
@@ -86,11 +87,14 @@ function FileExplorerContent() {
   const [project, setProject] = useState<Project | null>(null);
   const [contents, setContents] = useState<GithubRepoContentItem[]>([]);
   const [fileData, setFileData] = useState<{ name: string; path: string; content: string; type: 'md' | 'image' | 'html' | 'text' | 'other'; downloadUrl?: string | null, encoding?: string, sha: string } | null>(null);
+  
+  const [userRole, setUserRole] = useState<ProjectMemberRole | null>(null);
 
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isLoadingPathContent, setIsLoadingPathContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isViewingFile, setIsViewingFile] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingContent, setEditingContent] = useState('');
@@ -180,27 +184,44 @@ function FileExplorerContent() {
         router.push('/login');
         return;
     }
+    
     setIsLoadingProject(true);
-    fetchProjectAction(projectUuid)
-      .then((fetchedProject) => {
+    setAccessDenied(false);
+
+    const loadData = async () => {
+      try {
+        const fetchedProject = await fetchProjectAction(projectUuid);
         if (!fetchedProject) {
-          setError("Project not found or access denied.");
+          setError("Project not found or you don't have access.");
           setProject(null);
-        } else {
-          setProject(fetchedProject);
-          if (!fetchedProject.githubRepoName) {
-            setError("Project is not linked to a GitHub repository.");
-            setIsLoadingPathContent(false);
-          }
+          setAccessDenied(true);
+          return;
         }
-      })
-      .catch(err => {
-        setError("Failed to load project details.");
+
+        const roleResult = await fetchProjectMemberRoleAction(projectUuid, user.uuid);
+        if (fetchedProject.isPrivate && !roleResult.role) {
+          setError("You do not have permission to view this private project's CodeSpace.");
+          setAccessDenied(true);
+          return;
+        }
+        setUserRole(roleResult.role);
+        setProject(fetchedProject);
+
+        if (!fetchedProject.githubRepoName) {
+          setError("Project is not linked to a GitHub repository.");
+          setIsLoadingPathContent(false);
+        }
+      } catch (err) {
+        setError("Failed to load project details or permissions.");
         setProject(null);
-      })
-      .finally(() => {
+        setAccessDenied(true);
+      } finally {
         setIsLoadingProject(false);
-      });
+      }
+    };
+    
+    loadData();
+
   }, [projectUuid, user, authLoading, router]);
 
 
@@ -212,9 +233,10 @@ function FileExplorerContent() {
     }
   }, [project, isLoadingProject, currentPath, loadContent]);
 
+  const canEditCode = userRole === 'owner' || userRole === 'co-owner' || userRole === 'editor';
 
   const handleSaveFile = async () => {
-    if (!project || !fileData) return;
+    if (!project || !fileData || !canEditCode) return;
     setIsSavingFile(true);
     const result = await saveFileContentAction(project.uuid, fileData.path, editingContent, fileData.sha, `Update ${fileData.name} via FlowUp`);
     setIsSavingFile(false);
@@ -228,7 +250,7 @@ function FileExplorerContent() {
   };
 
   const handleCreateFile = async (values: NewFileFormValues) => {
-    if (!project) return;
+    if (!project || !canEditCode) return;
     setIsProcessingCreate(true);
     const fullPath = currentPath ? `${currentPath}/${values.fileName}` : values.fileName;
     const result = await createGithubFileAction(project.uuid, fullPath, values.initialContent || '', `Create ${values.fileName} via FlowUp`);
@@ -244,7 +266,7 @@ function FileExplorerContent() {
   };
 
   const handleCreateFolder = async (values: NewFolderFormValues) => {
-    if (!project) return;
+    if (!project || !canEditCode) return;
     setIsProcessingCreate(true);
     const fullPath = currentPath ? `${currentPath}/${values.folderName}` : values.folderName;
     const result = await createGithubFolderAction(project.uuid, fullPath, `Create folder ${values.folderName} via FlowUp`);
@@ -260,7 +282,7 @@ function FileExplorerContent() {
   };
 
   const handleDeleteFile = async () => {
-    if (!project || !contentToDelete || contentToDelete.type === 'dir') return;
+    if (!project || !contentToDelete || contentToDelete.type === 'dir' || !canEditCode) return;
     setIsDeleting(true);
     const result = await deleteGithubFileAction(project.uuid, contentToDelete.path, contentToDelete.sha, `Delete ${contentToDelete.name} via FlowUp`);
     setIsDeleting(false);
@@ -279,7 +301,7 @@ function FileExplorerContent() {
   };
 
   const handleAiScaffoldSubmit = (values: AiScaffoldFormValues) => {
-    if (!project) return;
+    if (!project || !canEditCode) return;
     const formData = new FormData();
     formData.append('projectUuid', project.uuid);
     formData.append('prompt', values.prompt);
@@ -304,7 +326,7 @@ function FileExplorerContent() {
   }, [aiScaffoldState, isAiScaffolding, toast, loadContent, currentPath, aiScaffoldForm]);
 
   const handleAiEditFile = async (values: AiEditFileFormValues) => {
-    if (!project || !fileData || !editingContent) return;
+    if (!project || !fileData || !editingContent || !canEditCode) return;
     setIsAiEditingFile(true);
     try {
       const result: EditFileContentAIOutput | { error: string } = await editFileWithAIAction(project.uuid, editingContent, values.aiEditPrompt);
@@ -334,11 +356,11 @@ function FileExplorerContent() {
   };
 
   const breadcrumbs = getBreadcrumbs();
-  const canEditCurrentFile = fileData && (fileData.type === 'text' || fileData.type === 'md' || fileData.type === 'html');
-  const isLoadingPage = authLoading || isLoadingProject || isLoadingPathContent;
+  const canEditCurrentFileType = fileData && (fileData.type === 'text' || fileData.type === 'md' || fileData.type === 'html');
+  const isLoadingPage = authLoading || isLoadingProject;
 
 
-  if (isLoadingPage && !error && !project?.githubRepoName) {
+  if (isLoadingPage) {
     return (
       <div className="space-y-6">
          <div className="flex justify-between items-center">
@@ -353,13 +375,28 @@ function FileExplorerContent() {
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="space-y-2">
-                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-                </div>
+                 <div className="flex justify-center items-center py-10">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                 </div>
             </CardContent>
         </Card>
       </div>
     );
+  }
+  
+  if (accessDenied) {
+      return (
+          <div className="space-y-6">
+              <Button variant="outline" onClick={() => router.push(`/projects/${projectUuid}`)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Project Overview
+              </Button>
+              <Alert variant="destructive">
+                  <ShieldAlert className="h-4 w-4" />
+                  <AlertTitle>Access Denied</AlertTitle>
+                  <AlertDescription>{error || "You do not have permission to access this page."}</AlertDescription>
+              </Alert>
+          </div>
+      )
   }
 
   return (
@@ -368,6 +405,7 @@ function FileExplorerContent() {
         <Button variant="outline" onClick={() => router.push(`/projects/${projectUuid}?tab=codespace`)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to CodeSpace Overview
         </Button>
+        {canEditCode && (
         <div className="flex items-center gap-2 flex-wrap">
             <Dialog open={isCreateFileModalOpen} onOpenChange={setIsCreateFileModalOpen}>
                 <DialogTrigger asChild>
@@ -446,10 +484,11 @@ function FileExplorerContent() {
                     </form>
                 </DialogContent>
             </Dialog>
-             <Button variant="outline" size="sm" onClick={() => loadContent(currentPath)} title="Refresh content" disabled={isLoadingPathContent || !project?.githubRepoName}>
-                {isLoadingPathContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4" />} Refresh
-            </Button>
         </div>
+        )}
+        <Button variant="outline" size="sm" onClick={() => loadContent(currentPath)} title="Refresh content" disabled={isLoadingPathContent || !project?.githubRepoName}>
+            {isLoadingPathContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4" />} Refresh
+        </Button>
       </div>
 
       <Card>
@@ -512,7 +551,7 @@ function FileExplorerContent() {
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h3 className="text-xl font-semibold truncate">{fileData.name}</h3>
                     <div className="flex items-center gap-2">
-                        {canEditCurrentFile && (
+                        {canEditCode && canEditCurrentFileType && (
                             <Button variant="outline" size="sm" onClick={() => setIsEditModalOpen(true)}>
                                 <Edit className="mr-2 h-4 w-4"/> Edit File
                             </Button>
@@ -627,7 +666,7 @@ function FileExplorerContent() {
                                     {item.type === 'dir' ? 'Open' : 'View'}
                                </Link>
                            </Button>
-                           {item.type === 'file' && (
+                           {canEditCode && item.type === 'file' && (
                                <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="Delete File" onClick={() => setContentToDelete(item)}>
@@ -650,7 +689,7 @@ function FileExplorerContent() {
                                     )}
                                </AlertDialog>
                            )}
-                           {item.type === 'dir' && (
+                           {canEditCode && item.type === 'dir' && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete Folder (Not Implemented)" disabled>
                                     <Trash2 className="h-4 w-4 opacity-50" />
                                 </Button>
@@ -682,9 +721,10 @@ function FileExplorerContent() {
             <DialogTitle>Edit: {fileData?.name}</DialogTitle>
             <DialogDescription className="flex justify-between items-center">
               Modify the content of the file. Your changes will be committed to GitHub.
+              {canEditCode && (
               <Dialog open={isAiEditFileModalOpen} onOpenChange={setIsAiEditFileModalOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!canEditCurrentFile || isSavingFile || isAiEditingFile}>
+                  <Button variant="outline" size="sm" disabled={!canEditCurrentFileType || isSavingFile || isAiEditingFile}>
                       <Sparkles className="mr-2 h-4 w-4 text-primary" /> Assist with AI
                   </Button>
                 </DialogTrigger>
@@ -715,6 +755,7 @@ function FileExplorerContent() {
                   </form>
                 </DialogContent>
               </Dialog>
+              )}
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -722,11 +763,11 @@ function FileExplorerContent() {
             onChange={(e) => setEditingContent(e.target.value)}
             className="flex-grow font-mono text-sm resize-none h-full min-h-[300px]"
             placeholder="Enter file content..."
-            disabled={!canEditCurrentFile}
+            disabled={!canEditCurrentFileType || !canEditCode}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} disabled={isSavingFile}>Cancel</Button>
-            <Button onClick={handleSaveFile} disabled={isSavingFile || !canEditCurrentFile}>
+            <Button onClick={handleSaveFile} disabled={isSavingFile || !canEditCurrentFileType || !canEditCode}>
               {isSavingFile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
             </Button>
