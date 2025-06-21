@@ -33,6 +33,8 @@ import {
   updateProjectGithubRepo as dbUpdateProjectGithubRepo,
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
   deleteUserGithubOAuthToken as dbDeleteUserGithubOAuthToken,
+  getUserDiscordToken as dbGetUserDiscordToken,
+  deleteUserDiscordToken as dbDeleteUserDiscordToken,
   getTaskByUuid as dbGetTaskByUuid,
   updateProjectDiscordSettings as dbUpdateProjectDiscordSettings,
   deleteProject as dbDeleteProject,
@@ -1283,6 +1285,87 @@ export async function disconnectGithubAction(prevState: { success: boolean; erro
 }
 
 
+export interface DiscordUserDetails {
+    id: string;
+    username: string;
+    avatar: string | null;
+    discriminator: string;
+}
+
+export async function fetchDiscordUserDetailsAction(targetUserUuid?: string): Promise<DiscordUserDetails | null> {
+    const session = await auth();
+    const userUuidForToken = targetUserUuid || session?.user?.uuid;
+
+    if (!userUuidForToken) {
+        console.error("[fetchDiscordUserDetailsAction] User UUID for token not determined.");
+        return null;
+    }
+
+    const oauthToken = await dbGetUserDiscordToken(userUuidForToken);
+
+    if (!oauthToken?.accessToken) {
+        console.log(`[fetchDiscordUserDetailsAction] No Discord OAuth token found for user ${userUuidForToken}.`);
+        return null;
+    }
+    
+    // Check if token is expired
+    if (oauthToken.expiresAt < Date.now()) {
+        console.log(`[fetchDiscordUserDetailsAction] Discord token for user ${userUuidForToken} has expired. Needs refresh.`);
+        await dbDeleteUserDiscordToken(userUuidForToken);
+        console.warn(`[fetchDiscordUserDetailsAction] Expired Discord token for user ${userUuidForToken} was removed.`);
+        return null;
+    }
+
+    try {
+        const userResponse = await fetch('https://discord.com/api/users/@me', {
+            headers: {
+                Authorization: `Bearer ${oauthToken.accessToken}`,
+            },
+        });
+
+        if (!userResponse.ok) {
+            const errorBody = await userResponse.text();
+            console.error(`[fetchDiscordUserDetailsAction] Failed to fetch Discord user details for user ${userUuidForToken}: ${userResponse.status}`, errorBody);
+            if (userResponse.status === 401) { // Unauthorized
+                await dbDeleteUserDiscordToken(userUuidForToken);
+                console.warn(`[fetchDiscordUserDetailsAction] Invalid Discord token for user ${userUuidForToken}, removed from DB.`);
+            }
+            return null;
+        }
+
+        const userData = await userResponse.json();
+        return {
+            id: userData.id,
+            username: userData.username,
+            avatar: userData.avatar,
+            discriminator: userData.discriminator,
+        };
+    } catch (error: any) {
+        console.error(`[fetchDiscordUserDetailsAction] Error fetching Discord user details for user ${userUuidForToken}:`, error);
+        return null;
+    }
+}
+
+
+export async function disconnectDiscordAction(prevState: { success: boolean; error?: string; message?: string }, formData: FormData): Promise<{ success: boolean; error?: string; message?: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { success: false, error: "Authentication required." };
+  }
+  try {
+    const success = await dbDeleteUserDiscordToken(session.user.uuid);
+    if (success) {
+      return { success: true, message: "Discord account disconnected successfully." };
+    }
+    return { success: false, error: "Failed to disconnect Discord account from database." };
+  } catch (error: any) {
+    console.error("[disconnectDiscordAction] Error:", error);
+    return { success: false, error: error.message || "An unexpected error occurred." };
+  }
+}
+
+
+
 function sanitizeRepoName(name: string | null | undefined): string {
   if (!name) {
     return '';
@@ -1892,7 +1975,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
