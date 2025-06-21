@@ -130,6 +130,8 @@ export interface Project {
   discordNotifyTasks?: boolean;
   discordNotifyMembers?: boolean;
   discordNotifyAnnouncements?: boolean;
+  discordNotifyDocuments?: boolean;
+  discordNotifySettings?: boolean;
 }
 
 export interface Announcement {

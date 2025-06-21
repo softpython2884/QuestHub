@@ -79,7 +79,7 @@ export async function updateProjectAction(
   formData: FormData
 ): Promise<{ error?: string; errors?: Record<string, string[] | undefined>; message?: string; project?: Project }> {
   const session = await auth();
-  if (!session?.user?.uuid) {
+  if (!session?.user?.uuid || !session.user.name) {
      console.error("[updateProjectAction] Authentication required. No session user UUID.");
      return { error: "Authentication required." };
   }
@@ -114,6 +114,25 @@ export async function updateProjectAction(
     if (!updatedProject) {
       return { error: 'Failed to update project or project not found.' };
     }
+
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifySettings) {
+      const changedFields = [];
+      if (project.name !== updatedProject.name) changedFields.push(`Name: from "**${project.name}**" to "**${updatedProject.name}**"`);
+      if (project.description !== updatedProject.description) changedFields.push("Description updated");
+      if (changedFields.length > 0) {
+        await sendDiscordNotification(project.discordWebhookUrl, {
+          embeds: [{
+            title: "🛠️ Project Details Updated",
+            description: `**${session.user.name}** updated the project details:\n- ${changedFields.join('\n- ')}`,
+            color: 15105570, // Orange
+            timestamp: new Date().toISOString(),
+            footer: { text: `Project: ${updatedProject.name}` }
+          }]
+        });
+      }
+    }
+
+
     return { message: 'Project updated successfully!', project: updatedProject };
   } catch (error: any) {
     console.error('Failed to update project (server action):', error);
@@ -276,7 +295,7 @@ export async function fetchProjectMembersAction(projectUuid: string | undefined)
 
 export async function removeUserFromProjectAction(projectUuid: string, userUuidToRemove: string): Promise<{success?: boolean, error?: string, message?: string}> {
     const session = await auth();
-    if (!session?.user?.uuid) {
+    if (!session?.user?.uuid || !session.user.name) {
       console.error("[removeUserFromProjectAction] Authentication required. No session user UUID.");
       return { error: "Authentication required." };
     }
@@ -299,8 +318,19 @@ export async function removeUserFromProjectAction(projectUuid: string, userUuidT
             return { error: "Project owner cannot be removed. Transfer ownership first." };
         }
 
-        const success = await dbRemoveProjectMember(projectUuid, userUuidToRemove);
-        if (success) {
+        const removalResult = await dbRemoveProjectMember(projectUuid, userUuidToRemove);
+        if (removalResult.success) {
+            if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyMembers) {
+                await sendDiscordNotification(project.discordWebhookUrl, {
+                    embeds: [{
+                        title: "👤 Member Removed",
+                        description: `**${removalResult.userRemoved?.name || 'A user'}** was removed from the project by **${session.user.name}**.`,
+                        color: 15158332, // Red
+                        timestamp: new Date().toISOString(),
+                        footer: { text: `Project: ${project.name}` }
+                    }]
+                });
+            }
             return { success: true, message: "User removed from project successfully." };
         }
         return { error: "Failed to remove user from project." };
@@ -435,7 +465,7 @@ const UpdateTaskSchema = z.object({
 
 export async function updateTaskAction(prevState: UpdateTaskFormState, formData: FormData): Promise<UpdateTaskFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
+  if (!session?.user?.uuid || !session.user.name) {
     console.error("[updateTaskAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
@@ -468,6 +498,10 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
 
 
   try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    const oldTask = await dbGetTaskByUuid(taskUuid);
+    if (!project || !oldTask) return { error: "Project or task not found." };
+    
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
     console.log(`[updateTaskAction] User role check for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
 
@@ -500,6 +534,33 @@ export async function updateTaskAction(prevState: UpdateTaskFormState, formData:
     if (!updatedTask) {
       return { error: "Failed to update task."};
     }
+
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyTasks) {
+        const changedFields: string[] = [];
+        if (oldTask.status !== updatedTask.status) {
+            changedFields.push(`Status changed from **${oldTask.status}** to **${updatedTask.status}**`);
+        }
+        if (oldTask.todoListMarkdown !== updatedTask.todoListMarkdown) {
+            changedFields.push("Sub-tasks were modified.");
+        }
+        if (oldTask.title !== updatedTask.title) {
+            changedFields.push(`Title changed to **${updatedTask.title}**`);
+        }
+        
+        if (changedFields.length > 0) {
+            await sendDiscordNotification(project.discordWebhookUrl, {
+                embeds: [{
+                    title: `🔄 Task Updated: ${updatedTask.title}`,
+                    description: `**${session.user.name}** updated a task:\n- ${changedFields.join('\n- ')}`,
+                    color: 3447003, // Blue
+                    timestamp: new Date().toISOString(),
+                    footer: { text: `Project: ${project.name}` }
+                }]
+            });
+        }
+    }
+
+
     return { message: "Task updated successfully!", updatedTask };
   } catch (error: any) {
     console.error("Error updating task:", error);
@@ -769,7 +830,7 @@ export interface ToggleProjectUrgencyFormState {
 
 export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgencyFormState, formData: FormData): Promise<ToggleProjectUrgencyFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
+  if (!session?.user?.uuid || !session.user.name) {
     console.error("[toggleProjectUrgencyAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
@@ -791,6 +852,19 @@ export async function toggleProjectUrgencyAction(prevState: ToggleProjectUrgency
     if (!updatedProject) {
       return { error: "Failed to update project urgency." };
     }
+
+    if (updatedProject.discordWebhookUrl && updatedProject.discordNotificationsEnabled && updatedProject.discordNotifySettings) {
+        await sendDiscordNotification(updatedProject.discordWebhookUrl, {
+            embeds: [{
+                title: isUrgent ? "🔥 Project Marked as Urgent" : "Project No Longer Urgent",
+                description: `**${session.user.name}** updated the project status.`,
+                color: isUrgent ? 15158332 : 5763719,
+                timestamp: new Date().toISOString(),
+                footer: { text: `Project: ${updatedProject.name}` }
+            }]
+        });
+    }
+
     return { message: `Project urgency ${isUrgent ? 'set' : 'unset'}.`, project: updatedProject };
   } catch (error: any) {
     return { error: error.message || "An unexpected error occurred." };
@@ -805,7 +879,7 @@ export interface ToggleProjectVisibilityFormState {
 
 export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisibilityFormState, formData: FormData): Promise<ToggleProjectVisibilityFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
+  if (!session?.user?.uuid || !session.user.name) {
     console.error("[toggleProjectVisibilityAction] Authentication required. No session user UUID.");
     return { error: "Authentication required." };
   }
@@ -833,6 +907,18 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
     if (!updatedProjectInDb) {
       return { error: "Failed to update project visibility in FlowUp." };
     }
+     if (updatedProjectInDb.discordWebhookUrl && updatedProjectInDb.discordNotificationsEnabled && updatedProjectInDb.discordNotifySettings) {
+        await sendDiscordNotification(updatedProjectInDb.discordWebhookUrl, {
+            embeds: [{
+                title: isPrivate ? "🔒 Project is now Private" : "🌍 Project is now Public",
+                description: `**${session.user.name}** updated the project's visibility.`,
+                color: isPrivate ? 15105570 : 3447003,
+                timestamp: new Date().toISOString(),
+                footer: { text: `Project: ${updatedProjectInDb.name}` }
+            }]
+        });
+    }
+
 
     if (updatedProjectInDb.githubRepoUrl && updatedProjectInDb.githubRepoName) {
         const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
@@ -957,7 +1043,7 @@ const CreateDocumentSchema = z.object({
 
 export async function createDocumentAction(prevState: CreateDocumentFormState, formData: FormData): Promise<CreateDocumentFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) return { error: "Authentication required." };
+  if (!session?.user?.uuid || !session.user.name) return { error: "Authentication required." };
 
   const validatedFields = CreateDocumentSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
@@ -983,6 +1069,20 @@ export async function createDocumentAction(prevState: CreateDocumentFormState, f
       fileType: 'markdown',
       createdByUuid: session.user.uuid,
     });
+    
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (project?.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyDocuments) {
+      await sendDiscordNotification(project.discordWebhookUrl, {
+        embeds: [{
+          title: "📄 New Document Created",
+          description: `**${session.user.name}** created a new document titled **${createdDocument.title}**.`,
+          color: 8421504, // Gray
+          timestamp: new Date().toISOString(),
+          footer: { text: `Project: ${project.name}` }
+        }]
+      });
+    }
+
     return { message: "Document created successfully!", createdDocument };
   } catch (error: any) {
     console.error("Error creating document:", error);
@@ -1065,7 +1165,7 @@ export interface DeleteDocumentFormState {
 }
 export async function deleteDocumentAction(prevState: DeleteDocumentFormState, formData: FormData): Promise<DeleteDocumentFormState> {
     const session = await auth();
-    if (!session?.user?.uuid) return { error: "Authentication required." };
+    if (!session?.user?.uuid || !session.user.name) return { error: "Authentication required." };
 
     const documentUuid = formData.get('documentUuid') as string;
     const projectUuid = formData.get('projectUuid') as string;
@@ -1073,17 +1173,30 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
     if (!documentUuid) return { error: "Document UUID is required."};
 
     try {
-        if (projectUuid) {
-            const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-            if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
-                return { error: "You do not have permission to delete documents in this project." };
-            }
-        } else {
-             return { error: "Project context is required for permission check." };
+        const project = await dbGetProjectByUuid(projectUuid);
+        if (!project) return { error: "Project context not found." };
+        
+        const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+            return { error: "You do not have permission to delete documents in this project." };
         }
+        
+        const docToDelete = await getDocumentByUuid(documentUuid);
+        if (!docToDelete) return { error: "Document not found."};
 
         const success = await dbDeleteDocument(documentUuid);
         if (success) {
+             if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyDocuments) {
+                await sendDiscordNotification(project.discordWebhookUrl, {
+                    embeds: [{
+                        title: "🗑️ Document Deleted",
+                        description: `**${session.user.name}** deleted the document titled **${docToDelete.title}**.`,
+                        color: 15158332, // Red
+                        timestamp: new Date().toISOString(),
+                        footer: { text: `Project: ${project.name}` }
+                    }]
+                });
+            }
             return { message: "Document deleted successfully." };
         }
         return { error: "Failed to delete document." };
@@ -1944,6 +2057,8 @@ const updateDiscordSettingsSchema = z.object({
   discordNotifyTasks: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
   discordNotifyMembers: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
   discordNotifyAnnouncements: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+  discordNotifyDocuments: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+  discordNotifySettings: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
 });
 
 
@@ -1963,13 +2078,15 @@ export async function updateProjectDiscordSettingsAction(
         discordNotifyTasks: formData.get('discordNotifyTasks'),
         discordNotifyMembers: formData.get('discordNotifyMembers'),
         discordNotifyAnnouncements: formData.get('discordNotifyAnnouncements'),
+        discordNotifyDocuments: formData.get('discordNotifyDocuments'),
+        discordNotifySettings: formData.get('discordNotifySettings'),
     });
 
     if (!validatedFields.success) {
         return { error: "Invalid input: " + validatedFields.error.flatten().fieldErrors.discordWebhookUrl?.join(', ') };
     }
 
-    const { projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements } = validatedFields.data;
+    const { projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings } = validatedFields.data;
     
     try {
         const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
@@ -1977,7 +2094,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
@@ -2088,7 +2205,9 @@ export async function setupGithubWebhookAction(
 
     const updatedProject = await dbUpdateProjectWebhookDetails(project.uuid, newWebhook.id, webhookSecret);
     if (!updatedProject) {
-        return { error: "Webhook created on GitHub, but failed to save details in FlowUp." };
+        // Best effort to clean up if DB write fails
+        await octokit.rest.repos.deleteWebhook({ owner, repo, hook_id: newWebhook.id });
+        return { error: "Webhook created on GitHub, but failed to save details in FlowUp. The webhook on GitHub has been removed." };
     }
     
     return { success: true, message: `Webhook (ID: ${newWebhook.id}) successfully created on GitHub!`, project: updatedProject };
@@ -2096,9 +2215,11 @@ export async function setupGithubWebhookAction(
   } catch (error: any) {
     console.error("Error setting up GitHub webhook:", error);
     let errorMessage = error.message || "An unexpected error occurred.";
-    if (error.status === 422) { // Unprocessable Entity
-        if(error.message.includes("Hook already exists")) {
+    if (error.status === 422) {
+        if (error.message.includes("Hook already exists")) {
             errorMessage = "A webhook for this URL already exists on the repository. Please check your repository settings on GitHub.";
+        } else if (error.message.includes("not supported because it isn't reachable")) {
+            errorMessage = "GitHub couldn't reach your webhook URL. If you are developing locally, your `localhost` is not accessible from the public internet. Please use a tunneling service like ngrok to expose your local server, then update your NEXT_PUBLIC_APP_URL in the .env file.";
         } else {
              errorMessage = `Could not create webhook (422): ${error.message}. Check permissions and configuration.`;
         }

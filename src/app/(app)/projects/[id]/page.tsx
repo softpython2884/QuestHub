@@ -13,8 +13,8 @@ import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, Pr
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState, useCallback, startTransition, useRef, Suspense } from 'react'; // Corrected import
-import { useActionState } from 'react'; // Corrected import
+import { useEffect, useState, useCallback, startTransition, useRef, Suspense } from 'react';
+import { useActionState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -141,6 +141,8 @@ const discordSettingsFormSchema = z.object({
   discordNotifyTasks: z.boolean().default(true),
   discordNotifyMembers: z.boolean().default(true),
   discordNotifyAnnouncements: z.boolean().default(true),
+  discordNotifyDocuments: z.boolean().default(true),
+  discordNotifySettings: z.boolean().default(true),
 });
 type DiscordSettingsFormValues = z.infer<typeof discordSettingsFormSchema>;
 
@@ -247,7 +249,7 @@ function ProjectDetailPageContent() {
 
   const discordSettingsForm = useForm<DiscordSettingsFormValues>({
     resolver: zodResolver(discordSettingsFormSchema),
-    defaultValues: { discordWebhookUrl: '', discordNotificationsEnabled: true, discordNotifyTasks: true, discordNotifyMembers: true, discordNotifyAnnouncements: true },
+    defaultValues: { discordWebhookUrl: '', discordNotificationsEnabled: true, discordNotifyTasks: true, discordNotifyMembers: true, discordNotifyAnnouncements: true, discordNotifyDocuments: true, discordNotifySettings: true },
   });
 
 
@@ -454,6 +456,8 @@ function ProjectDetailPageContent() {
                         discordNotifyTasks: projectData.discordNotifyTasks ?? true,
                         discordNotifyMembers: projectData.discordNotifyMembers ?? true,
                         discordNotifyAnnouncements: projectData.discordNotifyAnnouncements ?? true,
+                        discordNotifyDocuments: projectData.discordNotifyDocuments ?? true,
+                        discordNotifySettings: projectData.discordNotifySettings ?? true,
                     });
                     setProjectReadmeContent(projectData.readmeContent || '');
 
@@ -791,6 +795,8 @@ function ProjectDetailPageContent() {
         discordNotifyTasks: project.discordNotifyTasks ?? true,
         discordNotifyMembers: project.discordNotifyMembers ?? true,
         discordNotifyAnnouncements: project.discordNotifyAnnouncements ?? true,
+        discordNotifyDocuments: project.discordNotifyDocuments ?? true,
+        discordNotifySettings: project.discordNotifySettings ?? true,
       });
     }
   }, [project, editProjectForm, discordSettingsForm]);
@@ -1248,6 +1254,8 @@ function ProjectDetailPageContent() {
     formData.append('discordNotifyTasks', String(values.discordNotifyTasks));
     formData.append('discordNotifyMembers', String(values.discordNotifyMembers));
     formData.append('discordNotifyAnnouncements', String(values.discordNotifyAnnouncements));
+    formData.append('discordNotifyDocuments', String(values.discordNotifyDocuments));
+    formData.append('discordNotifySettings', String(values.discordNotifySettings));
 
     startTransition(() => {
         updateDiscordSettingsFormAction(formData);
@@ -2453,13 +2461,19 @@ function ProjectDetailPageContent() {
                             />
                             <div className="space-y-2 pl-4 border-l-2 ml-1">
                                <FormField control={discordSettingsForm.control} name="discordNotifyTasks" render={({ field }) => (
-                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Task Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Task Notifications (Creations, Updates)</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
                                 )}/>
                                 <FormField control={discordSettingsForm.control} name="discordNotifyMembers" render={({ field }) => (
-                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Member Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Member Notifications (Invites, Removals)</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
                                 )}/>
                                 <FormField control={discordSettingsForm.control} name="discordNotifyAnnouncements" render={({ field }) => (
                                   <FormItem className="flex flex-row items-center justify-between"><FormLabel>Announcement Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                )}/>
+                                <FormField control={discordSettingsForm.control} name="discordNotifyDocuments" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Document Notifications (Creations, Deletions)</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                )}/>
+                                <FormField control={discordSettingsForm.control} name="discordNotifySettings" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Project Setting Notifications (Urgency, Visibility)</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
                                 )}/>
                             </div>
 

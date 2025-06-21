@@ -311,6 +311,8 @@ export async function getDbConnection() {
       discordNotifyTasks BOOLEAN DEFAULT TRUE,
       discordNotifyMembers BOOLEAN DEFAULT TRUE,
       discordNotifyAnnouncements BOOLEAN DEFAULT TRUE,
+      discordNotifyDocuments BOOLEAN DEFAULT TRUE,
+      discordNotifySettings BOOLEAN DEFAULT TRUE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -678,7 +680,7 @@ export async function createProject(name: string, description: string | undefine
 
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
-  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, discordNotificationsEnabled: 0 | 1, discordNotifyTasks: 0 | 1, discordNotifyMembers: 0 | 1, discordNotifyAnnouncements: 0 | 1 }>(
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, discordNotificationsEnabled: 0 | 1, discordNotifyTasks: 0 | 1, discordNotifyMembers: 0 | 1, discordNotifyAnnouncements: 0 | 1, discordNotifyDocuments: 0 | 1, discordNotifySettings: 0 | 1 }>(
     'SELECT * FROM projects WHERE uuid = ?',
     uuid
   );
@@ -691,6 +693,8 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
     discordNotifyTasks: !!projectRow.discordNotifyTasks,
     discordNotifyMembers: !!projectRow.discordNotifyMembers,
     discordNotifyAnnouncements: !!projectRow.discordNotifyAnnouncements,
+    discordNotifyDocuments: !!projectRow.discordNotifyDocuments,
+    discordNotifySettings: !!projectRow.discordNotifySettings,
   };
 }
 
@@ -773,7 +777,9 @@ export async function updateProjectDiscordSettings(
   enabled: boolean,
   notifyTasks?: boolean,
   notifyMembers?: boolean,
-  notifyAnnouncements?: boolean
+  notifyAnnouncements?: boolean,
+  notifyDocuments?: boolean,
+  notifySettings?: boolean
 ): Promise<Project | null> {
     const connection = await getDbConnection();
     const now = new Date().toISOString();
@@ -792,6 +798,14 @@ export async function updateProjectDiscordSettings(
     if (notifyAnnouncements !== undefined) {
         setClauses += ', discordNotifyAnnouncements = ?';
         params.push(notifyAnnouncements ? 1 : 0);
+    }
+    if (notifyDocuments !== undefined) {
+        setClauses += ', discordNotifyDocuments = ?';
+        params.push(notifyDocuments ? 1 : 0);
+    }
+    if (notifySettings !== undefined) {
+        setClauses += ', discordNotifySettings = ?';
+        params.push(notifySettings ? 1 : 0);
     }
     params.push(projectUuid);
 
@@ -908,20 +922,23 @@ export async function getProjectMembers(projectUuid: string): Promise<ProjectMem
   }));
 }
 
-export async function removeProjectMember(projectUuid: string, userUuid: string): Promise<boolean> {
+export async function removeProjectMember(projectUuid: string, userUuid: string): Promise<{ success: boolean; userRemoved?: User | null }> {
   const connection = await getDbConnection();
   const project = await getProjectByUuid(projectUuid);
   if (project?.ownerUuid === userUuid) {
       console.warn("Attempted to remove project owner. This action should be handled carefully, e.g., by transferring ownership first.");
-      return false;
+      return { success: false };
   }
+  
+  const userRemoved = await getUserByUuid(userUuid);
 
   const result = await connection.run(
     'DELETE FROM project_members WHERE projectUuid = ? AND userUuid = ?',
     projectUuid,
     userUuid
   );
-  return result.changes ? result.changes > 0 : false;
+  
+  return { success: result.changes ? result.changes > 0 : false, userRemoved: userRemoved || null };
 }
 
 
