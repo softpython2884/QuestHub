@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, Mail, KeyRound } from "lucide-react";
+import { AlertTriangle, Mail, KeyRound, Github, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -44,7 +45,7 @@ export function LoginForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         {authError && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -110,7 +111,28 @@ export function LoginForm() {
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? "Signing In..." : "Sign In"}
         </Button>
-        <p className="text-center text-sm text-muted-foreground">
+        
+        <div className="relative my-2">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              Or continue with
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Button variant="outline" type="button" onClick={() => window.location.href='/api/auth/github/oauth/login'}>
+            <Github className="mr-2 h-4 w-4" /> GitHub
+          </Button>
+          <Button variant="outline" type="button" onClick={() => window.location.href='/api/auth/discord/oauth/login'}>
+            <MessageSquare className="mr-2 h-4 w-4" /> Discord
+          </Button>
+        </div>
+
+        <p className="text-center text-sm text-muted-foreground !mt-6">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="font-medium text-primary hover:underline">
             Sign up
