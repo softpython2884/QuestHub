@@ -85,7 +85,8 @@ export interface Task {
   isPinned?: boolean;
 }
 
-export interface Document {
+// Represents a document within a specific project
+export interface ProjectDocument {
   id: string;
   uuid: string;
   title: string;
@@ -97,6 +98,19 @@ export interface Document {
   createdByName?: string;
   creatorAvatar?: string;
   isPinned?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Represents a document in the global documentation section
+export interface GlobalDocument {
+  id: string;
+  uuid: string;
+  title: string;
+  content?: string;
+  authorUuid: string;
+  authorName?: string;
+  authorAvatar?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,7 +148,8 @@ export interface Project {
   discordNotifySettings?: boolean;
 }
 
-export interface Announcement {
+// Represents an announcement within a specific project
+export interface ProjectAnnouncement {
   id: string;
   uuid: string;
   title: string;
@@ -143,7 +158,20 @@ export interface Announcement {
   authorName?: string;
   authorAvatar?: string;
   projectUuid: string;
-  isGlobal: boolean;
+  isGlobal: boolean; // Kept for legacy, but we'll use a separate table for true global announcements
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Represents an announcement in the global announcements section
+export interface GlobalAnnouncement {
+  id: string;
+  uuid: string;
+  title: string;
+  content: string;
+  authorUuid: string;
+  authorName?: string;
+  authorAvatar?: string;
   createdAt: string;
   updatedAt: string;
 }

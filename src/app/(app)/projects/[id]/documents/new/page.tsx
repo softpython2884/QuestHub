@@ -67,6 +67,21 @@ export default function NewDocumentPage() {
     router.push(`/projects/${projectUuid}?tab=documents`);
   };
 
+  const handleSave = async (data: { title: string, content: string }) => {
+    const formData = new FormData();
+    formData.append('projectUuid', projectUuid);
+    formData.append('title', data.title);
+    formData.append('content', data.content);
+    
+    // @ts-ignore
+    const result = await createDocumentAction(null, formData);
+
+    if (result.error) {
+      return { error: result.error };
+    }
+    return { savedEntity: result.createdDocument };
+  };
+
   if (authLoading || isLoadingPermissions) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -97,9 +112,12 @@ export default function NewDocumentPage() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Project Documents
         </Button>
       <DocumentEditor
-        projectUuid={projectUuid}
+        onSave={handleSave}
         onSaveSuccess={(docUuid) => router.push(`/projects/${projectUuid}?tab=documents`)}
         onCancel={handleCancel}
+        entityName="Project Document"
+        saveButtonText="Save Changes"
+        createButtonText="Create Document"
       />
     </div>
   );

@@ -7,7 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { fetchDocumentAction, updateDocumentAction, fetchProjectMemberRoleAction, fetchProjectAction } from '../../../actions'; 
 import { useEffect, useState } from 'react';
-import type { ProjectDocumentType, Project } from '@/types';
+import type { ProjectDocument, Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -19,7 +19,7 @@ export default function EditDocumentPage() {
   const projectUuid = params.id as string;
   const documentUuid = params.docId as string;
 
-  const [document, setDocument] = useState<ProjectDocumentType | null>(null);
+  const [document, setDocument] = useState<ProjectDocument | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
   const [canEdit, setCanEdit] = useState(false);
@@ -84,6 +84,22 @@ export default function EditDocumentPage() {
     router.push(`/projects/${projectUuid}?tab=documents`);
   };
 
+  const handleSave = async (data: { uuid?: string, title: string, content: string }) => {
+    const formData = new FormData();
+    formData.append('projectUuid', projectUuid);
+    formData.append('documentUuid', data.uuid || '');
+    formData.append('title', data.title);
+    formData.append('content', data.content);
+    
+    // @ts-ignore
+    const result = await updateDocumentAction(null, formData);
+    
+    if (result.error) {
+      return { error: result.error };
+    }
+    return { savedEntity: result.updatedDocument };
+  };
+
 
   if (authLoading || isLoadingDocument) {
     return (
@@ -130,10 +146,13 @@ export default function EditDocumentPage() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Project Documents
         </Button>
       <DocumentEditor
-        projectUuid={projectUuid}
-        document={document} 
+        initialData={document}
+        onSave={handleSave}
         onSaveSuccess={(docUuid) => router.push(`/projects/${projectUuid}?tab=documents`)}
         onCancel={handleCancel}
+        entityName="Project Document"
+        saveButtonText='Save Changes'
+        createButtonText='Create Document'
       />
     </div>
   );

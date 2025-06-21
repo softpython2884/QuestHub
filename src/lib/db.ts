@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -361,6 +361,17 @@ export async function getDbConnection() {
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
       FOREIGN KEY (createdByUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
+    
+    CREATE TABLE IF NOT EXISTS global_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT,
+      authorUuid TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
 
     CREATE TABLE IF NOT EXISTS project_announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -375,6 +386,17 @@ export async function getDbConnection() {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
+      FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS global_announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      authorUuid TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
       FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
@@ -1195,15 +1217,15 @@ export async function deleteTask(taskUuid: string): Promise<boolean> {
 }
 
 
-// Document DB Functions
+// Document DB Functions (Project-specific)
 export async function createDocument(data: {
   projectUuid: string;
   title: string;
   content?: string;
-  fileType: ProjectDocumentType['fileType'];
+  fileType: ProjectDocument['fileType'];
   filePath?: string;
   createdByUuid: string;
-}): Promise<ProjectDocumentType> {
+}): Promise<ProjectDocument> {
   const connection = await getDbConnection();
   const docUuid = uuidv4();
   const now = new Date().toISOString();
@@ -1232,9 +1254,9 @@ export async function createDocument(data: {
   };
 }
 
-export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocumentType[]> {
+export async function getDocumentsForProject(projectUuid: string): Promise<ProjectDocument[]> {
   const connection = await getDbConnection();
-  const docs = await connection.all<Array<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>>(
+  const docs = await connection.all<Array<ProjectDocument & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>>(
     `SELECT pd.uuid, pd.projectUuid, pd.title, pd.content, pd.fileType, pd.filePath, pd.createdByUuid, u.name as createdByName, u.avatar as creatorAvatar, pd.isPinned, pd.createdAt, pd.updatedAt, pd.id
      FROM project_documents pd
      JOIN users u ON pd.createdByUuid = u.uuid
@@ -1244,9 +1266,9 @@ export async function getDocumentsForProject(projectUuid: string): Promise<Proje
   return docs.map(doc => ({ ...doc, id: doc.id.toString(), isPinned: !!doc.isPinned }));
 }
 
-export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentType | null> {
+export async function getDocumentByUuid(uuid: string): Promise<ProjectDocument | null> {
   const connection = await getDbConnection();
-  const doc = await connection.get<ProjectDocumentType & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>(
+  const doc = await connection.get<ProjectDocument & { isPinned: 0 | 1; createdByName: string; creatorAvatar?: string }>(
     `SELECT pd.uuid, pd.projectUuid, pd.title, pd.content, pd.fileType, pd.filePath, pd.createdByUuid, u.name as createdByName, u.avatar as creatorAvatar, pd.isPinned, pd.createdAt, pd.updatedAt, pd.id
      FROM project_documents pd
      JOIN users u ON pd.createdByUuid = u.uuid
@@ -1257,7 +1279,7 @@ export async function getDocumentByUuid(uuid: string): Promise<ProjectDocumentTy
   return { ...doc, id: doc.id.toString(), isPinned: !!doc.isPinned };
 }
 
-export async function updateDocumentContent(docUuid: string, title: string, content?: string): Promise<ProjectDocumentType | null> {
+export async function updateDocumentContent(docUuid: string, title: string, content?: string): Promise<ProjectDocument | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
 
@@ -1338,5 +1360,139 @@ export async function getProjectAnnouncements(projectUuid: string): Promise<Proj
 export async function deleteProjectAnnouncement(announcementUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   const result = await connection.run('DELETE FROM project_announcements WHERE uuid = ?', announcementUuid);
+  return result.changes ? result.changes > 0 : false;
+}
+
+
+// Global Announcements
+export async function createGlobalAnnouncement(data: {
+  authorUuid: string;
+  title: string;
+  content: string;
+}): Promise<GlobalAnnouncement> {
+  const connection = await getDbConnection();
+  const announcementUuid = uuidv4();
+  const now = new Date().toISOString();
+  const authorDetails = await getUserByUuid(data.authorUuid);
+
+  const result = await connection.run(
+    'INSERT INTO global_announcements (uuid, title, content, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    announcementUuid, data.title, data.content, data.authorUuid, now, now
+  );
+  if (!result.lastID) throw new Error('Global announcement creation failed.');
+
+  return {
+    id: result.lastID!.toString(),
+    uuid: announcementUuid,
+    title: data.title,
+    content: data.content,
+    authorUuid: data.authorUuid,
+    authorName: authorDetails?.name,
+    authorAvatar: authorDetails?.avatar,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function getGlobalAnnouncements(): Promise<GlobalAnnouncement[]> {
+  const connection = await getDbConnection();
+  const announcements = await connection.all<Array<Omit<GlobalAnnouncement, 'authorName'|'authorAvatar'> & {id: number}>>(
+    `SELECT ga.* FROM global_announcements ga ORDER BY ga.createdAt DESC`
+  );
+
+  const results: GlobalAnnouncement[] = [];
+  for (const ann of announcements) {
+    const author = await getUserByUuid(ann.authorUuid);
+    results.push({
+      ...ann,
+      id: ann.id.toString(),
+      authorName: author?.name,
+      authorAvatar: author?.avatar,
+    });
+  }
+  return results;
+}
+
+export async function deleteGlobalAnnouncement(announcementUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  const result = await connection.run('DELETE FROM global_announcements WHERE uuid = ?', announcementUuid);
+  return result.changes ? result.changes > 0 : false;
+}
+
+
+// Global Documents
+export async function createGlobalDocument(data: {
+  authorUuid: string;
+  title: string;
+  content: string;
+}): Promise<GlobalDocument> {
+  const connection = await getDbConnection();
+  const docUuid = uuidv4();
+  const now = new Date().toISOString();
+  const author = await getUserByUuid(data.authorUuid);
+
+  const result = await connection.run(
+    'INSERT INTO global_documents (uuid, title, content, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    docUuid, data.title, data.content, data.authorUuid, now, now
+  );
+  if (!result.lastID) throw new Error('Global document creation failed.');
+
+  return {
+    id: result.lastID.toString(),
+    uuid: docUuid,
+    title: data.title,
+    content: data.content,
+    authorUuid: data.authorUuid,
+    authorName: author?.name,
+    authorAvatar: author?.avatar,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
+  const connection = await getDbConnection();
+  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar'>>>('SELECT * FROM global_documents ORDER BY updatedAt DESC');
+  
+  const results: GlobalDocument[] = [];
+  for (const doc of documents) {
+    const author = await getUserByUuid(doc.authorUuid);
+    results.push({
+      ...doc,
+      authorName: author?.name,
+      authorAvatar: author?.avatar,
+    });
+  }
+  return results;
+}
+
+export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocument | null> {
+  const connection = await getDbConnection();
+  const doc = await connection.get<Omit<GlobalDocument, 'authorName' | 'authorAvatar'>>('SELECT * FROM global_documents WHERE uuid = ?', uuid);
+  if (!doc) return null;
+
+  const author = await getUserByUuid(doc.authorUuid);
+  return {
+    ...doc,
+    authorName: author?.name,
+    authorAvatar: author?.avatar,
+  };
+}
+
+export async function updateGlobalDocument(uuid: string, title: string, content: string): Promise<GlobalDocument | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  
+  const result = await connection.run(
+    'UPDATE global_documents SET title = ?, content = ?, updatedAt = ? WHERE uuid = ?',
+    title, content, now, uuid
+  );
+  if (result.changes === 0) return null;
+  return getGlobalDocumentByUuid(uuid);
+}
+
+export async function deleteGlobalDocument(uuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  const result = await connection.run('DELETE FROM global_documents WHERE uuid = ?', uuid);
   return result.changes ? result.changes > 0 : false;
 }

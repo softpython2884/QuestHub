@@ -14,11 +14,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import type { ProjectDocumentType } from '@/types';
-import { generateDocumentContent, type GenerateDocumentContentInput } from '@/ai/flows/generate-document-content';
+import { generateDocumentContent } from '@/ai/flows/generate-document-content';
 import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createDocumentAction, updateDocumentAction } from '@/app/(app)/projects/[id]/actions';
 
 const documentEditorFormSchema = z.object({
   title: z.string().min(1, 'Title is required.').max(255),
@@ -28,10 +26,13 @@ const documentEditorFormSchema = z.object({
 type DocumentEditorFormValues = z.infer<typeof documentEditorFormSchema>;
 
 interface DocumentEditorProps {
-  projectUuid: string;
-  document?: ProjectDocumentType | null;
+  initialData?: { uuid?: string, title: string; content?: string | null };
+  onSave: (data: { uuid?: string; title: string; content: string }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
   onSaveSuccess: (documentUuid: string) => void;
   onCancel: () => void;
+  entityName: string;
+  saveButtonText: string;
+  createButtonText: string;
 }
 
 interface MarkdownTool {
@@ -41,10 +42,13 @@ interface MarkdownTool {
 }
 
 export function DocumentEditor({
-  projectUuid,
-  document,
+  initialData,
+  onSave,
   onSaveSuccess,
   onCancel,
+  entityName,
+  saveButtonText,
+  createButtonText,
 }: DocumentEditorProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,8 +61,8 @@ export function DocumentEditor({
   const form = useForm<DocumentEditorFormValues>({
     resolver: zodResolver(documentEditorFormSchema),
     defaultValues: {
-      title: document?.title || '',
-      content: document?.content || '',
+      title: initialData?.title || '',
+      content: initialData?.content || '',
     },
   });
 
@@ -66,13 +70,11 @@ export function DocumentEditor({
   const contentField = form.register('content');
 
   useEffect(() => {
-    if (document) {
-      form.reset({
-        title: document.title,
-        content: document.content || '',
-      });
-    }
-  }, [document, form]);
+    form.reset({
+      title: initialData?.title || '',
+      content: initialData?.content || '',
+    });
+  }, [initialData, form]);
 
   const applyMarkdownSyntax = (
     syntaxStart: string,
@@ -135,31 +137,20 @@ export function DocumentEditor({
 
   const onSubmit = async (data: DocumentEditorFormValues) => {
     setIsSubmitting(true);
-    // AI check for API key risk removed from here
-
-    const formData = new FormData();
-    formData.append('projectUuid', projectUuid);
-    formData.append('title', data.title);
-    formData.append('content', data.content || '');
-
-    let result;
-    if (document?.uuid) {
-      formData.append('documentUuid', document.uuid);
-      // @ts-ignore
-      result = await updateDocumentAction(null, formData);
-    } else {
-      // @ts-ignore
-      result = await createDocumentAction(null, formData);
-    }
+    
+    const result = await onSave({ 
+      uuid: initialData?.uuid,
+      title: data.title,
+      content: data.content || '',
+    });
 
     setIsSubmitting(false);
 
     if (result.error) {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
-    } else if (result.createdDocument || result.updatedDocument) {
-      const savedDoc = result.createdDocument || result.updatedDocument;
-      toast({ title: 'Success', description: `Document "${savedDoc.title}" ${document?.uuid ? 'updated' : 'created'}.` });
-      onSaveSuccess(savedDoc.uuid);
+    } else if (result.savedEntity) {
+      toast({ title: 'Success', description: `${entityName} "${result.savedEntity.title}" saved.` });
+      onSaveSuccess(result.savedEntity.uuid);
     } else {
       toast({ variant: 'destructive', title: 'Error', description: 'An unknown error occurred.' });
     }
@@ -197,7 +188,7 @@ export function DocumentEditor({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
                 <CardTitle className="text-2xl font-headline">
-                {document ? 'Edit Document' : 'Create New Markdown Document'}
+                {initialData ? `Edit ${entityName}` : `Create New ${entityName}`}
                 </CardTitle>
                 <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
             </div>
@@ -303,7 +294,7 @@ export function DocumentEditor({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {document ? 'Save Changes' : 'Create Document'}
+              {initialData ? saveButtonText : createButtonText}
             </Button>
           </div>
         </form>
