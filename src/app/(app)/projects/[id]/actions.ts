@@ -1182,7 +1182,7 @@ export async function deleteDocumentAction(prevState: DeleteDocumentFormState, f
             return { error: "You do not have permission to delete documents in this project." };
         }
         
-        const docToDelete = await getDocumentByUuid(documentUuid);
+        const docToDelete = await dbGetDocumentByUuid(documentUuid);
         if (!docToDelete) return { error: "Document not found."};
 
         const success = await dbDeleteDocument(documentUuid);
@@ -2095,7 +2095,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
@@ -2309,7 +2309,7 @@ export async function duplicateProjectAction(
       });
     }
 
-    let finalProject = await getProjectByUuid(newProject.uuid);
+    let finalProject = await dbGetProjectByUuid(newProject.uuid);
     if (!finalProject) throw new Error("Failed to fetch duplicated project after creation.");
 
     if (forkGithubRepo && originalProject.githubRepoName) {
