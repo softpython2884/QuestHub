@@ -3,24 +3,36 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, Search, Filter, FolderKanban, Flame } from "lucide-react";
+import { PlusCircle, Search, Filter, FolderKanban, Flame, MoreHorizontal, Copy, Link as LinkIcon, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState, useCallback } from "react";
-import type { Project } from "@/types";
+import { useEffect, useState, useCallback, useActionState } from "react";
+import type { Project, DuplicateProjectFormState } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { fetchProjectsAction } from "./actions";
+import { duplicateProjectAction } from "./[id]/actions";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 
 export default function ProjectsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [projectToDuplicate, setProjectToDuplicate] = useState<Project | null>(null);
+  const [duplicateFormState, duplicateFormAction, isDuplicating] = useActionState(duplicateProjectAction, { message: "", error: ""});
+
 
   const loadProjects = useCallback(async () => {
     if (user && !authLoading) {
@@ -44,6 +56,19 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  useEffect(() => {
+    if (!isDuplicating && duplicateFormState) {
+        if (duplicateFormState.message && !duplicateFormState.error) {
+            toast({ title: "Success!", description: duplicateFormState.message });
+            setProjectToDuplicate(null); // Close dialog
+            loadProjects(); // Refresh the list
+        }
+        if (duplicateFormState.error) {
+            toast({ variant: "destructive", title: "Duplication Error", description: duplicateFormState.error });
+        }
+    }
+  }, [duplicateFormState, isDuplicating, toast, loadProjects]);
 
   if (authLoading && isLoadingProjects) { 
     return (
@@ -150,35 +175,94 @@ export default function ProjectsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredProjects.map((project) => (
-                <Card 
-                  key={project.uuid} 
-                  className={cn(
-                    "hover:shadow-lg transition-shadow flex flex-col",
-                    project.isUrgent && "border-destructive ring-1 ring-destructive"
-                  )}
-                >
-                  <CardHeader className="flex-grow">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="hover:text-primary">
-                        <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
-                      </CardTitle>
-                      {project.isUrgent && <Flame className="h-5 w-5 text-destructive flex-shrink-0" />}
-                    </div>
-                    <CardDescription className="h-12 overflow-hidden text-ellipsis line-clamp-2"> 
-                      {project.description || "No description provided."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                       <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : 'Other'}</span></p>
-                      <p>Updated: <span className="font-medium text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span></p>
-                      <p>Status: <span className={cn("font-medium", project.isPrivate ? "text-foreground" : "text-green-600")}>{project.isPrivate ? 'Private' : 'Public'}</span></p>
-                    </div>
-                    <Button variant="outline" size="sm" className="w-full mt-3" asChild>
-                       <Link href={`/projects/${project.uuid}`}>View Details</Link>
-                    </Button>
-                  </CardContent>
-                </Card>
+                <Dialog key={project.uuid} open={projectToDuplicate?.uuid === project.uuid} onOpenChange={(open) => !open && setProjectToDuplicate(null)}>
+                  <Card 
+                    className={cn(
+                      "hover:shadow-lg transition-shadow flex flex-col",
+                      project.isUrgent && "border-destructive ring-1 ring-destructive"
+                    )}
+                  >
+                    <CardHeader className="flex-grow">
+                      <div className="flex justify-between items-start">
+                        <CardTitle className="hover:text-primary">
+                          <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
+                        </CardTitle>
+                        {project.isUrgent && <Flame className="h-5 w-5 text-destructive flex-shrink-0" />}
+                      </div>
+                      <CardDescription className="h-12 overflow-hidden text-ellipsis line-clamp-2"> 
+                        {project.description || "No description provided."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : 'Other'}</span></p>
+                        <p>Updated: <span className="font-medium text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span></p>
+                        <p>Status: <span className={cn("font-medium", project.isPrivate ? "text-foreground" : "text-green-600")}>{project.isPrivate ? 'Private' : 'Public'}</span></p>
+                      </div>
+                       <div className="mt-3">
+                         <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="w-full">
+                                    Actions <ChevronDown className="ml-auto h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem asChild>
+                                    <Link href={`/projects/${project.uuid}`}>
+                                        <FolderKanban className="mr-2 h-4 w-4"/>
+                                        <span>View Details</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => navigator.clipboard.writeText(`${window.location.origin}/projects/${project.uuid}`)}>
+                                    <LinkIcon className="mr-2 h-4 w-4"/>
+                                    <span>Copy Link</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DialogTrigger asChild>
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setProjectToDuplicate(project); }}>
+                                        <Copy className="mr-2 h-4 w-4"/>
+                                        <span>Duplicate</span>
+                                    </DropdownMenuItem>
+                                </DialogTrigger>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                       </div>
+                    </CardContent>
+                  </Card>
+                   <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Duplicate Project: {project.name}</DialogTitle>
+                            <DialogDescription>
+                                This will create a new project with a copy of all tasks, documents, and settings. Members and integrations will not be copied.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form action={duplicateFormAction}>
+                            <input type="hidden" name="originalProjectUuid" value={project.uuid} />
+                            <div className="space-y-4 my-4">
+                                {project.githubRepoUrl && (
+                                    <div className="flex items-start space-x-3 rounded-md border p-3">
+                                        <Checkbox id={`fork-repo-${project.uuid}`} name="forkGithubRepo" />
+                                        <div className="grid gap-1.5 leading-none">
+                                            <Label htmlFor={`fork-repo-${project.uuid}`}>
+                                                Also fork the GitHub repository
+                                            </Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                This will fork <span className="font-mono bg-muted/50 px-1 py-0.5 rounded text-xs">{project.githubRepoName}</span> to your GitHub account. Requires a connected GitHub account.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <DialogClose asChild><Button type="button" variant="ghost" disabled={isDuplicating}>Cancel</Button></DialogClose>
+                                <Button type="submit" disabled={isDuplicating}>
+                                    {isDuplicating && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Duplicate Project
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
               ))}
             </div>
           )}
@@ -187,4 +271,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-

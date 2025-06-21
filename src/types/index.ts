@@ -181,3 +181,9 @@ export interface DiscordWebhookPayload {
     avatar_url?: string;
     embeds?: DiscordEmbed[];
 }
+
+export interface DuplicateProjectFormState {
+  message?: string;
+  error?: string;
+  duplicatedProject?: Project;
+}

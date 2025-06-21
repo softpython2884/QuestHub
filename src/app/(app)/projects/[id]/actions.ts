@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User } from '@/types';
+import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState } from '@/types';
 import {
   getProjectByUuid as dbGetProjectByUuid,
   getUserByUuid as dbGetUserByUuid,
@@ -39,6 +39,7 @@ import {
   updateProjectDiscordSettings as dbUpdateProjectDiscordSettings,
   deleteProject as dbDeleteProject,
   updateProjectWebhookDetails as dbUpdateProjectWebhookDetails,
+  createProject as dbCreateProject,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -2227,5 +2228,113 @@ export async function setupGithubWebhookAction(
         errorMessage = "Repository not found. Check that the linked repository exists and you have access.";
     }
     return { error: errorMessage };
+  }
+}
+
+const DuplicateProjectSchema = z.object({
+  originalProjectUuid: z.string().uuid(),
+  forkGithubRepo: z.enum(['on', 'off']).transform(val => val === 'on').optional(),
+});
+
+export async function duplicateProjectAction(
+  prevState: DuplicateProjectFormState,
+  formData: FormData
+): Promise<DuplicateProjectFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+  const newOwnerUuid = session.user.uuid;
+
+  const validatedFields = DuplicateProjectSchema.safeParse({
+    originalProjectUuid: formData.get('originalProjectUuid'),
+    forkGithubRepo: formData.get('forkGithubRepo') || 'off',
+  });
+
+  if (!validatedFields.success) {
+    return { error: "Invalid input for duplication." };
+  }
+
+  const { originalProjectUuid, forkGithubRepo } = validatedFields.data;
+
+  try {
+    const originalProject = await dbGetProjectByUuid(originalProjectUuid);
+    if (!originalProject) {
+      return { error: "Original project not found." };
+    }
+
+    const memberRole = await dbGetProjectMemberRole(originalProjectUuid, newOwnerUuid);
+    if (!originalProject.isPrivate && !memberRole) {
+      // Allow duplication of public projects by non-members
+    } else if (!memberRole) {
+      return { error: "You do not have permission to duplicate this private project." };
+    }
+
+    const newProjectName = `Copy of ${originalProject.name}`;
+    const newProject = await dbCreateProject(newProjectName, originalProject.description, newOwnerUuid);
+
+    await dbUpdateProjectReadme(newProject.uuid, originalProject.readmeContent || '');
+
+    const originalTasks = await dbGetTasksForProject(originalProjectUuid);
+    for (const task of originalTasks) {
+      await dbCreateTask({
+        projectUuid: newProject.uuid,
+        title: task.title,
+        description: task.description,
+        todoListMarkdown: task.todoListMarkdown,
+        status: task.status,
+        assigneeUuid: null,
+        tagsString: task.tags.map(t => t.name).join(', '),
+      });
+    }
+
+    const originalDocs = await dbGetDocumentsForProject(originalProjectUuid);
+    for (const doc of originalDocs) {
+      await dbCreateDocument({
+        projectUuid: newProject.uuid,
+        title: doc.title,
+        content: doc.content,
+        fileType: doc.fileType,
+        createdByUuid: newOwnerUuid,
+      });
+    }
+    
+    const originalAnnouncements = await dbGetProjectAnnouncements(originalProjectUuid);
+    for (const ann of originalAnnouncements) {
+      await dbCreateProjectAnnouncement({
+        projectUuid: newProject.uuid,
+        authorUuid: newOwnerUuid,
+        title: ann.title,
+        content: ann.content,
+      });
+    }
+
+    let finalProject = await getProjectByUuid(newProject.uuid);
+    if (!finalProject) throw new Error("Failed to fetch duplicated project after creation.");
+
+    if (forkGithubRepo && originalProject.githubRepoName) {
+      const newOwnerToken = await dbGetUserGithubOAuthToken(newOwnerUuid);
+      if (!newOwnerToken?.accessToken) {
+        return { error: "Your GitHub account is not connected. The project was duplicated in FlowUp, but the repository could not be forked.", duplicatedProject: finalProject };
+      }
+
+      try {
+        const octokit = new Octokit({ auth: newOwnerToken.accessToken });
+        const [owner, repo] = originalProject.githubRepoName.split('/');
+        const forkResponse = await octokit.rest.repos.createFork({ owner, repo });
+        
+        const forkedRepo = forkResponse.data;
+        finalProject = await dbUpdateProjectGithubRepo(newProject.uuid, forkedRepo.html_url, forkedRepo.full_name);
+
+      } catch (githubError: any) {
+        return { error: `FlowUp project duplicated, but failed to fork GitHub repo: ${githubError.message}`, duplicatedProject: finalProject };
+      }
+    }
+
+    return { message: "Project duplicated successfully!", duplicatedProject: finalProject };
+
+  } catch (error: any) {
+    console.error("Error duplicating project:", error);
+    return { error: error.message || "An unexpected error occurred during duplication." };
   }
 }
