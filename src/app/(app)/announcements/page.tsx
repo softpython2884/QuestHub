@@ -1,6 +1,10 @@
+
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Megaphone, PlusCircle } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Mock data for announcements
 const mockAnnouncements = [
@@ -11,6 +15,8 @@ const mockAnnouncements = [
 
 
 export default function AnnouncementsPage() {
+  const { user } = useAuth();
+
   return (
     <div className="space-y-6">
        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -18,10 +24,11 @@ export default function AnnouncementsPage() {
           <h1 className="text-3xl font-headline font-semibold">Announcements</h1>
           <p className="text-muted-foreground">Stay updated with the latest news and updates.</p>
         </div>
-        {/* This button should be visible only to admins/managers */}
-        <Button>
-          <PlusCircle className="mr-2 h-5 w-5" /> Create Announcement
-        </Button>
+        {user?.role === 'admin' && (
+          <Button>
+            <PlusCircle className="mr-2 h-5 w-5" /> Create Announcement
+          </Button>
+        )}
       </div>
 
       <Card>

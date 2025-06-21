@@ -1374,8 +1374,8 @@ function ProjectDetailPageContent() {
                 {projectTags.length > 5 && <Badge variant="outline">+{projectTags.length - 5} more</Badge>}
               </div>
             </div>
+            {canManageProjectSettings && (
             <div className="flex gap-2 flex-shrink-0">
-              {canManageProjectSettings && (
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -1431,8 +1431,8 @@ function ProjectDetailPageContent() {
                   </Form>
                 </DialogContent>
               </Dialog>
-              )}
             </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -2255,15 +2255,15 @@ function ProjectDetailPageContent() {
                 <CardContent className="flex flex-col sm:flex-row items-center gap-4">
                     <Button asChild size="lg" className="w-full sm:w-auto">
                         <a href={`flowup://open-project?uuid=${project.uuid}&name=${encodeURIComponent(project.name)}&repoUrl=${encodeURIComponent(project.githubRepoUrl || '')}`}>
-                            Ouvrir avec FlowUp Desktop
+                            Open with FlowUp Desktop
                         </a>
                     </Button>
                     <div className="text-sm text-muted-foreground text-center sm:text-left">
-                        <p>Je n'ai pas FlowUp Desktop ?</p>
+                        <p>Don't have FlowUp Desktop?</p>
                         <div className="space-x-2">
-                            <Button variant="link" asChild className="p-0 h-auto"><a href="#">Télécharger pour Windows</a></Button>
-                            <Button variant="link" asChild className="p-0 h-auto"><a href="#">Télécharger pour Linux</a></Button>
-                            <p className="text-xs">(Compilation pour macOS bientôt disponible)</p>
+                            <Button variant="link" asChild className="p-0 h-auto"><a href="https://github.com/softpython2884/QuestHub/releases/download/Windows/FlowUp.Desktop.Setup.1.0.0.exe">Download for Windows</a></Button>
+                            <Button variant="link" asChild className="p-0 h-auto"><a href="#">Download for Linux</a></Button>
+                            <p className="text-xs">(macOS compilation coming soon)</p>
                         </div>
                     </div>
                 </CardContent>

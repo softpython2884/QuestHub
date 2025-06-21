@@ -1,5 +1,5 @@
 
-import { Briefcase } from 'lucide-react';
+import { Atom } from 'lucide-react';
 import Link from 'next/link';
 
 interface LogoProps {
@@ -11,7 +11,7 @@ interface LogoProps {
 export function Logo({ className, iconSize = 24, textSize = 'text-xl' }: LogoProps) {
   return (
     <Link href="/" className={`flex items-center gap-2 ${className}`}>
-      <Briefcase size={iconSize} className="text-primary" />
+      <Atom size={iconSize} className="text-primary" />
       <span className={`font-bold ${textSize} text-foreground`}>FlowUp</span>
     </Link>
   );
