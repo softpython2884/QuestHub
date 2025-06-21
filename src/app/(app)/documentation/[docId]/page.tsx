@@ -9,9 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Loader2, AlertTriangle, FileText, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, FileText, Edit, Trash2, Tag, Link2 as LinkIcon } from 'lucide-react';
 import { getGlobalDocumentAction, deleteGlobalDocumentAction } from '../actions';
 import type { GlobalDocument } from '@/types';
 import ReactMarkdown from 'react-markdown';
@@ -134,15 +134,37 @@ export default function ViewDocumentPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl font-headline">{document.title}</CardTitle>
-          <CardDescription className="flex items-center gap-2 pt-1">
-            <Avatar className="h-6 w-6">
-              <AvatarImage src={document.authorAvatar} alt={document.authorName} />
-              <AvatarFallback>{getInitials(document.authorName)}</AvatarFallback>
-            </Avatar>
-            <span>Authored by {document.authorName} on {new Date(document.createdAt).toLocaleDateString()}</span>
+          <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+            <div className="flex items-center gap-2">
+                <Avatar className="h-6 w-6">
+                <AvatarImage src={document.authorAvatar} alt={document.authorName} />
+                <AvatarFallback>{getInitials(document.authorName)}</AvatarFallback>
+                </Avatar>
+                <span>Authored by {document.authorName}</span>
+            </div>
             <span>·</span>
             <span>Last updated on {new Date(document.updatedAt).toLocaleDateString()}</span>
+            {document.linkedProject && (
+                <>
+                <span>·</span>
+                <div className="flex items-center gap-1.5">
+                    <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                    <span>Linked to project:</span>
+                    <Button variant="link" className="p-0 h-auto" asChild>
+                        <Link href={`/projects/${document.linkedProject.uuid}`}>{document.linkedProject.name}</Link>
+                    </Button>
+                </div>
+                </>
+            )}
           </CardDescription>
+          {document.tags && document.tags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-3">
+                 <Tag className="h-4 w-4 text-muted-foreground"/>
+                 {document.tags.map(tag => (
+                    <Badge key={tag.uuid} variant="secondary">{tag.name}</Badge>
+                 ))}
+            </div>
+           )}
         </CardHeader>
         <CardContent>
           <div className="prose dark:prose-invert max-w-none">

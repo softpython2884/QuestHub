@@ -4,7 +4,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FileText, Search, PlusCircle, BookOpen, User, Trash2, Edit } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FileText, Search, PlusCircle, BookOpen, User, Trash2, Edit, Tag } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +24,7 @@ export default function DocumentationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [documentToDelete, setDocumentToDelete] = useState<GlobalDocument | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function loadDocs() {
@@ -69,6 +71,15 @@ export default function DocumentationPage() {
     }
   };
 
+  const filteredDocuments = documents.filter(doc => {
+    const term = searchTerm.toLowerCase();
+    return (
+        doc.title.toLowerCase().includes(term) ||
+        doc.authorName?.toLowerCase().includes(term) ||
+        doc.tags?.some(tag => tag.name.toLowerCase().includes(term))
+    )
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -89,17 +100,17 @@ export default function DocumentationPage() {
             <CardTitle>All Documents</CardTitle>
             <div className="relative w-full sm:w-auto sm:max-w-xs">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search documentation..." className="pl-8" />
+              <Input placeholder="Search docs or tags..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
-          <CardDescription>Albums and tagging features are coming soon!</CardDescription>
+          <CardDescription>Browse all available documentation. Album functionality coming soon!</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="grid gap-4">
-              {[...Array(3)].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
-          ) : documents.length === 0 ? (
+          ) : filteredDocuments.length === 0 ? (
             <div className="text-center py-12">
               <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-medium">No documents yet</h3>
@@ -114,16 +125,16 @@ export default function DocumentationPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {documents.map((doc) => (
+              {filteredDocuments.map((doc) => (
                 <Card key={doc.uuid} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-6 w-6 text-primary flex-shrink-0" />
-                      <div>
+                    <div className="flex items-start gap-3">
+                      <FileText className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                      <div className="flex-grow">
                         <h3 className="font-semibold hover:text-primary">
                            <Link href={`/documentation/${doc.uuid}`}>{doc.title}</Link>
                         </h3>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                            <Avatar className="h-4 w-4">
                               <AvatarImage src={doc.authorAvatar} alt={doc.authorName} />
                               <AvatarFallback className="text-xs">{getInitials(doc.authorName)}</AvatarFallback>
@@ -132,9 +143,17 @@ export default function DocumentationPage() {
                           <span>•</span>
                           <span>Last updated: {new Date(doc.updatedAt).toLocaleDateString()}</span>
                         </p>
+                        {doc.tags && doc.tags.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                                {doc.tags.map(tag => (
+                                    <Badge key={tag.uuid} variant="secondary" className="text-xs">{tag.name}</Badge>
+                                ))}
+                            </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {(user?.uuid === doc.authorUuid || user?.role === 'admin') && (
                         <>
                           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>

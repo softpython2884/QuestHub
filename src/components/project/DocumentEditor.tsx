@@ -15,24 +15,31 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { generateDocumentContent } from '@/ai/flows/generate-document-content';
-import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles } from 'lucide-react';
+import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles, Tag, Link as ProjectLinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { Project, GlobalDocument } from '@/types';
+
 
 const documentEditorFormSchema = z.object({
   title: z.string().min(1, 'Title is required.').max(255),
   content: z.string().optional(),
+  tagsString: z.string().optional(),
+  linkedProjectUuid: z.string().optional(),
 });
 
 type DocumentEditorFormValues = z.infer<typeof documentEditorFormSchema>;
 
 interface DocumentEditorProps {
-  initialData?: { uuid?: string, title: string; content?: string | null };
-  onSave: (data: { uuid?: string; title: string; content: string }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
+  initialData?: GlobalDocument;
+  onSave: (data: { uuid?: string; title: string; content: string; tagsString?: string; linkedProjectUuid?: string | null }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
   onSaveSuccess: (documentUuid: string) => void;
   onCancel: () => void;
   entityName: string;
   saveButtonText: string;
   createButtonText: string;
+  showMetadataControls?: boolean;
+  publicProjects?: Pick<Project, 'uuid' | 'name'>[];
 }
 
 interface MarkdownTool {
@@ -49,6 +56,8 @@ export function DocumentEditor({
   entityName,
   saveButtonText,
   createButtonText,
+  showMetadataControls = false,
+  publicProjects = [],
 }: DocumentEditorProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,6 +72,8 @@ export function DocumentEditor({
     defaultValues: {
       title: initialData?.title || '',
       content: initialData?.content || '',
+      tagsString: initialData?.tags?.map(t => t.name).join(', ') || '',
+      linkedProjectUuid: initialData?.linkedProject?.uuid || 'none',
     },
   });
 
@@ -73,13 +84,15 @@ export function DocumentEditor({
     form.reset({
       title: initialData?.title || '',
       content: initialData?.content || '',
+      tagsString: initialData?.tags?.map(t => t.name).join(', ') || '',
+      linkedProjectUuid: initialData?.linkedProject?.uuid || 'none',
     });
   }, [initialData, form]);
 
   const applyMarkdownSyntax = (
     syntaxStart: string,
     syntaxEnd: string = '',
-    isBlock: boolean = false,
+    _isBlock: boolean = false,
     prefixEachLine: boolean = false
   ) => {
     if (!textareaRef.current) return;
@@ -142,6 +155,8 @@ export function DocumentEditor({
       uuid: initialData?.uuid,
       title: data.title,
       content: data.content || '',
+      tagsString: data.tagsString,
+      linkedProjectUuid: data.linkedProjectUuid === 'none' ? null : data.linkedProjectUuid,
     });
 
     setIsSubmitting(false);
@@ -183,53 +198,53 @@ export function DocumentEditor({
 
   return (
     <>
-    <Card className="shadow-xl">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-                <CardTitle className="text-2xl font-headline">
-                {initialData ? `Edit ${entityName}` : `Create New ${entityName}`}
-                </CardTitle>
-                <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
-            </div>
-            <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
-              <DialogTrigger asChild>
-                  <Button variant="outline">
-                      <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
-                  </Button>
-              </DialogTrigger>
-              <DialogContent>
-                  <DialogHeader>
-                      <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" />Generate Document Content with AI</DialogTitle>
-                      <UIDialogDescription>
-                          Enter a prompt for the AI to generate the Markdown content for your document.
-                      </UIDialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                      <Label htmlFor="ai-prompt">Your Prompt</Label>
-                      <Textarea
-                          id="ai-prompt"
-                          placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
-                          value={aiPrompt}
-                          onChange={(e) => setAiPrompt(e.target.value)}
-                          rows={5}
-                      />
-                  </div>
-                  <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
-                      </DialogClose>
-                      <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
-                          {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Generate Content
-                      </Button>
-                  </DialogFooter>
-              </DialogContent>
-            </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <Card className="shadow-xl">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                  <CardTitle className="text-2xl font-headline">
+                  {initialData ? `Edit ${entityName}` : `Create New ${entityName}`}
+                  </CardTitle>
+                  <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
+              </div>
+              <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" type="button">
+                        <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" />Generate Document Content with AI</DialogTitle>
+                        <UIDialogDescription>
+                            Enter a prompt for the AI to generate the Markdown content for your document.
+                        </UIDialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <Label htmlFor="ai-prompt">Your Prompt</Label>
+                        <Textarea
+                            id="ai-prompt"
+                            placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            rows={5}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
+                        </DialogClose>
+                        <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
+                            {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Generate Content
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+              </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
           <div>
             <Label htmlFor="title" className="text-lg">Title</Label>
             <Input
@@ -242,6 +257,41 @@ export function DocumentEditor({
               <p className="text-sm text-destructive mt-1">{form.formState.errors.title.message}</p>
             )}
           </div>
+
+          {showMetadataControls && (
+             <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <Label htmlFor="tagsString" className="text-base flex items-center mb-1"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Tags</Label>
+                    <Input
+                        id="tagsString"
+                        {...form.register('tagsString')}
+                        placeholder="e.g., react, tutorial, api"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Comma-separated list of tags.</p>
+                </div>
+                 <div>
+                    <Label htmlFor="linkedProjectUuid" className="text-base flex items-center mb-1"><ProjectLinkIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Link Project (Optional)</Label>
+                     <Controller
+                        name="linkedProjectUuid"
+                        control={form.control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a public project to link..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No linked project</SelectItem>
+                                    {publicProjects.map(p => (
+                                        <SelectItem key={p.uuid} value={p.uuid}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                     <p className="text-xs text-muted-foreground mt-1">Associate this document with a public project.</p>
+                </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="content" className="text-lg">Markdown Content</Label>
@@ -266,9 +316,6 @@ export function DocumentEditor({
                ref={(e) => {
                 contentField.ref(e);
                 textareaRef.current = e;
-              }}
-              onChange={(e) => {
-                contentField.onChange(e);
               }}
               rows={20}
               className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none")}
@@ -297,9 +344,9 @@ export function DocumentEditor({
               {initialData ? saveButtonText : createButtonText}
             </Button>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      </form>
     </>
   );
 }

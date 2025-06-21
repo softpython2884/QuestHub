@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -416,6 +416,45 @@ export async function getDbConnection() {
       PRIMARY KEY (taskUuid, tagUuid),
       FOREIGN KEY (taskUuid) REFERENCES tasks (uuid) ON DELETE CASCADE,
       FOREIGN KEY (tagUuid) REFERENCES project_tags (uuid) ON DELETE CASCADE
+    );
+
+    -- New tables for global documentation features
+    CREATE TABLE IF NOT EXISTS global_tags (
+        uuid TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS global_document_tags (
+        documentUuid TEXT NOT NULL,
+        tagUuid TEXT NOT NULL,
+        PRIMARY KEY (documentUuid, tagUuid),
+        FOREIGN KEY (documentUuid) REFERENCES global_documents(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (tagUuid) REFERENCES global_tags(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS doc_albums (
+        uuid TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        authorUuid TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (authorUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS doc_album_items (
+        albumUuid TEXT NOT NULL,
+        documentUuid TEXT NOT NULL,
+        PRIMARY KEY (albumUuid, documentUuid),
+        FOREIGN KEY (albumUuid) REFERENCES doc_albums(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (documentUuid) REFERENCES global_documents(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS global_document_projects (
+        documentUuid TEXT PRIMARY KEY,
+        projectUuid TEXT NOT NULL,
+        FOREIGN KEY (documentUuid) REFERENCES global_documents(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (projectUuid) REFERENCES projects(uuid) ON DELETE CASCADE
     );
   `);
 
@@ -861,6 +900,13 @@ export async function getAllProjects(): Promise<Project[]> {
       isUrgent: !!p.isUrgent,
       isPrivate: !!p.isPrivate,
     }));
+}
+
+export async function getPublicProjects(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
+    const connection = await getDbConnection();
+    return connection.all<Pick<Project, 'uuid' | 'name'>[]>(
+        'SELECT uuid, name FROM projects WHERE isPrivate = FALSE ORDER BY name ASC'
+    );
 }
 
 export async function deleteProject(projectUuid: string): Promise<boolean> {
@@ -1429,7 +1475,6 @@ export async function createGlobalDocument(data: {
   const connection = await getDbConnection();
   const docUuid = uuidv4();
   const now = new Date().toISOString();
-  const author = await getUserByUuid(data.authorUuid);
 
   const result = await connection.run(
     'INSERT INTO global_documents (uuid, title, content, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
@@ -1437,30 +1482,28 @@ export async function createGlobalDocument(data: {
   );
   if (!result.lastID) throw new Error('Global document creation failed.');
 
-  return {
-    id: result.lastID.toString(),
-    uuid: docUuid,
-    title: data.title,
-    content: data.content,
-    authorUuid: data.authorUuid,
-    authorName: author?.name,
-    authorAvatar: author?.avatar,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const newDoc = await getGlobalDocumentByUuid(docUuid);
+  if (!newDoc) throw new Error("Failed to retrieve newly created global document");
+  return newDoc;
 }
 
 export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
   const connection = await getDbConnection();
-  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar'>>>('SELECT * FROM global_documents ORDER BY updatedAt DESC');
+  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject'>>>(
+      'SELECT * FROM global_documents ORDER BY updatedAt DESC'
+  );
   
   const results: GlobalDocument[] = [];
   for (const doc of documents) {
     const author = await getUserByUuid(doc.authorUuid);
+    const tags = await getTagsForGlobalDocument(doc.uuid);
+    const linkedProject = await getLinkedProjectForGlobalDocument(doc.uuid);
     results.push({
       ...doc,
       authorName: author?.name,
       authorAvatar: author?.avatar,
+      tags,
+      linkedProject,
     });
   }
   return results;
@@ -1468,14 +1511,19 @@ export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
 
 export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocument | null> {
   const connection = await getDbConnection();
-  const doc = await connection.get<Omit<GlobalDocument, 'authorName' | 'authorAvatar'>>('SELECT * FROM global_documents WHERE uuid = ?', uuid);
+  const doc = await connection.get<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject'>>('SELECT * FROM global_documents WHERE uuid = ?', uuid);
   if (!doc) return null;
 
   const author = await getUserByUuid(doc.authorUuid);
+  const tags = await getTagsForGlobalDocument(uuid);
+  const linkedProject = await getLinkedProjectForGlobalDocument(uuid);
+  
   return {
     ...doc,
     authorName: author?.name,
     authorAvatar: author?.avatar,
+    tags,
+    linkedProject,
   };
 }
 
@@ -1493,6 +1541,61 @@ export async function updateGlobalDocument(uuid: string, title: string, content:
 
 export async function deleteGlobalDocument(uuid: string): Promise<boolean> {
   const connection = await getDbConnection();
+  // Cascading deletes will handle linked tags and projects
   const result = await connection.run('DELETE FROM global_documents WHERE uuid = ?', uuid);
   return result.changes ? result.changes > 0 : false;
+}
+
+// Global Tags
+export async function createOrGetGlobalTag(name: string): Promise<GlobalTag> {
+    const connection = await getDbConnection();
+    const tagName = name.trim();
+    let tag = await connection.get<GlobalTag>('SELECT * FROM global_tags WHERE name = ?', tagName);
+    if (tag) {
+        return tag;
+    }
+    const newUuid = uuidv4();
+    await connection.run('INSERT INTO global_tags (uuid, name) VALUES (?, ?)', newUuid, tagName);
+    return { uuid: newUuid, name: tagName };
+}
+
+export async function linkTagToGlobalDocument(documentUuid: string, tagUuid: string) {
+    const connection = await getDbConnection();
+    await connection.run('INSERT INTO global_document_tags (documentUuid, tagUuid) VALUES (?, ?)', documentUuid, tagUuid);
+}
+
+export async function clearTagsForGlobalDocument(documentUuid: string) {
+    const connection = await getDbConnection();
+    await connection.run('DELETE FROM global_document_tags WHERE documentUuid = ?', documentUuid);
+}
+
+export async function getTagsForGlobalDocument(documentUuid: string): Promise<GlobalTag[]> {
+    const connection = await getDbConnection();
+    return connection.all<GlobalTag[]>(
+        `SELECT t.uuid, t.name FROM global_tags t
+         JOIN global_document_tags dt ON t.uuid = dt.tagUuid
+         WHERE dt.documentUuid = ?`,
+        documentUuid
+    );
+}
+
+// Global Document Project Linking
+export async function linkProjectToGlobalDocument(documentUuid: string, projectUuid: string) {
+    const connection = await getDbConnection();
+    await connection.run('INSERT OR REPLACE INTO global_document_projects (documentUuid, projectUuid) VALUES (?, ?)', documentUuid, projectUuid);
+}
+
+export async function clearProjectLinkForGlobalDocument(documentUuid: string) {
+    const connection = await getDbConnection();
+    await connection.run('DELETE FROM global_document_projects WHERE documentUuid = ?', documentUuid);
+}
+
+export async function getLinkedProjectForGlobalDocument(documentUuid: string): Promise<Pick<Project, 'uuid' | 'name'> | null> {
+    const connection = await getDbConnection();
+    return connection.get<Pick<Project, 'uuid' | 'name'>>(
+        `SELECT p.uuid, p.name FROM projects p
+         JOIN global_document_projects gdp ON p.uuid = gdp.projectUuid
+         WHERE gdp.documentUuid = ?`,
+        documentUuid
+    );
 }

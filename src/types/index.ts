@@ -102,17 +102,37 @@ export interface ProjectDocument {
   updatedAt: string;
 }
 
-// Represents a document in the global documentation section
-export interface GlobalDocument {
-  id: string;
+export interface GlobalTag {
+  uuid: string;
+  name: string;
+}
+
+export interface DocAlbum {
   uuid: string;
   title: string;
-  content?: string;
+  description?: string;
   authorUuid: string;
   authorName?: string;
   authorAvatar?: string;
   createdAt: string;
   updatedAt: string;
+  documentCount?: number;
+}
+
+// Represents a document in the global documentation section
+export interface GlobalDocument {
+  id: string;
+  uuid: string;
+  title: string;
+  content: string;
+  authorUuid: string;
+  authorName?: string;
+  authorAvatar?: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: GlobalTag[];
+  linkedProject?: Pick<Project, 'uuid' | 'name'> | null;
+  albums?: Pick<DocAlbum, 'uuid' | 'title'>[];
 }
 
 export type ProjectMemberRole = 'owner' | 'co-owner' | 'editor' | 'viewer';

@@ -6,10 +6,18 @@ import {
   getGlobalDocuments,
   getGlobalDocumentByUuid,
   updateGlobalDocument,
-  deleteGlobalDocument
+  deleteGlobalDocument,
+  getPublicProjects,
+  createOrGetGlobalTag,
+  clearTagsForGlobalDocument,
+  linkTagToGlobalDocument,
+  clearProjectLinkForGlobalDocument,
+  linkProjectToGlobalDocument,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
+import type { Project } from '@/types';
+
 
 export async function getGlobalDocumentsAction() {
   return getGlobalDocuments();
@@ -19,32 +27,67 @@ export async function getGlobalDocumentAction(uuid: string) {
   return getGlobalDocumentByUuid(uuid);
 }
 
-export async function saveGlobalDocumentAction(uuid: string | null, title: string, content: string) {
+export async function saveGlobalDocumentAction(
+  uuid: string | null,
+  title: string,
+  content: string,
+  tagsString?: string | null,
+  linkedProjectUuid?: string | null,
+) {
   const session = await auth();
   if (!session?.user) {
     return { error: "Authentication required." };
   }
 
   try {
-    let savedDocument;
+    let docIdToUpdate: string;
+    let isNewDoc = false;
+
     if (uuid) {
-      // Check permission for updating
       const existingDoc = await getGlobalDocumentByUuid(uuid);
       if (!existingDoc) return { error: "Document not found." };
       if (existingDoc.authorUuid !== session.user.uuid && session.user.role !== 'admin') {
         return { error: "You do not have permission to edit this document." };
       }
-      savedDocument = await updateGlobalDocument(uuid, title, content);
+      await updateGlobalDocument(uuid, title, content);
+      docIdToUpdate = uuid;
     } else {
-      savedDocument = await createGlobalDocument({
+      const newDoc = await createGlobalDocument({
         authorUuid: session.user.uuid,
         title,
         content,
       });
+      docIdToUpdate = newDoc.uuid;
+      isNewDoc = true;
     }
+
+    // Handle tags
+    await clearTagsForGlobalDocument(docIdToUpdate);
+    if (tagsString) {
+      const tagNames = tagsString.split(',').map(t => t.trim()).filter(Boolean);
+      for (const name of tagNames) {
+        const tag = await createOrGetGlobalTag(name);
+        await linkTagToGlobalDocument(docIdToUpdate, tag.uuid);
+      }
+    }
+    
+    // Handle project link
+    await clearProjectLinkForGlobalDocument(docIdToUpdate);
+    if (linkedProjectUuid) {
+        await linkProjectToGlobalDocument(docIdToUpdate, linkedProjectUuid);
+    }
+
+    const finalDocument = await getGlobalDocumentByUuid(docIdToUpdate);
+
     revalidatePath('/documentation');
-    revalidatePath(`/documentation/${savedDocument?.uuid}`);
-    return { document: savedDocument };
+    revalidatePath(`/documentation/${docIdToUpdate}`);
+    
+    if (isNewDoc && finalDocument) {
+        return { document: finalDocument };
+    }
+    
+    return { document: finalDocument };
+
   } catch (error: any) {
     return { error: error.message || "Failed to save document." };
   }
@@ -72,4 +115,8 @@ export async function deleteGlobalDocumentAction(uuid: string) {
     } catch (error: any) {
         return { error: error.message || "Failed to delete document." };
     }
+}
+
+export async function getPublicProjectsAction(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
+    return getPublicProjects();
 }

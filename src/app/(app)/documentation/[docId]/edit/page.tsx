@@ -5,9 +5,9 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { getGlobalDocumentAction, saveGlobalDocumentAction } from '../actions'; 
+import { getGlobalDocumentAction, saveGlobalDocumentAction, getPublicProjectsAction } from '../actions'; 
 import { useEffect, useState } from 'react';
-import type { GlobalDocument } from '@/types';
+import type { GlobalDocument, Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -21,13 +21,20 @@ export default function EditGlobalDocumentPage() {
   const [document, setDocument] = useState<GlobalDocument | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
+  const [publicProjects, setPublicProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
 
   useEffect(() => {
-    async function loadDocumentAndCheckPermissions() {
+    async function loadInitialData() {
       if (!user || !documentUuid) return;
       setIsLoadingDocument(true);
       try {
-        const fetchedDoc = await getGlobalDocumentAction(documentUuid);
+        const [fetchedDoc, projects] = await Promise.all([
+          getGlobalDocumentAction(documentUuid),
+          getPublicProjectsAction()
+        ]);
+        
+        setPublicProjects(projects);
+
         if (fetchedDoc) {
           if (user.uuid === fetchedDoc.authorUuid || user.role === 'admin') {
             setCanEdit(true);
@@ -42,14 +49,14 @@ export default function EditGlobalDocumentPage() {
           router.push('/documentation');
         }
       } catch (error) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load document.' });
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load document or projects.' });
       } finally {
         setIsLoadingDocument(false);
       }
     }
     if (!authLoading) {
       if (!user) router.push('/login');
-      else loadDocumentAndCheckPermissions();
+      else loadInitialData();
     }
   }, [user, authLoading, documentUuid, router, toast]);
 
@@ -57,8 +64,8 @@ export default function EditGlobalDocumentPage() {
     router.push(`/documentation/${documentUuid}`);
   };
 
-  const handleSave = async (data: { uuid?: string, title: string, content: string }) => {
-    const result = await saveGlobalDocumentAction(data.uuid || null, data.title, data.content);
+  const handleSave = async (data: { uuid?: string, title: string, content: string, tagsString?: string, linkedProjectUuid?: string | null }) => {
+    const result = await saveGlobalDocumentAction(data.uuid || null, data.title, data.content, data.tagsString, data.linkedProjectUuid);
     if (result.error) {
       return { error: result.error };
     }
@@ -76,7 +83,7 @@ export default function EditGlobalDocumentPage() {
             <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
             <h2 className="text-2xl font-semibold mb-2">Access Denied</h2>
             <p className="text-muted-foreground">You do not have permission to edit this document.</p>
-             <Button asChild className="mt-4"><Link href={`/documentation/${documentUuid}`}>Back to Document</Link></Button>
+             <Button asChild className="mt-4"><a href={`/documentation/${documentUuid}`}>Back to Document</a></Button>
         </div>
       </div>
     );
@@ -89,7 +96,7 @@ export default function EditGlobalDocumentPage() {
             <FileText className="h-16 w-16 text-muted-foreground mb-4" />
             <h2 className="text-2xl font-semibold mb-2">Document Not Found</h2>
             <p className="text-muted-foreground">The document you are trying to edit could not be found.</p>
-            <Button asChild className="mt-4"><Link href="/documentation">Back to Documentation</Link></Button>
+            <Button asChild className="mt-4"><a href="/documentation">Back to Documentation</a></Button>
         </div>
       </div>
     );
@@ -108,6 +115,8 @@ export default function EditGlobalDocumentPage() {
         entityName="Document"
         saveButtonText="Save Changes"
         createButtonText="Create Document"
+        showMetadataControls={true}
+        publicProjects={publicProjects}
       />
     </div>
   );
