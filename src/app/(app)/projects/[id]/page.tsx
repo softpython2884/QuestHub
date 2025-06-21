@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2 } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +58,8 @@ import {
   linkProjectToGithubAction,
   type LinkProjectToGithubFormState,
   fetchUserGithubOAuthTokenAction,
+  updateProjectDiscordSettingsAction,
+  type UpdateProjectDiscordSettingsFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -127,6 +129,12 @@ const linkGithubFormSchema = z.object({
   path: ["githubRepoName"],
 });
 type LinkGithubFormValues = z.infer<typeof linkGithubFormSchema>;
+
+const discordSettingsFormSchema = z.object({
+  discordWebhookUrl: z.string().url({ message: "Please enter a valid Discord webhook URL." }).or(z.literal('')),
+  discordNotificationsEnabled: z.boolean().default(true),
+});
+type DiscordSettingsFormValues = z.infer<typeof discordSettingsFormSchema>;
 
 
 const convertMarkdownToSubtaskInput = (markdown?: string): string => {
@@ -229,6 +237,11 @@ function ProjectDetailPageContent() {
   });
   const useDefaultRepoNameWatch = linkGithubForm.watch("useDefaultRepoName");
 
+  const discordSettingsForm = useForm<DiscordSettingsFormValues>({
+    resolver: zodResolver(discordSettingsFormSchema),
+    defaultValues: { discordWebhookUrl: '', discordNotificationsEnabled: true },
+  });
+
 
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab');
@@ -324,6 +337,7 @@ function ProjectDetailPageContent() {
   const [createAnnouncementState, createProjectAnnouncementFormAction, isCreateAnnouncementPending] = useActionState(createProjectAnnouncementAction, { message: "", error: "" });
   const [deleteAnnouncementState, deleteProjectAnnouncementFormAction, isDeleteAnnouncementPending] = useActionState(deleteProjectAnnouncementAction, { message: "", error: ""});
   const [linkGithubState, linkProjectToGithubFormAction, isLinkGithubPending] = useActionState(linkProjectToGithubAction, { message: "", error: "" });
+  const [updateDiscordSettingsState, updateDiscordSettingsFormAction, isUpdateDiscordSettingsPending] = useActionState(updateProjectDiscordSettingsAction, { message: "", error: "" });
 
 
   const loadTasks = useCallback(async () => {
@@ -424,6 +438,10 @@ function ProjectDetailPageContent() {
 
                     setProject(projectData);
                     editProjectForm.reset({ name: projectData.name, description: projectData.description || '' });
+                    discordSettingsForm.reset({
+                        discordWebhookUrl: projectData.discordWebhookUrl || '',
+                        discordNotificationsEnabled: projectData.discordNotificationsEnabled === undefined ? true : projectData.discordNotificationsEnabled,
+                    });
                     setProjectReadmeContent(projectData.readmeContent || '');
 
 
@@ -455,7 +473,7 @@ function ProjectDetailPageContent() {
         }
     };
       performLoadProjectData();
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubOAuth]);
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubOAuth, discordSettingsForm]);
 
 
   useEffect(() => {
@@ -709,13 +727,31 @@ function ProjectDetailPageContent() {
     }
   }, [linkGithubState, isLinkGithubPending, toast, linkGithubForm]);
 
+  useEffect(() => {
+    if (!isUpdateDiscordSettingsPending && updateDiscordSettingsState) {
+        if (updateDiscordSettingsState.message && !updateDiscordSettingsState.error) {
+            toast({ title: "Success", description: updateDiscordSettingsState.message });
+            if(updateDiscordSettingsState.project) {
+                setProject(updateDiscordSettingsState.project);
+            }
+        }
+        if (updateDiscordSettingsState.error) {
+            toast({ variant: "destructive", title: "Discord Settings Error", description: updateDiscordSettingsState.error });
+        }
+    }
+  }, [updateDiscordSettingsState, isUpdateDiscordSettingsPending, toast]);
+
 
   useEffect(() => {
     if (project) {
       editProjectForm.reset({ name: project.name, description: project.description || '' });
       setProjectReadmeContent(project.readmeContent || '');
+      discordSettingsForm.reset({
+        discordWebhookUrl: project.discordWebhookUrl || '',
+        discordNotificationsEnabled: project.discordNotificationsEnabled === undefined ? true : project.discordNotificationsEnabled,
+      });
     }
-  }, [project, editProjectForm]);
+  }, [project, editProjectForm, discordSettingsForm]);
 
 
   const canManageProjectSettings = currentUserRole === 'owner' || currentUserRole === 'co-owner';
@@ -1161,6 +1197,16 @@ function ProjectDetailPageContent() {
     });
   };
 
+  const handleDiscordSettingsSubmit = (values: DiscordSettingsFormValues) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('discordWebhookUrl', values.discordWebhookUrl);
+    formData.append('discordNotificationsEnabled', String(values.discordNotificationsEnabled));
+    startTransition(() => {
+        updateDiscordSettingsFormAction(formData);
+    });
+  };
 
   const handleInitiateGithubOAuth = () => {
     if (!project) return;
@@ -2132,31 +2178,19 @@ function ProjectDetailPageContent() {
                         </p>
                     </CardContent>
                   </Card>
-
-                  <Card>
-                      <CardHeader>
-                          <CardTitle className="flex items-center"><MessageSquare className="mr-2 h-5 w-5"/>Discord Logs (Placeholder)</CardTitle>
-                           <CardDescription>Future: Integrate with Discord to send commit logs or other notifications.</CardDescription>
-                      </CardHeader>
-                       <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12c0 1.99.586 3.823 1.589 5.34L2.056 22l4.603-1.534A9.956 9.956 0 0 0 12 22z"></path><path d="M8 12.5c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2zm8 0c-.828 0-1.5-.895-1.5-2s.672-2 1.5-2 1.5.895 1.5 2-.672 2-1.5 2z"></path></svg>
-                          <p className="font-medium">Discord Integration</p>
-                          <p className="text-xs">This feature is planned for a future update.</p>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader>
-                          <CardTitle className="flex items-center"><DownloadCloud className="mr-2 h-5 w-5"/>Desktop Application (Placeholder)</CardTitle>
-                           <CardDescription>Future: Access FlowUp more easily with a dedicated desktop application.</CardDescription>
-                      </CardHeader>
-                       <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-3 opacity-50"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                          <p className="font-medium">Desktop App</p>
-                          <p className="text-xs">We're working on it!</p>
-                      </CardContent>
-                  </Card>
                 </div>
               )}
+               <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><GitBranch className="mr-2 h-5 w-5"/>GitHub Activity Logs</CardTitle>
+                        <CardDescription>View recent commits and activity from the linked GitHub repository.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
+                        <Terminal className="mx-auto h-12 w-12 opacity-50 mb-3" />
+                        <p className="font-medium">GitHub Webhook Integration</p>
+                        <p className="text-xs">This feature is planned for a future update. Once implemented, commit history will appear here.</p>
+                    </CardContent>
+                </Card>
             </CardContent>
           </Card>
         </TabsContent>
@@ -2230,7 +2264,7 @@ function ProjectDetailPageContent() {
                     </Dialog>
                 )}
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-8">
               <div>
                 <h4 className="font-semibold mb-2 text-lg">Current Members ({projectMembers.length})</h4>
                  {projectMembers.length > 0 ? (
@@ -2311,6 +2345,60 @@ function ProjectDetailPageContent() {
                 </div>
                  {toggleVisibilityState?.error && <p className="text-sm text-destructive">{toggleVisibilityState.error}</p>}
               </div>
+
+               <div>
+                <h4 className="font-semibold mb-2 text-lg">Discord Integration</h4>
+                <Card className="border p-4">
+                    <Form {...discordSettingsForm}>
+                        <form onSubmit={discordSettingsForm.handleSubmit(handleDiscordSettingsSubmit)} className="space-y-4">
+                            <FormField
+                                control={discordSettingsForm.control}
+                                name="discordWebhookUrl"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Discord Webhook URL</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="https://discord.com/api/webhooks/..." disabled={!canManageProjectSettings}/>
+                                        </FormControl>
+                                        <FormDescription>
+                                            Paste your Discord webhook URL here to receive project notifications.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             <FormField
+                                control={discordSettingsForm.control}
+                                name="discordNotificationsEnabled"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background/50">
+                                        <div className="space-y-0.5">
+                                            <FormLabel>Enable Notifications</FormLabel>
+                                            <FormDescription>
+                                                Toggle sending notifications to the configured webhook.
+                                            </FormDescription>
+                                        </div>
+                                        <FormControl>
+                                             <Switch
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                                disabled={!canManageProjectSettings}
+                                             />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            {updateDiscordSettingsState?.error && <p className="text-sm text-destructive">{updateDiscordSettingsState.error}</p>}
+                            <div className="flex justify-end">
+                                <Button type="submit" disabled={isUpdateDiscordSettingsPending || !canManageProjectSettings}>
+                                    {isUpdateDiscordSettingsPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Save Discord Settings
+                                </Button>
+                            </div>
+                        </form>
+                    </Form>
+                </Card>
+               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-2">

@@ -289,7 +289,9 @@ export async function getDbConnection() {
       isUrgent BOOLEAN DEFAULT FALSE,
       githubRepoUrl TEXT,
       githubRepoName TEXT,
-      github_installation_id INTEGER, 
+      github_installation_id INTEGER,
+      discordWebhookUrl TEXT,
+      discordNotificationsEnabled BOOLEAN DEFAULT TRUE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -574,8 +576,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id, discordWebhookUrl, discordNotificationsEnabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null, null, true
     );
 
     if (!result.lastID) {
@@ -606,6 +608,8 @@ export async function createProject(name: string, description: string | undefine
       githubRepoUrl: undefined,
       githubRepoName: undefined,
       githubInstallationId: undefined,
+      discordWebhookUrl: null,
+      discordNotificationsEnabled: true,
     };
   } catch (err) {
     await connection.run('ROLLBACK');
@@ -619,8 +623,8 @@ export async function createProject(name: string, description: string | undefine
 
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
-  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
-    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, createdAt, updatedAt FROM projects WHERE uuid = ?',
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, discordNotificationsEnabled: 0 | 1 }>(
+    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, discordWebhookUrl, discordNotificationsEnabled, createdAt, updatedAt FROM projects WHERE uuid = ?',
     uuid
   );
   if (!projectRow) return null;
@@ -628,6 +632,7 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
     ...projectRow,
     isUrgent: !!projectRow.isUrgent,
     isPrivate: !!projectRow.isPrivate,
+    discordNotificationsEnabled: !!projectRow.discordNotificationsEnabled,
   };
 }
 
@@ -693,6 +698,16 @@ export async function updateProjectGithubRepo(projectUuid: string, repoUrl: stri
   return getProjectByUuid(projectUuid);
 }
 
+export async function updateProjectDiscordSettings(projectUuid: string, webhookUrl: string | null, enabled: boolean): Promise<Project | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    const result = await connection.run(
+        'UPDATE projects SET discordWebhookUrl = ?, discordNotificationsEnabled = ?, updatedAt = ? WHERE uuid = ?',
+        webhookUrl, enabled ? 1 : 0, now, projectUuid
+    );
+    if (result.changes === 0) return null;
+    return getProjectByUuid(projectUuid);
+}
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();

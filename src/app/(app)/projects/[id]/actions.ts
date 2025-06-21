@@ -34,6 +34,7 @@ import {
   getUserGithubOAuthToken as dbGetUserGithubOAuthToken,
   deleteUserGithubOAuthToken as dbDeleteUserGithubOAuthToken,
   getTaskByUuid as dbGetTaskByUuid,
+  updateProjectDiscordSettings as dbUpdateProjectDiscordSettings,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -41,6 +42,7 @@ import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
 import { generateProjectScaffold, type GenerateProjectScaffoldInput, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import { editFileContentWithAI, type EditFileContentAIInput, type EditFileContentAIOutput } from '@/ai/flows/edit-file-content-ai';
+import { sendDiscordNotification } from '@/lib/discord';
 
 
 export async function fetchProjectAction(uuid: string | undefined): Promise<Project | null> {
@@ -134,12 +136,12 @@ export async function inviteUserToProjectAction(
   formData: FormData
 ): Promise<InviteUserFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
-    console.error("[inviteUserToProjectAction] Authentication required. No session user UUID.");
+  if (!session?.user?.uuid || !session.user.name) {
+    console.error("[inviteUserToProjectAction] Authentication required. No session user UUID or name.");
     return { error: "Authentication required." };
   }
   const inviterUserUuid = session.user.uuid;
-  console.log("[inviteUserToProjectAction] Authenticated user for permission check:", inviterUserUuid);
+  const inviterName = session.user.name;
 
   const validatedFields = InviteUserSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
@@ -160,7 +162,6 @@ export async function inviteUserToProjectAction(
     if (!project) return { error: "Project not found." };
 
     const inviterRole = await dbGetProjectMemberRole(projectUuid, inviterUserUuid);
-    console.log(`[inviteUserToProjectAction] Inviter role check for project ${projectUuid} (user ${inviterUserUuid}): ${inviterRole}`);
      if (!inviterRole || !['owner', 'co-owner'].includes(inviterRole)) {
       return { error: `You do not have permission to invite users to this project. Your role: ${inviterRole || 'not a member'}. UUID: ${inviterUserUuid}` };
     }
@@ -200,7 +201,7 @@ export async function inviteUserToProjectAction(
          invitedUserGithubLogin = invitedUserOAuthDetails.login;
          console.log(`[inviteUserToProjectAction] Fetched GitHub login for invited user: ${invitedUserGithubLogin}`);
       } else {
-          console.log(`[inviteUserToProjectAction] Invited user ${userToInvite.email} has not connected their GitHub account via OAuth or login not found.`);
+          console.log(`[inviteUserToProjectAction] Invited user ${userToInvite.email} has not connected their GitHub account or login not found.`);
       }
 
 
@@ -236,6 +237,18 @@ export async function inviteUserToProjectAction(
          githubMessage = ` Invited user (${userToInvite.email}) has not connected their GitHub account or their GitHub login could not be determined. Cannot add as collaborator automatically.`;
          console.warn("[inviteUserToProjectAction] Could not determine GitHub login for invited user.");
       }
+    }
+
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled) {
+      await sendDiscordNotification(project.discordWebhookUrl, {
+        embeds: [{
+          title: "👥 New Member Invited",
+          description: `**${userToInvite.name}** was invited to the project as a **${role}** by **${inviterName}**.`,
+          color: 3447003, // Blue
+          timestamp: new Date().toISOString(),
+          footer: { text: `Project: ${project.name}` }
+        }]
+      });
     }
 
     return { message: `${userToInvite.name} has been successfully ${existingMembership ? 'updated to role' : 'invited as'} ${role}.${githubMessage}`, invitedMember: newOrUpdatedMember };
@@ -314,11 +327,11 @@ export interface CreateTaskFormState {
 
 export async function createTaskAction(prevState: CreateTaskFormState, formData: FormData): Promise<CreateTaskFormState> {
   const session = await auth();
-  if (!session?.user?.uuid) {
-    console.error("[createTaskAction] Authentication required. No session user UUID.");
+  if (!session?.user?.uuid || !session.user.name) {
+    console.error("[createTaskAction] Authentication required. No session user UUID or name.");
     return { error: "Authentication required." };
   }
-  console.log("[createTaskAction] Authenticated user:", session.user.uuid);
+  const creatorName = session.user.name;
 
   const validatedFields = CreateTaskSchema.safeParse({
     projectUuid: formData.get('projectUuid'),
@@ -343,8 +356,10 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
   }
 
   try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project) return { error: "Project not found." };
+    
     const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
-    console.log(`[createTaskAction] User role for project ${projectUuid} (user ${session.user.uuid}): ${userRole}`);
     if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
       return { error: `You do not have permission to create tasks in this project. Your role: ${userRole || 'not a member'}. UUID: ${session.user.uuid}` };
     }
@@ -359,6 +374,23 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
       tagsString: tagsString || undefined,
     };
     const createdTask = await dbCreateTask(taskData);
+
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled) {
+      await sendDiscordNotification(project.discordWebhookUrl, {
+        embeds: [{
+          title: `✅ New Task Created: ${createdTask.title}`,
+          description: `A new task has been added by **${creatorName}**.`,
+          color: 5763719, // Green
+          fields: [
+            { name: "Status", value: createdTask.status, inline: true },
+            { name: "Assigned To", value: createdTask.assigneeName || "Everyone", inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: `Project: ${project.name}` }
+        }]
+      });
+    }
+
     return { message: "Task created successfully!", createdTask };
   } catch (error: any) {
     console.error("Error creating task:", error);
@@ -1792,4 +1824,57 @@ export async function editFileWithAIAction(
     console.error("Error editing file with AI:", error);
     return { error: `AI file editing failed: ${error.message || "An unexpected error occurred."}` };
   }
+}
+
+
+export interface UpdateProjectDiscordSettingsFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+const updateDiscordSettingsSchema = z.object({
+  projectUuid: z.string().uuid(),
+  discordWebhookUrl: z.string().url("Please enter a valid Discord webhook URL.").or(z.literal('')),
+  discordNotificationsEnabled: z.enum(['true', 'false']).transform(v => v === 'true'),
+});
+
+export async function updateProjectDiscordSettingsAction(
+  prevState: UpdateProjectDiscordSettingsFormState,
+  formData: FormData
+): Promise<UpdateProjectDiscordSettingsFormState> {
+    const session = await auth();
+    if (!session?.user?.uuid) {
+        return { error: "Authentication required." };
+    }
+
+    const validatedFields = updateDiscordSettingsSchema.safeParse({
+        projectUuid: formData.get('projectUuid'),
+        discordWebhookUrl: formData.get('discordWebhookUrl'),
+        discordNotificationsEnabled: formData.get('discordNotificationsEnabled'),
+    });
+
+    if (!validatedFields.success) {
+        return { error: "Invalid input: " + validatedFields.error.flatten().fieldErrors.discordWebhookUrl?.join(', ') };
+    }
+
+    const { projectUuid, discordWebhookUrl, discordNotificationsEnabled } = validatedFields.data;
+
+    try {
+        const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+        if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
+            return { error: "You do not have permission to change Discord settings for this project." };
+        }
+
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled);
+
+        if (!updatedProject) {
+            return { error: "Failed to update project settings in the database." };
+        }
+
+        return { message: "Discord settings updated successfully.", project: updatedProject };
+
+    } catch (error: any) {
+        return { error: error.message || "An unexpected error occurred." };
+    }
 }

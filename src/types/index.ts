@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
@@ -110,6 +111,8 @@ export interface Project {
   githubRepoUrl?: string;
   githubRepoName?: string;
   githubInstallationId?: number; // Kept for potential future use with App-specific actions
+  discordWebhookUrl?: string | null;
+  discordNotificationsEnabled?: boolean;
 }
 
 export interface Announcement {
@@ -126,3 +129,36 @@ export interface Announcement {
   updatedAt: string;
 }
 
+
+// Discord Types
+export interface DiscordEmbed {
+    title?: string;
+    description?: string;
+    url?: string;
+    timestamp?: string;
+    color?: number;
+    footer?: {
+        text: string;
+        icon_url?: string;
+    };
+    thumbnail?: {
+        url: string;
+    };
+    author?: {
+        name: string;
+        url?: string;
+        icon_url?: string;
+    };
+    fields?: Array<{
+        name: string;
+        value: string;
+        inline?: boolean;
+    }>;
+}
+
+export interface DiscordWebhookPayload {
+    content?: string;
+    username?: string;
+    avatar_url?: string;
+    embeds?: DiscordEmbed[];
+}
