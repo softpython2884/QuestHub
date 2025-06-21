@@ -17,7 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, Mail, KeyRound, Github, MessageSquare } from "lucide-react";
+import { AlertTriangle, Mail, KeyRound, Github } from "lucide-react";
+import { DiscordIcon } from '@/components/icons/DiscordIcon';
 import Link from "next/link";
 import { useState } from "react";
 
@@ -128,7 +129,7 @@ export function LoginForm() {
             <Github className="mr-2 h-4 w-4" /> GitHub
           </Button>
           <Button variant="outline" type="button" onClick={() => window.location.href='/api/auth/discord/oauth/login'}>
-            <MessageSquare className="mr-2 h-4 w-4" /> Discord
+            <DiscordIcon className="mr-2 h-4 w-4" /> Discord
           </Button>
         </div>
 
