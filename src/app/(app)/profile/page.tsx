@@ -4,8 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User as UserIcon, Mail, Shield, Edit3, Image as ImageIcon, Github, Link2, PowerOff, ExternalLink, Loader2 } from 'lucide-react'; // Added Loader2
-import { DiscordIcon } from '@/components/icons/DiscordIcon';
+import { User as UserIcon, Mail, Shield, Edit3, Image as ImageIcon, Github, Link2, PowerOff, ExternalLink, Loader2, MessageSquare } from 'lucide-react'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -444,7 +443,7 @@ export default function ProfilePage() {
            <Card className="p-4 bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <DiscordIcon className="h-8 w-8 text-[#5865F2]" />
+                <MessageSquare className="h-8 w-8 text-[#5865F2]" />
                 <div>
                   <h4 className="font-semibold">Discord</h4>
                   {isLoadingDiscord ? (
@@ -473,7 +472,7 @@ export default function ProfilePage() {
                 </Button>
               ) : (
                 <Button onClick={handleConnectDiscord}>
-                  <DiscordIcon className="mr-2 h-4 w-4" /> Connect
+                  <MessageSquare className="mr-2 h-4 w-4" /> Connect
                 </Button>
               )}
             </div>

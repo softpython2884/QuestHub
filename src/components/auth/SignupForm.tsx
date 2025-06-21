@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,8 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, Mail, User as UserIcon, KeyRound, Github } from "lucide-react";
-import { DiscordIcon } from '@/components/icons/DiscordIcon';
+import { AlertTriangle, Mail, User as UserIcon, KeyRound, Github, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -153,7 +151,7 @@ export function SignupForm() {
             <Github className="mr-2 h-4 w-4" /> GitHub
           </Button>
           <Button variant="outline" type="button" onClick={() => window.location.href='/api/auth/discord/oauth/login'}>
-            <DiscordIcon className="mr-2 h-4 w-4" /> Discord
+            <MessageSquare className="mr-2 h-4 w-4" /> Discord
           </Button>
         </div>
 
