@@ -18,6 +18,7 @@ import * as authService from '@/lib/authService';
 import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUserDetailsAction } from '@/app/(app)/projects/[id]/actions'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
 const profileFormSchema = z.object({
@@ -229,6 +230,24 @@ export default function ProfilePage() {
                   </div>
                   {form.formState.errors.avatar && <p className="text-sm text-destructive">{form.formState.errors.avatar.message}</p>}
                 </div>
+                <Card className="p-4 bg-muted/30">
+                  <h4 className="font-semibold mb-2">Avatar Source (Coming Soon)</h4>
+                   <RadioGroup defaultValue="flowup" disabled>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="flowup" id="r-flowup" />
+                        <Label htmlFor="r-flowup">Use FlowUp Avatar URL</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="github" id="r-github" disabled={!githubUserDetails}/>
+                        <Label htmlFor="r-github" className={!githubUserDetails ? "text-muted-foreground" : ""}>Use GitHub Profile Picture</Label>
+                         {githubUserDetails && <Avatar className="h-5 w-5 inline-block"><AvatarImage src={githubUserDetails.avatar_url} /></Avatar>}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="discord" id="r-discord" disabled />
+                        <Label htmlFor="r-discord" className="text-muted-foreground">Use Discord Profile Picture</Label>
+                      </div>
+                   </RadioGroup>
+                </Card>
               </>
             ) : (
               <>

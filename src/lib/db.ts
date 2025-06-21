@@ -292,6 +292,9 @@ export async function getDbConnection() {
       github_installation_id INTEGER,
       discordWebhookUrl TEXT,
       discordNotificationsEnabled BOOLEAN DEFAULT TRUE,
+      discordNotifyTasks BOOLEAN DEFAULT TRUE,
+      discordNotifyMembers BOOLEAN DEFAULT TRUE,
+      discordNotifyAnnouncements BOOLEAN DEFAULT TRUE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -576,8 +579,8 @@ export async function createProject(name: string, description: string | undefine
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id, discordWebhookUrl, discordNotificationsEnabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null, null, true
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, null, null, null, null, true, true, true, true
     );
 
     if (!result.lastID) {
@@ -595,22 +598,10 @@ export async function createProject(name: string, description: string | undefine
 
     await connection.run('COMMIT');
 
-    return {
-      uuid: projectUuid,
-      name,
-      description,
-      ownerUuid,
-      createdAt: now,
-      updatedAt: now,
-      isPrivate: true,
-      readmeContent: DEFAULT_PROJECT_README_CONTENT,
-      isUrgent: false,
-      githubRepoUrl: undefined,
-      githubRepoName: undefined,
-      githubInstallationId: undefined,
-      discordWebhookUrl: null,
-      discordNotificationsEnabled: true,
-    };
+    const createdProject = await getProjectByUuid(projectUuid);
+    if (!createdProject) throw new Error("Failed to fetch newly created project.");
+    return createdProject;
+    
   } catch (err) {
     await connection.run('ROLLBACK');
     console.error("Error creating project:", err);
@@ -623,8 +614,8 @@ export async function createProject(name: string, description: string | undefine
 
 export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
-  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, discordNotificationsEnabled: 0 | 1 }>(
-    'SELECT uuid, name, description, ownerUuid, isPrivate, readmeContent, isUrgent, githubRepoUrl, githubRepoName, github_installation_id as githubInstallationId, discordWebhookUrl, discordNotificationsEnabled, createdAt, updatedAt FROM projects WHERE uuid = ?',
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, discordNotificationsEnabled: 0 | 1, discordNotifyTasks: 0 | 1, discordNotifyMembers: 0 | 1, discordNotifyAnnouncements: 0 | 1 }>(
+    'SELECT * FROM projects WHERE uuid = ?',
     uuid
   );
   if (!projectRow) return null;
@@ -633,6 +624,9 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
     isUrgent: !!projectRow.isUrgent,
     isPrivate: !!projectRow.isPrivate,
     discordNotificationsEnabled: !!projectRow.discordNotificationsEnabled,
+    discordNotifyTasks: !!projectRow.discordNotifyTasks,
+    discordNotifyMembers: !!projectRow.discordNotifyMembers,
+    discordNotifyAnnouncements: !!projectRow.discordNotifyAnnouncements,
   };
 }
 
@@ -698,16 +692,42 @@ export async function updateProjectGithubRepo(projectUuid: string, repoUrl: stri
   return getProjectByUuid(projectUuid);
 }
 
-export async function updateProjectDiscordSettings(projectUuid: string, webhookUrl: string | null, enabled: boolean): Promise<Project | null> {
+export async function updateProjectDiscordSettings(
+  projectUuid: string,
+  webhookUrl: string | null,
+  enabled: boolean,
+  notifyTasks?: boolean,
+  notifyMembers?: boolean,
+  notifyAnnouncements?: boolean
+): Promise<Project | null> {
     const connection = await getDbConnection();
     const now = new Date().toISOString();
+    
+    let setClauses = 'discordWebhookUrl = ?, discordNotificationsEnabled = ?, updatedAt = ?';
+    let params: (string | number | boolean | null | undefined)[] = [webhookUrl, enabled, now];
+
+    if (notifyTasks !== undefined) {
+        setClauses += ', discordNotifyTasks = ?';
+        params.push(notifyTasks);
+    }
+    if (notifyMembers !== undefined) {
+        setClauses += ', discordNotifyMembers = ?';
+        params.push(notifyMembers);
+    }
+    if (notifyAnnouncements !== undefined) {
+        setClauses += ', discordNotifyAnnouncements = ?';
+        params.push(notifyAnnouncements);
+    }
+    params.push(projectUuid);
+
     const result = await connection.run(
-        'UPDATE projects SET discordWebhookUrl = ?, discordNotificationsEnabled = ?, updatedAt = ? WHERE uuid = ?',
-        webhookUrl, enabled ? 1 : 0, now, projectUuid
+        `UPDATE projects SET ${setClauses} WHERE uuid = ?`,
+        ...params
     );
     if (result.changes === 0) return null;
     return getProjectByUuid(projectUuid);
 }
+
 
 export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   const connection = await getDbConnection();
@@ -736,6 +756,22 @@ export async function getAllProjects(): Promise<Project[]> {
       isUrgent: !!p.isUrgent,
       isPrivate: !!p.isPrivate,
     }));
+}
+
+export async function deleteProject(projectUuid: string): Promise<boolean> {
+  const connection = await getDbConnection();
+  await connection.run('BEGIN TRANSACTION');
+  try {
+    // Cascading deletes are on, so deleting from projects should cascade
+    // to project_members, tasks, project_documents, project_announcements, project_tags
+    const result = await connection.run('DELETE FROM projects WHERE uuid = ?', projectUuid);
+    await connection.run('COMMIT');
+    return result.changes ? result.changes > 0 : false;
+  } catch (error) {
+    await connection.run('ROLLBACK');
+    console.error(`Failed to delete project ${projectUuid}:`, error);
+    throw error;
+  }
 }
 
 export async function getProjectMemberRole(projectUuid: string, userUuid: string): Promise<ProjectMemberRole | null> {

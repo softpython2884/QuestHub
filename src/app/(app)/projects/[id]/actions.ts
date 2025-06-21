@@ -35,6 +35,7 @@ import {
   deleteUserGithubOAuthToken as dbDeleteUserGithubOAuthToken,
   getTaskByUuid as dbGetTaskByUuid,
   updateProjectDiscordSettings as dbUpdateProjectDiscordSettings,
+  deleteProject as dbDeleteProject,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -239,7 +240,7 @@ export async function inviteUserToProjectAction(
       }
     }
 
-    if (project.discordWebhookUrl && project.discordNotificationsEnabled) {
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyMembers) {
       await sendDiscordNotification(project.discordWebhookUrl, {
         embeds: [{
           title: "👥 New Member Invited",
@@ -375,7 +376,7 @@ export async function createTaskAction(prevState: CreateTaskFormState, formData:
     };
     const createdTask = await dbCreateTask(taskData);
 
-    if (project.discordWebhookUrl && project.discordNotificationsEnabled) {
+    if (project.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyTasks) {
       await sendDiscordNotification(project.discordWebhookUrl, {
         embeds: [{
           title: `✅ New Task Created: ${createdTask.title}`,
@@ -1134,6 +1135,24 @@ export async function createProjectAnnouncementAction(
       content,
       authorUuid: session.user.uuid,
     });
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (project?.discordWebhookUrl && project.discordNotificationsEnabled && project.discordNotifyAnnouncements) {
+      await sendDiscordNotification(project.discordWebhookUrl, {
+        embeds: [{
+          title: `📢 New Announcement: ${createdAnnouncement.title}`,
+          description: createdAnnouncement.content.substring(0, 200) + (createdAnnouncement.content.length > 200 ? '...' : ''),
+          color: 16729344, // Orange
+          timestamp: new Date().toISOString(),
+          author: {
+            name: createdAnnouncement.authorName || 'FlowUp',
+            icon_url: createdAnnouncement.authorAvatar
+          },
+          footer: { text: `Project: ${project.name}` }
+        }]
+      });
+    }
+
+
     return { message: "Announcement created successfully!", createdAnnouncement };
   } catch (error: any) {
     console.error("Error creating project announcement:", error);
@@ -1837,7 +1856,11 @@ const updateDiscordSettingsSchema = z.object({
   projectUuid: z.string().uuid(),
   discordWebhookUrl: z.string().url("Please enter a valid Discord webhook URL.").or(z.literal('')),
   discordNotificationsEnabled: z.enum(['true', 'false']).transform(v => v === 'true'),
+  discordNotifyTasks: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+  discordNotifyMembers: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
+  discordNotifyAnnouncements: z.enum(['true', 'false']).transform(v => v === 'true').optional(),
 });
+
 
 export async function updateProjectDiscordSettingsAction(
   prevState: UpdateProjectDiscordSettingsFormState,
@@ -1852,21 +1875,24 @@ export async function updateProjectDiscordSettingsAction(
         projectUuid: formData.get('projectUuid'),
         discordWebhookUrl: formData.get('discordWebhookUrl'),
         discordNotificationsEnabled: formData.get('discordNotificationsEnabled'),
+        discordNotifyTasks: formData.get('discordNotifyTasks'),
+        discordNotifyMembers: formData.get('discordNotifyMembers'),
+        discordNotifyAnnouncements: formData.get('discordNotifyAnnouncements'),
     });
 
     if (!validatedFields.success) {
         return { error: "Invalid input: " + validatedFields.error.flatten().fieldErrors.discordWebhookUrl?.join(', ') };
     }
 
-    const { projectUuid, discordWebhookUrl, discordNotificationsEnabled } = validatedFields.data;
-
+    const { projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements } = validatedFields.data;
+    
     try {
         const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
         if (!userRole || !['owner', 'co-owner'].includes(userRole)) {
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
@@ -1877,4 +1903,41 @@ export async function updateProjectDiscordSettingsAction(
     } catch (error: any) {
         return { error: error.message || "An unexpected error occurred." };
     }
+}
+
+export interface DeleteProjectFormState {
+  success?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function deleteProjectAction(
+  prevState: DeleteProjectFormState,
+  formData: FormData
+): Promise<DeleteProjectFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { error: "Authentication required." };
+  }
+
+  const projectUuid = formData.get('projectUuid') as string;
+  if (!projectUuid) {
+    return { error: "Project UUID is required." };
+  }
+
+  try {
+    const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+    if (userRole !== 'owner') {
+      return { error: "Only the project owner can delete this project." };
+    }
+
+    const success = await dbDeleteProject(projectUuid);
+    if (success) {
+      return { success: true, message: "Project deleted successfully." };
+    }
+    return { error: "Failed to delete project from the database." };
+  } catch (error: any) {
+    console.error(`Error deleting project ${projectUuid}:`, error);
+    return { error: error.message || "An unexpected error occurred." };
+  }
 }

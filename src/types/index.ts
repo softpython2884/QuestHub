@@ -113,6 +113,9 @@ export interface Project {
   githubInstallationId?: number; // Kept for potential future use with App-specific actions
   discordWebhookUrl?: string | null;
   discordNotificationsEnabled?: boolean;
+  discordNotifyTasks?: boolean;
+  discordNotifyMembers?: boolean;
+  discordNotifyAnnouncements?: boolean;
 }
 
 export interface Announcement {

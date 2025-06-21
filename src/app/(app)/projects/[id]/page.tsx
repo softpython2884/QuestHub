@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +60,8 @@ import {
   fetchUserGithubOAuthTokenAction,
   updateProjectDiscordSettingsAction,
   type UpdateProjectDiscordSettingsFormState,
+  deleteProjectAction,
+  type DeleteProjectFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,6 +77,7 @@ import remarkGfm from 'remark-gfm';
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -133,6 +136,9 @@ type LinkGithubFormValues = z.infer<typeof linkGithubFormSchema>;
 const discordSettingsFormSchema = z.object({
   discordWebhookUrl: z.string().url({ message: "Please enter a valid Discord webhook URL." }).or(z.literal('')),
   discordNotificationsEnabled: z.boolean().default(true),
+  discordNotifyTasks: z.boolean().default(true),
+  discordNotifyMembers: z.boolean().default(true),
+  discordNotifyAnnouncements: z.boolean().default(true),
 });
 type DiscordSettingsFormValues = z.infer<typeof discordSettingsFormSchema>;
 
@@ -239,7 +245,7 @@ function ProjectDetailPageContent() {
 
   const discordSettingsForm = useForm<DiscordSettingsFormValues>({
     resolver: zodResolver(discordSettingsFormSchema),
-    defaultValues: { discordWebhookUrl: '', discordNotificationsEnabled: true },
+    defaultValues: { discordWebhookUrl: '', discordNotificationsEnabled: true, discordNotifyTasks: true, discordNotifyMembers: true, discordNotifyAnnouncements: true },
   });
 
 
@@ -338,6 +344,7 @@ function ProjectDetailPageContent() {
   const [deleteAnnouncementState, deleteProjectAnnouncementFormAction, isDeleteAnnouncementPending] = useActionState(deleteProjectAnnouncementAction, { message: "", error: ""});
   const [linkGithubState, linkProjectToGithubFormAction, isLinkGithubPending] = useActionState(linkProjectToGithubAction, { message: "", error: "" });
   const [updateDiscordSettingsState, updateDiscordSettingsFormAction, isUpdateDiscordSettingsPending] = useActionState(updateProjectDiscordSettingsAction, { message: "", error: "" });
+  const [deleteProjectState, deleteProjectFormAction, isDeleteProjectPending] = useActionState(deleteProjectAction, {success: false});
 
 
   const loadTasks = useCallback(async () => {
@@ -441,6 +448,9 @@ function ProjectDetailPageContent() {
                     discordSettingsForm.reset({
                         discordWebhookUrl: projectData.discordWebhookUrl || '',
                         discordNotificationsEnabled: projectData.discordNotificationsEnabled === undefined ? true : projectData.discordNotificationsEnabled,
+                        discordNotifyTasks: projectData.discordNotifyTasks ?? true,
+                        discordNotifyMembers: projectData.discordNotifyMembers ?? true,
+                        discordNotifyAnnouncements: projectData.discordNotifyAnnouncements ?? true,
                     });
                     setProjectReadmeContent(projectData.readmeContent || '');
 
@@ -741,6 +751,18 @@ function ProjectDetailPageContent() {
     }
   }, [updateDiscordSettingsState, isUpdateDiscordSettingsPending, toast]);
 
+  useEffect(() => {
+    if (!isDeleteProjectPending && deleteProjectState) {
+      if (deleteProjectState.success) {
+        toast({ title: 'Project Deleted', description: deleteProjectState.message });
+        router.push('/projects');
+      }
+      if (deleteProjectState.error) {
+        toast({ variant: 'destructive', title: 'Deletion Error', description: deleteProjectState.error });
+      }
+    }
+  }, [deleteProjectState, isDeleteProjectPending, toast, router]);
+
 
   useEffect(() => {
     if (project) {
@@ -748,7 +770,10 @@ function ProjectDetailPageContent() {
       setProjectReadmeContent(project.readmeContent || '');
       discordSettingsForm.reset({
         discordWebhookUrl: project.discordWebhookUrl || '',
-        discordNotificationsEnabled: project.discordNotificationsEnabled === undefined ? true : project.discordNotificationsEnabled,
+        discordNotificationsEnabled: project.discordNotificationsEnabled ?? true,
+        discordNotifyTasks: project.discordNotifyTasks ?? true,
+        discordNotifyMembers: project.discordNotifyMembers ?? true,
+        discordNotifyAnnouncements: project.discordNotifyAnnouncements ?? true,
       });
     }
   }, [project, editProjectForm, discordSettingsForm]);
@@ -1203,6 +1228,10 @@ function ProjectDetailPageContent() {
     formData.append('projectUuid', project.uuid);
     formData.append('discordWebhookUrl', values.discordWebhookUrl);
     formData.append('discordNotificationsEnabled', String(values.discordNotificationsEnabled));
+    formData.append('discordNotifyTasks', String(values.discordNotifyTasks));
+    formData.append('discordNotifyMembers', String(values.discordNotifyMembers));
+    formData.append('discordNotifyAnnouncements', String(values.discordNotifyAnnouncements));
+
     startTransition(() => {
         updateDiscordSettingsFormAction(formData);
     });
@@ -1215,6 +1244,15 @@ function ProjectDetailPageContent() {
         projectUuid: project.uuid,
     }).toString();
     window.location.href = `/api/auth/github/oauth/login?state=${encodeURIComponent(statePayload)}`;
+  };
+
+  const handleDeleteProject = () => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    startTransition(() => {
+      deleteProjectFormAction(formData);
+    });
   };
 
   const copyToClipboard = (text: string, type: string) => {
@@ -1354,27 +1392,6 @@ function ProjectDetailPageContent() {
                   </Form>
                 </DialogContent>
               </Dialog>
-              <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" disabled={currentUserRole !== 'owner'}>
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete Project
-                      </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                      <AlertDialogHeader>
-                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                              This action cannot be undone. This will permanently delete the project and all its associated data. (This action is currently disabled).
-                          </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => { toast({title: "Info", description: "Project deletion not implemented yet."}) } } disabled>
-                              Yes, delete project
-                          </AlertDialogAction>
-                      </AlertDialogFooter>
-                  </AlertDialogContent>
-              </AlertDialog>
             </div>
           </div>
         </CardHeader>
@@ -2181,9 +2198,14 @@ function ProjectDetailPageContent() {
                 </div>
               )}
                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center"><GitBranch className="mr-2 h-5 w-5"/>GitHub Activity Logs</CardTitle>
+                    <CardHeader className="flex flex-col sm:flex-row justify-between items-center">
+                      <div>
+                        <CardTitle className="flex items-center"><GitBranch className="mr-2 h-5 w-5"/>Activity Logs</CardTitle>
                         <CardDescription>View recent commits and activity from the linked GitHub repository.</CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" disabled>
+                        <Github className="mr-2 h-4 w-4" /> Setup Webhook (Coming Soon)
+                      </Button>
                     </CardHeader>
                     <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                         <Terminal className="mx-auto h-12 w-12 opacity-50 mb-3" />
@@ -2329,7 +2351,7 @@ function ProjectDetailPageContent() {
                         disabled={!canManageProjectSettings || isToggleUrgencyPending}
                     />
                 </div>
-                {toggleUrgencyState?.error && <p className="text-sm text-destructive">{toggleUrgencyState.error}</p>}
+                 {toggleUrgencyState?.error && <p className="text-sm text-destructive">{toggleUrgencyState.error}</p>}
 
                 <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
                      <Label htmlFor="project-visibility" className="flex flex-col">
@@ -2356,7 +2378,21 @@ function ProjectDetailPageContent() {
                                 name="discordWebhookUrl"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Discord Webhook URL</FormLabel>
+                                        <div className="flex items-center justify-between">
+                                          <FormLabel>Discord Webhook URL</FormLabel>
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary">
+                                                   <HelpCircle className="h-4 w-4" />
+                                                </a>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Click to learn how to create a webhook on Discord.</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
+                                        </div>
                                         <FormControl>
                                             <Input {...field} placeholder="https://discord.com/api/webhooks/..." disabled={!canManageProjectSettings}/>
                                         </FormControl>
@@ -2373,9 +2409,9 @@ function ProjectDetailPageContent() {
                                 render={({ field }) => (
                                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background/50">
                                         <div className="space-y-0.5">
-                                            <FormLabel>Enable Notifications</FormLabel>
+                                            <FormLabel>Enable All Notifications</FormLabel>
                                             <FormDescription>
-                                                Toggle sending notifications to the configured webhook.
+                                                Master toggle for sending notifications to the webhook.
                                             </FormDescription>
                                         </div>
                                         <FormControl>
@@ -2388,6 +2424,18 @@ function ProjectDetailPageContent() {
                                     </FormItem>
                                 )}
                             />
+                            <div className="space-y-2 pl-4 border-l-2 ml-1">
+                               <FormField control={discordSettingsForm.control} name="discordNotifyTasks" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Task Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                )}/>
+                                <FormField control={discordSettingsForm.control} name="discordNotifyMembers" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Member Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                )}/>
+                                <FormField control={discordSettingsForm.control} name="discordNotifyAnnouncements" render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between"><FormLabel>Announcement Notifications</FormLabel><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={!canManageProjectSettings} /></FormControl></FormItem>
+                                )}/>
+                            </div>
+
                             {updateDiscordSettingsState?.error && <p className="text-sm text-destructive">{updateDiscordSettingsState.error}</p>}
                             <div className="flex justify-end">
                                 <Button type="submit" disabled={isUpdateDiscordSettingsPending || !canManageProjectSettings}>
@@ -2506,9 +2554,43 @@ function ProjectDetailPageContent() {
                {currentUserRole === 'owner' && (
                 <div>
                     <h4 className="font-semibold mb-2 text-lg text-destructive">Danger Zone</h4>
-                    <div className="border border-destructive p-4 rounded-md ">
-                        <p className="text-destructive">Deleting a project is permanent and cannot be undone. (This action is currently disabled).</p>
-                        <Button variant="destructive" className="mt-3" size="sm" disabled><Trash2 className="mr-2 h-4 w-4"/>Delete Project</Button>
+                    <div className="border border-destructive p-4 rounded-md space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h5 className="font-medium">Archive this project</h5>
+                                <p className="text-sm text-muted-foreground">Mark the project as archived and read-only.</p>
+                            </div>
+                            <Button variant="outline" size="sm" disabled>
+                                <Archive className="mr-2 h-4 w-4"/>Archive Project (Coming Soon)
+                            </Button>
+                        </div>
+                         <div className="flex items-center justify-between">
+                            <div>
+                                <h5 className="font-medium text-destructive">Delete this project</h5>
+                                <p className="text-sm text-muted-foreground">Once you delete a project, there is no going back. Please be certain.</p>
+                            </div>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm" disabled={isDeleteProjectPending}>
+                                  <Trash2 className="mr-2 h-4 w-4"/>Delete Project
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the project **{project.name}** and all of its associated data from FlowUp. This will NOT delete any linked GitHub repository.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleDeleteProject} disabled={isDeleteProjectPending} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                    {isDeleteProjectPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Yes, delete project
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
                     </div>
                 </div>
                )}
