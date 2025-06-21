@@ -12,11 +12,11 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useEffect, useState, useActionState, startTransition } from 'react';
+import { useEffect, useState, useActionState, startTransition, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import * as authService from '@/lib/authService';
 import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUserDetailsAction, fetchDiscordUserDetailsAction, disconnectDiscordAction } from '@/app/(app)/projects/[id]/actions'; 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -49,6 +49,7 @@ type AvatarSource = 'flowup' | 'github' | 'discord';
 export default function ProfilePage() {
   const { user, isLoading: authLoading, refreshUser } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -75,6 +76,28 @@ export default function ProfilePage() {
     },
   });
 
+  const loadExternalData = useCallback(async () => {
+    if (user) {
+      setIsLoadingGithub(true);
+      setIsLoadingDiscord(true);
+
+      const tokenData = await fetchUserGithubOAuthTokenAction();
+      if (tokenData?.accessToken) {
+        setGithubToken(tokenData.accessToken);
+        const userDetails = await fetchGithubUserDetailsAction();
+        setGithubUserDetails(userDetails);
+      } else {
+        setGithubToken(null);
+        setGithubUserDetails(null);
+      }
+      setIsLoadingGithub(false);
+      
+      const discordDetails = await fetchDiscordUserDetailsAction();
+      setDiscordUserDetails(discordDetails);
+      setIsLoadingDiscord(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       form.reset({
@@ -86,29 +109,44 @@ export default function ProfilePage() {
   }, [user, form]);
 
   useEffect(() => {
-    async function loadExternalData() {
-      if (user) {
-        setIsLoadingGithub(true);
-        setIsLoadingDiscord(true);
-
-        const tokenData = await fetchUserGithubOAuthTokenAction();
-        if (tokenData?.accessToken) {
-          setGithubToken(tokenData.accessToken);
-          const userDetails = await fetchGithubUserDetailsAction();
-          setGithubUserDetails(userDetails);
-        } else {
-          setGithubToken(null);
-          setGithubUserDetails(null);
-        }
-        setIsLoadingGithub(false);
-        
-        const discordDetails = await fetchDiscordUserDetailsAction();
-        setDiscordUserDetails(discordDetails);
-        setIsLoadingDiscord(false);
-      }
+    if (!authLoading) {
+      loadExternalData();
     }
-    if (!authLoading) loadExternalData();
-  }, [user, authLoading]);
+  }, [authLoading, loadExternalData]);
+
+  useEffect(() => {
+    const githubStatus = searchParams.get('oauth_status');
+    const discordStatus = searchParams.get('discord_oauth_status');
+    const authError = searchParams.get('error');
+    const errorMessage = searchParams.get('message');
+    let urlModified = false;
+    const newUrl = new URL(window.location.href);
+
+    if (githubStatus === 'success') {
+        toast({ title: "GitHub Connected!", description: "Your GitHub account has been successfully linked." });
+        loadExternalData();
+        newUrl.searchParams.delete('oauth_status');
+        urlModified = true;
+    }
+
+    if (discordStatus === 'success') {
+        toast({ title: "Discord Connected!", description: "Your Discord account has been successfully linked." });
+        loadExternalData();
+        newUrl.searchParams.delete('discord_oauth_status');
+        urlModified = true;
+    }
+    
+    if (authError) {
+        toast({ variant: 'destructive', title: "Connection Error", description: errorMessage || authError });
+        newUrl.searchParams.delete('error');
+        newUrl.searchParams.delete('message');
+        urlModified = true;
+    }
+
+    if (urlModified) {
+        router.replace(newUrl.toString(), { scroll: false });
+    }
+  }, [searchParams, router, toast, loadExternalData]);
   
   useEffect(() => {
     if (user && !isLoadingGithub && !isLoadingDiscord) {
@@ -444,5 +482,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    

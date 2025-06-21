@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
   discordAuthUrl.searchParams.append('client_id', DISCORD_CLIENT_ID);
   discordAuthUrl.searchParams.append('redirect_uri', `${NEXT_PUBLIC_APP_URL}/api/auth/discord/oauth/callback`);
   discordAuthUrl.searchParams.append('response_type', 'code');
-  discordAuthUrl.searchParams.append('scope', 'identify email'); 
+  // Requesting 'bot' scope is necessary to enable bot interactions, like sending DMs to the user later.
+  // This also requires the app to be configured as a bot in the Discord Developer Portal.
+  discordAuthUrl.searchParams.append('scope', 'identify email bot'); 
   discordAuthUrl.searchParams.append('state', state);
 
   console.log('[Discord OAuth Login] Redirecting to Discord:', discordAuthUrl.toString());
