@@ -143,6 +143,7 @@ export interface ProjectMember {
   userUuid: string;
   role: ProjectMemberRole;
   user?: Pick<User, 'uuid' | 'name' | 'avatar' | 'email'>;
+  githubInvitationPending: boolean;
 }
 
 export interface Project {

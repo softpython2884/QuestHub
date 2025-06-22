@@ -322,6 +322,7 @@ export async function getDbConnection() {
       projectUuid TEXT NOT NULL,
       userUuid TEXT NOT NULL,
       roleInProject TEXT NOT NULL,
+      githubInvitationPending BOOLEAN DEFAULT FALSE,
       PRIMARY KEY (projectUuid, userUuid),
       FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE,
       FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -947,15 +948,16 @@ export async function addProjectMember(projectUuid: string, userUuid: string, ro
 
   if (existingMember) {
     await connection.run(
-      'UPDATE project_members SET roleInProject = ? WHERE projectUuid = ? AND userUuid = ?',
-      roleInProject, projectUuid, userUuid
+      'UPDATE project_members SET roleInProject = ?, githubInvitationPending = ? WHERE projectUuid = ? AND userUuid = ?',
+      roleInProject, false, projectUuid, userUuid
     );
   } else {
     await connection.run(
-      'INSERT INTO project_members (projectUuid, userUuid, roleInProject) VALUES (?, ?, ?)',
+      'INSERT INTO project_members (projectUuid, userUuid, roleInProject, githubInvitationPending) VALUES (?, ?, ?, ?)',
       projectUuid,
       userUuid,
-      roleInProject
+      roleInProject,
+      false
     );
   }
 
@@ -966,14 +968,15 @@ export async function addProjectMember(projectUuid: string, userUuid: string, ro
     projectUuid,
     userUuid,
     role: roleInProject,
-    user: { uuid: user.uuid, name: user.name, avatar: user.avatar, email: user.email }
+    user: { uuid: user.uuid, name: user.name, avatar: user.avatar, email: user.email },
+    githubInvitationPending: false
   };
 }
 
 export async function getProjectMembers(projectUuid: string): Promise<ProjectMember[]> {
   const connection = await getDbConnection();
-  const membersData = await connection.all<Array<{ userUuid: string; roleInProject: ProjectMemberRole; name: string; email: string; avatar?: string }>>(
-    `SELECT pm.userUuid, pm.roleInProject, u.name, u.email, u.avatar
+  const membersData = await connection.all<Array<{ userUuid: string; roleInProject: ProjectMemberRole; name: string; email: string; avatar?: string; githubInvitationPending: 0 | 1 }>>(
+    `SELECT pm.userUuid, pm.roleInProject, u.name, u.email, u.avatar, pm.githubInvitationPending
      FROM project_members pm
      JOIN users u ON pm.userUuid = u.uuid
      WHERE pm.projectUuid = ?`,
@@ -983,8 +986,19 @@ export async function getProjectMembers(projectUuid: string): Promise<ProjectMem
     projectUuid,
     userUuid: m.userUuid,
     role: m.roleInProject,
-    user: { uuid: m.userUuid, name: m.name, email: m.email, avatar: m.avatar }
+    user: { uuid: m.userUuid, name: m.name, email: m.email, avatar: m.avatar },
+    githubInvitationPending: !!m.githubInvitationPending,
   }));
+}
+
+export async function setGithubInvitationPendingStatus(projectUuid: string, userUuid: string, isPending: boolean): Promise<void> {
+  const connection = await getDbConnection();
+  await connection.run(
+    'UPDATE project_members SET githubInvitationPending = ? WHERE projectUuid = ? AND userUuid = ?',
+    isPending ? 1 : 0,
+    projectUuid,
+    userUuid
+  );
 }
 
 export async function removeProjectMember(projectUuid: string, userUuid: string): Promise<{ success: boolean; userRemoved?: User | null }> {

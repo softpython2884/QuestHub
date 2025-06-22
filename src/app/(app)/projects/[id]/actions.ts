@@ -41,6 +41,7 @@ import {
   deleteProject as dbDeleteProject,
   updateProjectWebhookDetails as dbUpdateProjectWebhookDetails,
   createProject as dbCreateProject,
+  setGithubInvitationPendingStatus as dbSetGithubInvitationPendingStatus, // Added
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -217,8 +218,8 @@ export async function inviteUserToProjectAction(
     }
 
     let githubMessage = "";
-    if (project.githubRepoName && project.githubRepoUrl) {
-      console.log("[inviteUserToProjectAction] Project is linked to GitHub. Attempting to add collaborator.");
+    if (project.githubRepoName && project.isPrivate) {
+      console.log("[inviteUserToProjectAction] Private project is linked to GitHub. Attempting to add collaborator.");
       const inviterOAuthToken = await dbGetUserGithubOAuthToken(inviterUserUuid);
       
       let invitedUserGithubLogin: string | undefined;
@@ -246,10 +247,11 @@ export async function inviteUserToProjectAction(
               username: invitedUserGithubLogin,
               permission: githubPermission,
             });
-            githubMessage = ` User also invited as a collaborator to the GitHub repository with '${githubPermission}' permission.`;
-            console.log(`[inviteUserToProjectAction] Successfully added ${invitedUserGithubLogin} to ${owner}/${repo} with ${githubPermission} permission.`);
+            await dbSetGithubInvitationPendingStatus(projectUuid, userToInvite.uuid, true);
+            githubMessage = ` An invitation to the private GitHub repository has been sent.`;
+            console.log(`[inviteUserToProjectAction] Successfully sent invitation to ${invitedUserGithubLogin} for ${owner}/${repo} with ${githubPermission} permission.`);
           } catch (githubError: any) {
-            githubMessage = ` Failed to add user to GitHub repository: ${githubError.message}. Please add them manually if needed.`;
+            githubMessage = ` Failed to send GitHub repository invitation: ${githubError.message}. Please add them manually if needed.`;
             console.error(`[inviteUserToProjectAction] Error adding collaborator to GitHub: ${githubError.status} ${githubError.message}`, githubError.response?.data);
           }
         } else {
@@ -257,10 +259,10 @@ export async function inviteUserToProjectAction(
             console.warn("[inviteUserToProjectAction] Invalid project.githubRepoName format:", project.githubRepoName);
         }
       } else if (!inviterOAuthToken?.accessToken) {
-        githubMessage = " Inviter has not connected their GitHub account, cannot add collaborator to repository.";
+        githubMessage = " Inviter has not connected their GitHub account, cannot automatically send repository invitation.";
         console.warn("[inviteUserToProjectAction] Inviter has no GitHub OAuth token.");
       } else if (!invitedUserGithubLogin) {
-         githubMessage = ` Invited user (${userToInvite.email}) has not connected their GitHub account or their GitHub login could not be determined. Cannot add as collaborator automatically.`;
+         githubMessage = ` Invited user (${userToInvite.email}) has not connected their GitHub account. Cannot send repository invitation automatically.`;
          console.warn("[inviteUserToProjectAction] Could not determine GitHub login for invited user.");
       }
     }
@@ -2111,7 +2113,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
@@ -2235,7 +2237,7 @@ export async function setupGithubWebhookAction(
     if (error.status === 422) {
         if (error.message.includes("Hook already exists")) {
             errorMessage = "A webhook for this URL already exists on the repository. Please check your repository settings on GitHub.";
-        } else if (error.message.includes("not supported because it isn't reachable")) {
+        } else if (error.message.includes("url is not supported because it isn't reachable")) {
             errorMessage = "GitHub couldn't reach your webhook URL. If you are developing locally, your `localhost` is not accessible from the public internet. Please use a tunneling service like ngrok to expose your local server, then update your NEXT_PUBLIC_APP_URL in the .env file.";
         } else {
              errorMessage = `Could not create webhook (422): ${error.message}. Check permissions and configuration.`;
@@ -2353,4 +2355,25 @@ export async function duplicateProjectAction(
     console.error("Error duplicating project:", error);
     return { error: error.message || "An unexpected error occurred during duplication." };
   }
+}
+
+export async function checkGithubAccessAction(projectUuid: string): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { success: false, error: "Authentication required." };
+  }
+
+  const repoContents = await getRepoContentsAction(projectUuid, '');
+
+  if ('error' in repoContents) {
+    if (repoContents.error.includes('Access denied') || repoContents.error.includes('not found')) {
+      return { success: false, error: "Access to the repository is still denied. Please ensure you have accepted the GitHub invitation." };
+    }
+    return { success: false, error: `An error occurred while checking access: ${repoContents.error}` };
+  }
+
+  // If access is successful, update the flag in the database
+  await dbSetGithubInvitationPendingStatus(projectUuid, session.user.uuid, false);
+  console.log(`[checkGithubAccessAction] User ${session.user.uuid} access to project ${projectUuid} confirmed. Flag updated.`);
+  return { success: true };
 }
