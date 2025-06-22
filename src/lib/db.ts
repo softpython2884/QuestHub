@@ -1638,14 +1638,15 @@ export async function getLinkedProjectForGlobalDocument(documentUuid: string): P
 
 export async function getLinkableProjects(userUuid: string | undefined): Promise<Pick<Project, 'uuid' | 'name'>[]> {
     const connection = await getDbConnection();
-    // This query will select all public projects, and also all private projects where the user is a member.
-    // It uses UNION to combine the results and avoid duplicates.
+    // This query selects all public projects OR private projects where the user is a member.
+    // It uses a LEFT JOIN and WHERE clause to filter, and GROUP BY to ensure uniqueness.
     const query = `
-        SELECT p.uuid, p.name FROM projects p WHERE p.isPrivate = FALSE
-        UNION
-        SELECT p.uuid, p.name FROM projects p JOIN project_members pm ON p.uuid = pm.projectUuid WHERE pm.userUuid = ?
-        ORDER BY name ASC
+        SELECT p.uuid, p.name
+        FROM projects p
+        LEFT JOIN project_members pm ON p.uuid = pm.projectUuid
+        WHERE p.isPrivate = FALSE OR pm.userUuid = ?
+        GROUP BY p.uuid
+        ORDER BY p.name ASC
     `;
-    // Pass an empty string if userUuid is undefined to avoid SQL errors with `?` for the second part of the UNION
     return connection.all<Pick<Project, 'uuid' | 'name'>[]>(query, userUuid || '');
 }
