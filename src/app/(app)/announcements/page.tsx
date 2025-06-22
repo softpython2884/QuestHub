@@ -40,7 +40,7 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     loadAnnouncements();
-  }, [toast]);
+  }, []);
   
   useEffect(() => {
     if (deleteState.success) {
@@ -120,7 +120,7 @@ export default function AnnouncementsPage() {
           ) : (
             <div className="space-y-4">
               {announcements.map((announcement) => (
-                <Card key={announcement.uuid} className={cn("shadow-sm", announcement.isPinned && "bg-primary/5")}>
+                <Card key={announcement.uuid} className={cn("shadow-sm", announcement.isPinned && "bg-primary/5 border-primary/20")}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">

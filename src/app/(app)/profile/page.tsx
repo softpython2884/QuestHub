@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User as UserIcon, Mail, Shield, Edit3, Image as ImageIcon, Github, Link2, PowerOff, ExternalLink, Loader2, MessageSquare } from 'lucide-react'; 
+import { User as UserIcon, Mail, Shield, Edit3, Image as ImageIcon, Github, Link2, PowerOff, ExternalLink, Loader2, MessageSquare, Globe } from 'lucide-react'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,13 +19,20 @@ import { fetchUserGithubOAuthTokenAction, disconnectGithubAction, fetchGithubUse
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
   avatar: z.string().url({ message: "Invalid URL format." }).optional().or(z.literal('')),
+  bio: z.string().max(280, { message: "Bio cannot exceed 280 characters." }).optional(),
+  websiteUrl: z.string().url({ message: "Invalid URL format." }).optional().or(z.literal('')),
+  showGithubOnProfile: z.boolean().default(false),
+  showDiscordOnProfile: z.boolean().default(false),
 });
+
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
@@ -73,6 +80,10 @@ export default function ProfilePage() {
       name: user?.name || '',
       email: user?.email || '',
       avatar: user?.avatar || '',
+      bio: user?.bio || '',
+      websiteUrl: user?.websiteUrl || '',
+      showGithubOnProfile: user?.showGithubOnProfile || false,
+      showDiscordOnProfile: user?.showDiscordOnProfile || false,
     },
   });
 
@@ -104,6 +115,10 @@ export default function ProfilePage() {
         name: user.name,
         email: user.email,
         avatar: user.avatar || '',
+        bio: user.bio || '',
+        websiteUrl: user.websiteUrl || '',
+        showGithubOnProfile: user.showGithubOnProfile || false,
+        showDiscordOnProfile: user.showDiscordOnProfile || false,
       });
     }
   }, [user, form]);
@@ -233,7 +248,16 @@ export default function ProfilePage() {
   const onSubmit = async (data: ProfileFormValues) => {
     setIsSubmitting(true);
     try {
-      const result = await authService.updateUserProfile(user.uuid, data.name, data.email, data.avatar || undefined);
+      const result = await authService.updateUserProfile({
+          uuid: user.uuid,
+          name: data.name,
+          email: data.email,
+          avatar: data.avatar || undefined,
+          bio: data.bio || null,
+          websiteUrl: data.websiteUrl || null,
+          showDiscordOnProfile: data.showDiscordOnProfile,
+          showGithubOnProfile: data.showGithubOnProfile
+      });
 
       if (result) {
         toast({ title: "Success", description: "Profile updated successfully." });
@@ -306,6 +330,8 @@ export default function ProfilePage() {
               <>
                 <CardTitle className="text-2xl">{user.name}</CardTitle>
                 <CardDescription>{user.email}</CardDescription>
+                {user.bio && <p className="text-sm text-muted-foreground pt-2 italic">"{user.bio}"</p>}
+                 {user.websiteUrl && <a href={user.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center justify-center gap-1 pt-1"><Globe className="h-4 w-4"/>{user.websiteUrl}</a>}
               </>
             ) : (
                <CardTitle className="text-2xl">Edit Profile</CardTitle>
@@ -313,16 +339,26 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
             {isEditing ? (
-              <>
-                <div className="space-y-1">
+              <div className="space-y-4">
+                <div>
                   <Label htmlFor="name">Full Name</Label>
                   <Input id="name" {...form.register("name")} />
                   {form.formState.errors.name && <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>}
                 </div>
-                <div className="space-y-1">
+                <div>
                   <Label htmlFor="email">Email Address</Label>
                   <Input id="email" type="email" {...form.register("email")} />
                    {form.formState.errors.email && <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>}
+                </div>
+                 <div>
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea id="bio" placeholder="Tell us a little about yourself..." {...form.register("bio")} />
+                  {form.formState.errors.bio && <p className="text-sm text-destructive">{form.formState.errors.bio.message}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="websiteUrl">Website URL</Label>
+                  <Input id="websiteUrl" placeholder="https://your-website.com" {...form.register("websiteUrl")} />
+                  {form.formState.errors.websiteUrl && <p className="text-sm text-destructive">{form.formState.errors.websiteUrl.message}</p>}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="avatar">Avatar URL</Label>
@@ -337,7 +373,7 @@ export default function ProfilePage() {
                    <RadioGroup value={avatarSource} onValueChange={handleAvatarSourceChange}>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="flowup" id="r-flowup" />
-                        <Label htmlFor="r-flowup">Use FlowUp Avatar URL</Label>
+                        <Label htmlFor="r-flowup">Use Custom Avatar URL</Label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="github" id="r-github" disabled={!githubUserDetails}/>
@@ -351,7 +387,24 @@ export default function ProfilePage() {
                       </div>
                    </RadioGroup>
                 </Card>
-              </>
+                <Card className="p-4 bg-muted/30 space-y-3">
+                     <h4 className="font-semibold">Public Profile Visibility</h4>
+                     <div className="flex items-center justify-between">
+                        <Label htmlFor="showGithub" className="flex flex-col">
+                            <span>Show GitHub Connection</span>
+                            <span className="text-xs font-normal text-muted-foreground">Allow others to see your linked GitHub profile.</span>
+                        </Label>
+                        <Switch id="showGithub" checked={form.watch('showGithubOnProfile')} onCheckedChange={(c) => form.setValue('showGithubOnProfile', c)} disabled={!githubToken}/>
+                    </div>
+                     <div className="flex items-center justify-between">
+                        <Label htmlFor="showDiscord" className="flex flex-col">
+                            <span>Show Discord Connection</span>
+                            <span className="text-xs font-normal text-muted-foreground">Allow others to see your linked Discord username.</span>
+                        </Label>
+                        <Switch id="showDiscord" checked={form.watch('showDiscordOnProfile')} onCheckedChange={(c) => form.setValue('showDiscordOnProfile', c)} disabled={!discordUserDetails}/>
+                    </div>
+                </Card>
+              </div>
             ) : (
               <>
                 <div className="flex items-center p-3 bg-muted/50 rounded-md">
@@ -387,9 +440,9 @@ export default function ProfilePage() {
           </CardContent>
           {isEditing && (
             <CardFooter className="flex justify-end gap-2">
-              <Button variant="ghost" type="button" onClick={() => { setIsEditing(false); form.reset({ name: user.name, email: user.email, avatar: user.avatar || '' }); }}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => { setIsEditing(false); form.reset(user); }}>Cancel</Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
               </Button>
             </CardFooter>
           )}

@@ -111,9 +111,18 @@ export const logout = async (): Promise<void> => {
   }
 };
 
-export const updateUserProfile = async (uuid: string, name: string, email: string, avatar?: string): Promise<User | null> => {
+export const updateUserProfile = async (data: {
+    uuid: string;
+    name: string;
+    email: string;
+    avatar?: string;
+    bio: string | null;
+    websiteUrl: string | null;
+    showGithubOnProfile: boolean;
+    showDiscordOnProfile: boolean;
+}): Promise<User | null> => {
   try {
-    const updatedUserFromDb = await dbUpdateUserProfile(uuid, name, email, avatar);
+    const updatedUserFromDb = await dbUpdateUserProfile(data);
     if (updatedUserFromDb) {
         const { hashedPassword, ...userToReturn } = updatedUserFromDb;
         

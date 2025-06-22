@@ -8,6 +8,8 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import { getCurrentUserUuid } from './authEdge';
+
 
 let db: Database | null = null;
 
@@ -254,7 +256,11 @@ export async function getDbConnection() {
       email TEXT UNIQUE NOT NULL,
       hashedPassword TEXT NOT NULL,
       role TEXT NOT NULL,
-      avatar TEXT
+      avatar TEXT,
+      bio TEXT,
+      websiteUrl TEXT,
+      showDiscordOnProfile BOOLEAN DEFAULT FALSE,
+      showGithubOnProfile BOOLEAN DEFAULT FALSE
     );
 
     CREATE TABLE IF NOT EXISTS user_github_installations (
@@ -421,7 +427,6 @@ export async function getDbConnection() {
       FOREIGN KEY (tagUuid) REFERENCES project_tags (uuid) ON DELETE CASCADE
     );
 
-    -- New tables for global documentation features
     CREATE TABLE IF NOT EXISTS global_tags (
         uuid TEXT PRIMARY KEY,
         name TEXT UNIQUE NOT NULL
@@ -457,6 +462,22 @@ export async function getDbConnection() {
         documentUuid TEXT PRIMARY KEY,
         projectUuid TEXT NOT NULL,
         FOREIGN KEY (documentUuid) REFERENCES global_documents(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (projectUuid) REFERENCES projects(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS project_stars (
+        projectUuid TEXT NOT NULL,
+        userUuid TEXT NOT NULL,
+        PRIMARY KEY (projectUuid, userUuid),
+        FOREIGN KEY (projectUuid) REFERENCES projects(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_pinned_projects (
+        userUuid TEXT NOT NULL,
+        projectUuid TEXT NOT NULL,
+        PRIMARY KEY (userUuid, projectUuid),
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE,
         FOREIGN KEY (projectUuid) REFERENCES projects(uuid) ON DELETE CASCADE
     );
   `);
@@ -522,7 +543,7 @@ export async function createUser(name: string, email: string, password?: string,
 export async function getUserByEmail(email: string): Promise<(User & { hashedPassword?: string }) | null> {
   const connection = await getDbConnection();
   const userRow = await connection.get<User & { hashedPassword?: string }>(
-    'SELECT id, uuid, name, email, hashedPassword, role, avatar FROM users WHERE email = ?',
+    'SELECT * FROM users WHERE email = ?',
     email
   );
   if (!userRow) return null;
@@ -532,7 +553,7 @@ export async function getUserByEmail(email: string): Promise<(User & { hashedPas
 export async function getUserById(id: string): Promise<User | null> {
   const connection = await getDbConnection();
   const userRow = await connection.get<User>(
-    'SELECT id, uuid, name, email, role, avatar FROM users WHERE id = ?',
+    'SELECT * FROM users WHERE id = ?',
     id
   );
   if (!userRow) return null;
@@ -542,45 +563,62 @@ export async function getUserById(id: string): Promise<User | null> {
 export async function getUserByUuid(uuid: string): Promise<(User & { hashedPassword?: string }) | null> {
   const connection = await getDbConnection();
   const userRow = await connection.get<(User & { hashedPassword?: string })>(
-    'SELECT id, uuid, name, email, hashedPassword, role, avatar FROM users WHERE uuid = ?',
+    'SELECT * FROM users WHERE uuid = ?',
     uuid
   );
   if (!userRow) return null;
   return { ...userRow, id: userRow.id.toString() };
 }
 
-export async function updateUserProfile(uuid: string, name: string, email: string, avatar?: string): Promise<User | null> {
+export async function updateUserProfile(data: {
+  uuid: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  bio: string | null;
+  websiteUrl: string | null;
+  showGithubOnProfile: boolean;
+  showDiscordOnProfile: boolean;
+}): Promise<User | null> {
   const connection = await getDbConnection();
 
-  const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', email, uuid);
+  const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', data.email, data.uuid);
   if (existingUserWithEmail) {
     throw new Error('Email is already in use by another account.');
   }
 
-  let finalAvatar = avatar;
-  const currentUser = await getUserByUuid(uuid);
-
-  if (avatar === '') {
-    const defaultAvatarText = name.substring(0,2).toUpperCase() || 'NA';
+  let finalAvatar = data.avatar;
+  if (data.avatar === '') {
+    const defaultAvatarText = data.name.substring(0, 2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
-  } else if (avatar === undefined && currentUser) {
-    finalAvatar = currentUser.avatar;
   }
 
-
   await connection.run(
-    'UPDATE users SET name = ?, email = ?, avatar = ? WHERE uuid = ?',
-    name,
-    email,
+    `UPDATE users SET 
+      name = ?, 
+      email = ?, 
+      avatar = ?, 
+      bio = ?, 
+      websiteUrl = ?, 
+      showGithubOnProfile = ?, 
+      showDiscordOnProfile = ?
+     WHERE uuid = ?`,
+    data.name,
+    data.email,
     finalAvatar,
-    uuid
+    data.bio,
+    data.websiteUrl,
+    data.showGithubOnProfile ? 1 : 0,
+    data.showDiscordOnProfile ? 1 : 0,
+    data.uuid
   );
 
-  const updatedUser = await getUserByUuid(uuid);
+  const updatedUser = await getUserByUuid(data.uuid);
   if (!updatedUser) return null;
   const { hashedPassword, ...userToReturn } = updatedUser;
   return userToReturn;
 }
+
 
 export async function storeUserGithubInstallation(userUuid: string, installationId: number, accountLogin?: string): Promise<void> {
     const connection = await getDbConnection();
@@ -1649,4 +1687,81 @@ export async function getLinkableProjects(userUuid: string | undefined): Promise
         ORDER BY p.name ASC
     `;
     return connection.all<Pick<Project, 'uuid' | 'name'>[]>(query, userUuid || '');
+}
+
+// Discover / Social Features
+export async function getPublicProjectsWithStars(currentUserId?: string | null): Promise<Array<Project & { starCount: number, isStarred: boolean, ownerName: string }>> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<Array<Project & { starCount: number, isStarred: 0 | 1, ownerName: string }>>(
+        `SELECT 
+            p.*, 
+            u.name as ownerName,
+            (SELECT COUNT(*) FROM project_stars WHERE projectUuid = p.uuid) as starCount,
+            (SELECT COUNT(*) FROM project_stars WHERE projectUuid = p.uuid AND userUuid = ?) as isStarred
+         FROM projects p
+         JOIN users u ON p.ownerUuid = u.uuid
+         WHERE p.isPrivate = FALSE
+         ORDER BY starCount DESC, p.updatedAt DESC`,
+        currentUserId || ''
+    );
+
+    return rows.map(p => ({
+        ...p,
+        isStarred: !!p.isStarred
+    }));
+}
+
+export async function searchPublicUsers(query: string): Promise<User[]> {
+    const connection = await getDbConnection();
+    return connection.all<User[]>(
+        `SELECT uuid, name, email, role, avatar, bio, websiteUrl 
+         FROM users 
+         WHERE name LIKE ? OR email LIKE ?
+         LIMIT 10`,
+        `%${query}%`, `%${query}%`
+    );
+}
+
+export async function toggleStar(projectUuid: string, userUuid: string): Promise<{ starred: boolean; error?: string }> {
+    const connection = await getDbConnection();
+    const existingStar = await connection.get(
+        'SELECT * FROM project_stars WHERE projectUuid = ? AND userUuid = ?',
+        projectUuid, userUuid
+    );
+
+    if (existingStar) {
+        await connection.run(
+            'DELETE FROM project_stars WHERE projectUuid = ? AND userUuid = ?',
+            projectUuid, userUuid
+        );
+        return { starred: false };
+    } else {
+        await connection.run(
+            'INSERT INTO project_stars (projectUuid, userUuid) VALUES (?, ?)',
+            projectUuid, userUuid
+        );
+        return { starred: true };
+    }
+}
+
+export async function getPublicProfile(userUuid: string): Promise<(User & { projects: Project[], pinnedProjects: Project[] }) | null> {
+    const connection = await getDbConnection();
+    const user = await connection.get<User>('SELECT uuid, name, email, role, avatar, bio, websiteUrl, showGithubOnProfile, showDiscordOnProfile FROM users WHERE uuid = ?', userUuid);
+    if (!user) return null;
+
+    const projects = await connection.all<Project[]>(
+        'SELECT * FROM projects WHERE ownerUuid = ? AND isPrivate = FALSE ORDER BY updatedAt DESC',
+        userUuid
+    );
+
+    const pinnedProjects = await connection.all<Project[]>(
+      `SELECT p.*
+       FROM projects p
+       JOIN user_pinned_projects upp ON p.uuid = upp.projectUuid
+       WHERE upp.userUuid = ? AND p.isPrivate = FALSE
+       ORDER BY p.name ASC`,
+       userUuid
+    );
+    
+    return { ...user, projects, pinnedProjects };
 }

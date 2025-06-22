@@ -9,6 +9,10 @@ export interface User {
   name: string;
   role: UserRole;
   avatar?: string;
+  bio?: string | null;
+  websiteUrl?: string | null;
+  showGithubOnProfile?: boolean;
+  showDiscordOnProfile?: boolean;
 }
 
 export interface UserGithubInstallation {
@@ -151,6 +155,7 @@ export interface Project {
   name: string;
   description?: string;
   ownerUuid: string;
+  ownerName?: string;
   createdAt: string;
   updatedAt: string;
   isPrivate?: boolean;
@@ -168,6 +173,8 @@ export interface Project {
   discordNotifyAnnouncements?: boolean;
   discordNotifyDocuments?: boolean;
   discordNotifySettings?: boolean;
+  starCount?: number;
+  isStarred?: boolean;
 }
 
 // Represents an announcement within a specific project
