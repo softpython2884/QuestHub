@@ -5,7 +5,7 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { getGlobalDocumentAction, saveGlobalDocumentAction, getPublicProjectsAction } from '../actions'; 
+import { getGlobalDocumentAction, saveGlobalDocumentAction, getLinkableProjectsForUserAction } from '../../actions'; 
 import { useEffect, useState } from 'react';
 import type { GlobalDocument, Project } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
@@ -21,7 +21,7 @@ export default function EditGlobalDocumentPage() {
   const [document, setDocument] = useState<GlobalDocument | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
-  const [publicProjects, setPublicProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
+  const [linkableProjects, setLinkableProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -30,10 +30,10 @@ export default function EditGlobalDocumentPage() {
       try {
         const [fetchedDoc, projects] = await Promise.all([
           getGlobalDocumentAction(documentUuid),
-          getPublicProjectsAction()
+          getLinkableProjectsForUserAction()
         ]);
         
-        setPublicProjects(projects);
+        setLinkableProjects(projects);
 
         if (fetchedDoc) {
           if (user.uuid === fetchedDoc.authorUuid || user.role === 'admin') {
@@ -116,7 +116,7 @@ export default function EditGlobalDocumentPage() {
         saveButtonText="Save Changes"
         createButtonText="Create Document"
         showMetadataControls={true}
-        publicProjects={publicProjects}
+        linkableProjects={linkableProjects}
       />
     </div>
   );

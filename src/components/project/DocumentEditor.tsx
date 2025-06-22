@@ -39,7 +39,7 @@ interface DocumentEditorProps {
   saveButtonText: string;
   createButtonText: string;
   showMetadataControls?: boolean;
-  publicProjects?: Pick<Project, 'uuid' | 'name'>[];
+  linkableProjects?: Pick<Project, 'uuid' | 'name'>[];
 }
 
 interface MarkdownTool {
@@ -57,7 +57,7 @@ export function DocumentEditor({
   saveButtonText,
   createButtonText,
   showMetadataControls = false,
-  publicProjects = [],
+  linkableProjects = [],
 }: DocumentEditorProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -277,11 +277,11 @@ export function DocumentEditor({
                         render={({ field }) => (
                             <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select a public project to link..." />
+                                    <SelectValue placeholder="Select a project to link..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">No linked project</SelectItem>
-                                    {publicProjects.map(p => (
+                                    {linkableProjects.map(p => (
                                         <SelectItem key={p.uuid} value={p.uuid}>{p.name}</SelectItem>
                                     ))}
                                 </SelectContent>

@@ -905,13 +905,6 @@ export async function getAllProjects(): Promise<Project[]> {
     }));
 }
 
-export async function getPublicProjects(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
-    const connection = await getDbConnection();
-    return connection.all<Pick<Project, 'uuid' | 'name'>[]>(
-        'SELECT uuid, name FROM projects WHERE isPrivate = FALSE ORDER BY name ASC'
-    );
-}
-
 export async function deleteProject(projectUuid: string): Promise<boolean> {
   const connection = await getDbConnection();
   await connection.run('BEGIN TRANSACTION');
@@ -1641,4 +1634,18 @@ export async function getLinkedProjectForGlobalDocument(documentUuid: string): P
          WHERE gdp.documentUuid = ?`,
         documentUuid
     );
+}
+
+export async function getLinkableProjects(userUuid: string | undefined): Promise<Pick<Project, 'uuid' | 'name'>[]> {
+    const connection = await getDbConnection();
+    // This query will select all public projects, and also all private projects where the user is a member.
+    // It uses UNION to combine the results and avoid duplicates.
+    const query = `
+        SELECT p.uuid, p.name FROM projects p WHERE p.isPrivate = FALSE
+        UNION
+        SELECT p.uuid, p.name FROM projects p JOIN project_members pm ON p.uuid = pm.projectUuid WHERE pm.userUuid = ?
+        ORDER BY name ASC
+    `;
+    // Pass an empty string if userUuid is undefined to avoid SQL errors with `?` for the second part of the UNION
+    return connection.all<Pick<Project, 'uuid' | 'name'>[]>(query, userUuid || '');
 }

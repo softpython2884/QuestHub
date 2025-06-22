@@ -7,7 +7,7 @@ import {
   getGlobalDocumentByUuid,
   updateGlobalDocument,
   deleteGlobalDocument,
-  getPublicProjects,
+  getLinkableProjects,
   createOrGetGlobalTag,
   clearTagsForGlobalDocument,
   linkTagToGlobalDocument,
@@ -74,7 +74,7 @@ export async function saveGlobalDocumentAction(
     
     // Handle project link
     await clearProjectLinkForGlobalDocument(docIdToUpdate);
-    if (linkedProjectUuid) {
+    if (linkedProjectUuid && linkedProjectUuid !== 'none') {
         await linkProjectToGlobalDocument(docIdToUpdate, linkedProjectUuid);
     }
 
@@ -118,8 +118,10 @@ export async function deleteGlobalDocumentAction(uuid: string) {
     }
 }
 
-export async function getPublicProjectsAction(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
-    return getPublicProjects();
+export async function getLinkableProjectsForUserAction(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
+    const session = await auth();
+    const userUuid = session?.user?.uuid;
+    return getLinkableProjects(userUuid);
 }
 
 export async function toggleGlobalDocumentPinAction(uuid: string, currentPinStatus: boolean) {

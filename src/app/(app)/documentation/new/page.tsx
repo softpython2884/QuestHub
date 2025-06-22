@@ -5,7 +5,7 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { saveGlobalDocumentAction, getPublicProjectsAction } from '../actions'; 
+import { saveGlobalDocumentAction, getLinkableProjectsForUserAction } from '../actions'; 
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Project } from '@/types';
@@ -14,20 +14,24 @@ import { useState, useEffect } from 'react';
 export default function NewGlobalDocumentPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [publicProjects, setPublicProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
+  const [linkableProjects, setLinkableProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   useEffect(() => {
     async function loadProjects() {
         if (user) {
             setIsLoadingProjects(true);
-            const projects = await getPublicProjectsAction();
-            setPublicProjects(projects);
+            const projects = await getLinkableProjectsForUserAction();
+            setLinkableProjects(projects);
             setIsLoadingProjects(false);
         }
     }
-    loadProjects();
-  }, [user]);
+    if (!authLoading && user) {
+        loadProjects();
+    } else if (!authLoading && !user) {
+        router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   const handleCancel = () => {
     router.push(`/documentation`);
@@ -62,7 +66,7 @@ export default function NewGlobalDocumentPage() {
         saveButtonText="Save Changes"
         createButtonText="Create Document"
         showMetadataControls={true}
-        publicProjects={publicProjects}
+        linkableProjects={linkableProjects}
       />
     </div>
   );
