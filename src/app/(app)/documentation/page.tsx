@@ -5,17 +5,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Search, PlusCircle, BookOpen, User, Trash2, Edit, Tag } from "lucide-react";
+import { FileText, Search, PlusCircle, BookOpen, User, Trash2, Edit, Tag, Pin, PinOff } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import type { GlobalDocument } from "@/types";
-import { getGlobalDocumentsAction, deleteGlobalDocumentAction } from "./actions";
+import { getGlobalDocumentsAction, deleteGlobalDocumentAction, toggleGlobalDocumentPinAction } from "./actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function DocumentationPage() {
   const { user } = useAuth();
@@ -26,18 +27,19 @@ export default function DocumentationPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    async function loadDocs() {
-      setIsLoading(true);
-      try {
-        const data = await getGlobalDocumentsAction();
-        setDocuments(data);
-      } catch (err) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load documents.' });
-      } finally {
-        setIsLoading(false);
-      }
+  const loadDocs = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getGlobalDocumentsAction();
+      setDocuments(data);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load documents.' });
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadDocs();
   }, [toast]);
 
@@ -70,6 +72,18 @@ export default function DocumentationPage() {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     }
   };
+  
+  const handleTogglePin = (doc: GlobalDocument) => {
+    startTransition(async () => {
+      const result = await toggleGlobalDocumentPinAction(doc.uuid, !!doc.isPinned);
+      if (result.success) {
+        toast({ title: "Success", description: `Document ${result.document?.isPinned ? 'pinned' : 'unpinned'}.` });
+        loadDocs();
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.error });
+      }
+    });
+  }
 
   const filteredDocuments = documents.filter(doc => {
     const term = searchTerm.toLowerCase();
@@ -126,14 +140,17 @@ export default function DocumentationPage() {
           ) : (
             <div className="grid gap-4">
               {filteredDocuments.map((doc) => (
-                <Card key={doc.uuid} className="hover:shadow-md transition-shadow">
+                <Card key={doc.uuid} className={cn("hover:shadow-md transition-shadow", doc.isPinned && "bg-primary/5")}>
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-start gap-3">
                       <FileText className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
                       <div className="flex-grow">
-                        <h3 className="font-semibold hover:text-primary">
-                           <Link href={`/documentation/${doc.uuid}`}>{doc.title}</Link>
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          {doc.isPinned && <Pin className="h-4 w-4 text-primary" />}
+                          <h3 className="font-semibold hover:text-primary">
+                            <Link href={`/documentation/${doc.uuid}`}>{doc.title}</Link>
+                          </h3>
+                        </div>
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                            <Avatar className="h-4 w-4">
                               <AvatarImage src={doc.authorAvatar} alt={doc.authorName} />
@@ -154,6 +171,11 @@ export default function DocumentationPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      {user?.role === 'admin' && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title={doc.isPinned ? "Unpin" : "Pin"} onClick={() => handleTogglePin(doc)}>
+                          {doc.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                        </Button>
+                      )}
                       {(user?.uuid === doc.authorUuid || user?.role === 'admin') && (
                         <>
                           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>

@@ -5,7 +5,7 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { saveGlobalDocumentAction, getPublicProjectsAction } from './actions'; 
+import { saveGlobalDocumentAction, getPublicProjectsAction } from '../actions'; 
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Project } from '@/types';

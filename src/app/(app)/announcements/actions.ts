@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { createGlobalAnnouncement, getGlobalAnnouncements, deleteGlobalAnnouncement } from '@/lib/db';
+import { createGlobalAnnouncement, getGlobalAnnouncements, deleteGlobalAnnouncement, toggleGlobalAnnouncementPinStatus } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
 
@@ -73,5 +73,23 @@ export async function deleteGlobalAnnouncementAction(
     return { success: false, error: 'Failed to delete announcement.' };
   } catch (error: any) {
     return { success: false, error: error.message || 'An unknown error occurred.' };
+  }
+}
+
+export async function toggleGlobalAnnouncementPinAction(uuid: string, currentPinStatus: boolean) {
+  const session = await auth();
+  if (session?.user?.role !== 'admin') {
+    return { error: 'You do not have permission to perform this action.' };
+  }
+  
+  try {
+    const updatedAnnouncement = await toggleGlobalAnnouncementPinStatus(uuid, !currentPinStatus);
+    if (updatedAnnouncement) {
+        revalidatePath('/announcements');
+        return { success: true, announcement: updatedAnnouncement };
+    }
+    return { error: 'Failed to update pin status.' };
+  } catch(error: any) {
+    return { error: error.message || 'An unknown error occurred.' };
   }
 }

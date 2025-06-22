@@ -368,6 +368,7 @@ export async function getDbConnection() {
       title TEXT NOT NULL,
       content TEXT,
       authorUuid TEXT NOT NULL,
+      isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -395,6 +396,7 @@ export async function getDbConnection() {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       authorUuid TEXT NOT NULL,
+      isPinned BOOLEAN DEFAULT FALSE,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -1422,28 +1424,26 @@ export async function createGlobalAnnouncement(data: {
   const authorDetails = await getUserByUuid(data.authorUuid);
 
   const result = await connection.run(
-    'INSERT INTO global_announcements (uuid, title, content, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
-    announcementUuid, data.title, data.content, data.authorUuid, now, now
+    'INSERT INTO global_announcements (uuid, title, content, authorUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    announcementUuid, data.title, data.content, data.authorUuid, now, now, false
   );
   if (!result.lastID) throw new Error('Global announcement creation failed.');
 
+  const newAnn = await connection.get('SELECT * FROM global_announcements WHERE uuid = ?', announcementUuid);
+
   return {
-    id: result.lastID!.toString(),
-    uuid: announcementUuid,
-    title: data.title,
-    content: data.content,
-    authorUuid: data.authorUuid,
+    ...newAnn,
+    id: newAnn.id.toString(),
     authorName: authorDetails?.name,
     authorAvatar: authorDetails?.avatar,
-    createdAt: now,
-    updatedAt: now,
+    isPinned: false,
   };
 }
 
 export async function getGlobalAnnouncements(): Promise<GlobalAnnouncement[]> {
   const connection = await getDbConnection();
-  const announcements = await connection.all<Array<Omit<GlobalAnnouncement, 'authorName'|'authorAvatar'> & {id: number}>>(
-    `SELECT ga.* FROM global_announcements ga ORDER BY ga.createdAt DESC`
+  const announcements = await connection.all<Array<Omit<GlobalAnnouncement, 'authorName'|'authorAvatar'|'isPinned'> & {id: number, isPinned: 0 | 1}>>(
+    `SELECT ga.* FROM global_announcements ga ORDER BY ga.isPinned DESC, ga.createdAt DESC`
   );
 
   const results: GlobalAnnouncement[] = [];
@@ -1454,6 +1454,7 @@ export async function getGlobalAnnouncements(): Promise<GlobalAnnouncement[]> {
       id: ann.id.toString(),
       authorName: author?.name,
       authorAvatar: author?.avatar,
+      isPinned: !!ann.isPinned,
     });
   }
   return results;
@@ -1463,6 +1464,20 @@ export async function deleteGlobalAnnouncement(announcementUuid: string): Promis
   const connection = await getDbConnection();
   const result = await connection.run('DELETE FROM global_announcements WHERE uuid = ?', announcementUuid);
   return result.changes ? result.changes > 0 : false;
+}
+
+export async function toggleGlobalAnnouncementPinStatus(uuid: string, isPinned: boolean): Promise<GlobalAnnouncement | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE global_announcements SET isPinned = ?, updatedAt = ? WHERE uuid = ?',
+    isPinned ? 1 : 0, now, uuid
+  );
+  if (result.changes === 0) return null;
+  const ann = await connection.get('SELECT * from global_announcements WHERE uuid = ?', uuid);
+  if (!ann) return null;
+  const author = await getUserByUuid(ann.authorUuid);
+  return {...ann, authorName: author?.name, authorAvatar: author?.avatar, isPinned: !!ann.isPinned};
 }
 
 
@@ -1477,8 +1492,8 @@ export async function createGlobalDocument(data: {
   const now = new Date().toISOString();
 
   const result = await connection.run(
-    'INSERT INTO global_documents (uuid, title, content, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
-    docUuid, data.title, data.content, data.authorUuid, now, now
+    'INSERT INTO global_documents (uuid, title, content, authorUuid, createdAt, updatedAt, isPinned) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    docUuid, data.title, data.content, data.authorUuid, now, now, false
   );
   if (!result.lastID) throw new Error('Global document creation failed.');
 
@@ -1489,8 +1504,8 @@ export async function createGlobalDocument(data: {
 
 export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
   const connection = await getDbConnection();
-  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject'>>>(
-      'SELECT * FROM global_documents ORDER BY updatedAt DESC'
+  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject' | 'isPinned'> & {isPinned: 0 | 1}>>(
+      'SELECT * FROM global_documents ORDER BY isPinned DESC, updatedAt DESC'
   );
   
   const results: GlobalDocument[] = [];
@@ -1504,6 +1519,7 @@ export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
       authorAvatar: author?.avatar,
       tags,
       linkedProject,
+      isPinned: !!doc.isPinned,
     });
   }
   return results;
@@ -1511,7 +1527,8 @@ export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
 
 export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocument | null> {
   const connection = await getDbConnection();
-  const doc = await connection.get<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject'>>('SELECT * FROM global_documents WHERE uuid = ?', uuid);
+  const doc = await connection.get<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject'|'isPinned'> & {isPinned: 0 | 1}>(
+    'SELECT * FROM global_documents WHERE uuid = ?', uuid);
   if (!doc) return null;
 
   const author = await getUserByUuid(doc.authorUuid);
@@ -1524,6 +1541,7 @@ export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocum
     authorAvatar: author?.avatar,
     tags,
     linkedProject,
+    isPinned: !!doc.isPinned,
   };
 }
 
@@ -1544,6 +1562,17 @@ export async function deleteGlobalDocument(uuid: string): Promise<boolean> {
   // Cascading deletes will handle linked tags and projects
   const result = await connection.run('DELETE FROM global_documents WHERE uuid = ?', uuid);
   return result.changes ? result.changes > 0 : false;
+}
+
+export async function toggleGlobalDocumentPinStatus(uuid: string, isPinned: boolean): Promise<GlobalDocument | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  const result = await connection.run(
+    'UPDATE global_documents SET isPinned = ?, updatedAt = ? WHERE uuid = ?',
+    isPinned ? 1 : 0, now, uuid
+  );
+  if (result.changes === 0) return null;
+  return getGlobalDocumentByUuid(uuid);
 }
 
 // Global Tags

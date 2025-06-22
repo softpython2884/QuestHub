@@ -130,6 +130,7 @@ export interface GlobalDocument {
   authorAvatar?: string;
   createdAt: string;
   updatedAt: string;
+  isPinned?: boolean;
   tags?: GlobalTag[];
   linkedProject?: Pick<Project, 'uuid' | 'name'> | null;
   albums?: Pick<DocAlbum, 'uuid' | 'title'>[];
@@ -192,6 +193,7 @@ export interface GlobalAnnouncement {
   authorUuid: string;
   authorName?: string;
   authorAvatar?: string;
+  isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
 }

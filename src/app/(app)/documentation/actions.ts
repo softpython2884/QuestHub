@@ -13,6 +13,7 @@ import {
   linkTagToGlobalDocument,
   clearProjectLinkForGlobalDocument,
   linkProjectToGlobalDocument,
+  toggleGlobalDocumentPinStatus,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
@@ -119,4 +120,22 @@ export async function deleteGlobalDocumentAction(uuid: string) {
 
 export async function getPublicProjectsAction(): Promise<Pick<Project, 'uuid' | 'name'>[]> {
     return getPublicProjects();
+}
+
+export async function toggleGlobalDocumentPinAction(uuid: string, currentPinStatus: boolean) {
+  const session = await auth();
+  if (session?.user?.role !== 'admin') {
+    return { error: 'You do not have permission to perform this action.' };
+  }
+  
+  try {
+    const updatedDocument = await toggleGlobalDocumentPinStatus(uuid, !currentPinStatus);
+    if (updatedDocument) {
+        revalidatePath('/documentation');
+        return { success: true, document: updatedDocument };
+    }
+    return { error: 'Failed to update pin status.' };
+  } catch(error: any) {
+    return { error: error.message || 'An unknown error occurred.' };
+  }
 }

@@ -3,11 +3,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Megaphone, PlusCircle, Trash2, Loader2, AlertTriangle, User } from "lucide-react";
+import { Megaphone, PlusCircle, Trash2, Loader2, AlertTriangle, Pin, PinOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { GlobalAnnouncement } from "@/types";
-import { useEffect, useState, useActionState } from "react";
-import { getGlobalAnnouncementsAction, deleteGlobalAnnouncementAction } from "./actions";
+import { useEffect, useState, useActionState, startTransition } from "react";
+import { getGlobalAnnouncementsAction, deleteGlobalAnnouncementAction, toggleGlobalAnnouncementPinAction } from "./actions";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export default function AnnouncementsPage() {
   const { user } = useAuth();
@@ -25,18 +26,19 @@ export default function AnnouncementsPage() {
 
   const [deleteState, deleteAction, isDeleting] = useActionState(deleteGlobalAnnouncementAction, { success: false, error: null });
 
-  useEffect(() => {
-    async function loadAnnouncements() {
-      setIsLoading(true);
-      try {
-        const data = await getGlobalAnnouncementsAction();
-        setAnnouncements(data);
-      } catch (error) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to load announcements.' });
-      } finally {
-        setIsLoading(false);
-      }
+  const loadAnnouncements = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getGlobalAnnouncementsAction();
+      setAnnouncements(data);
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load announcements.' });
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadAnnouncements();
   }, [toast]);
   
@@ -50,6 +52,18 @@ export default function AnnouncementsPage() {
       toast({ variant: 'destructive', title: "Error", description: deleteState.error });
     }
   }, [deleteState, announcementToDelete, toast]);
+
+  const handleTogglePin = (announcement: GlobalAnnouncement) => {
+    startTransition(async () => {
+      const result = await toggleGlobalAnnouncementPinAction(announcement.uuid, !!announcement.isPinned);
+      if (result.success) {
+        toast({ title: "Success", description: `Announcement ${result.announcement?.isPinned ? 'pinned' : 'unpinned'}.` });
+        loadAnnouncements();
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.error });
+      }
+    });
+  }
 
   const getInitials = (name?: string) => {
     if (!name) return '?';
@@ -106,32 +120,40 @@ export default function AnnouncementsPage() {
           ) : (
             <div className="space-y-4">
               {announcements.map((announcement) => (
-                <Card key={announcement.uuid} className="shadow-sm">
+                <Card key={announcement.uuid} className={cn("shadow-sm", announcement.isPinned && "bg-primary/5")}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{announcement.title}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        {announcement.isPinned && <Pin className="h-4 w-4 text-primary" />}
+                        <CardTitle className="text-lg">{announcement.title}</CardTitle>
+                      </div>
                       {user?.role === 'admin' && (
-                         <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete Announcement" onClick={() => setAnnouncementToDelete(announcement)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          {announcementToDelete?.uuid === announcement.uuid && (
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Announcement: "{announcementToDelete.title}"?</AlertDialogTitle>
-                                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => setAnnouncementToDelete(null)}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeleteConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                  {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          )}
-                        </AlertDialog>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" title={announcement.isPinned ? "Unpin" : "Pin"} onClick={() => handleTogglePin(announcement)}>
+                              {announcement.isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Delete Announcement" onClick={() => setAnnouncementToDelete(announcement)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            {announcementToDelete?.uuid === announcement.uuid && (
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Announcement: "{announcementToDelete.title}"?</AlertDialogTitle>
+                                  <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setAnnouncementToDelete(null)}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleDeleteConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            )}
+                          </AlertDialog>
+                        </div>
                       )}
                     </div>
                     <CardDescription className="flex items-center gap-2 text-xs">
