@@ -946,8 +946,13 @@ export async function toggleProjectVisibilityAction(prevState: ToggleProjectVisi
             } catch (githubError: any) {
                 console.error(`[toggleProjectVisibilityAction] Failed to update GitHub repository visibility for ${owner}/${repo}:`, githubError.status, githubError.message, githubError.response?.data);
                 let detailedError = githubError.message;
-                if (githubError.status === 404) detailedError = `Repository ${owner}/${repo} not found or access denied. Check repository name and token permissions.`;
-                else if (githubError.status === 403) detailedError = `Permission denied to update ${owner}/${repo}. Ensure your token has sufficient scopes.`;
+                if (githubError.status === 422 && githubError.message?.includes("Private forks can't be made public")) {
+                    detailedError = "This project's repository is a private fork and its visibility cannot be changed to public.";
+                } else if (githubError.status === 404) {
+                    detailedError = `Repository ${owner}/${repo} not found or access denied. Check repository name and token permissions.`;
+                } else if (githubError.status === 403) {
+                    detailedError = `Permission denied to update ${owner}/${repo}. Ensure your token has sufficient scopes.`;
+                }
                 return { error: `Project visibility updated in FlowUp, but failed to update on GitHub: ${detailedError}`, project: updatedProjectInDb };
             }
         } else {

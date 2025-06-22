@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Megaphone } from 'lucide-react';
 import React, { useActionState, useEffect } from 'react';
-import { createGlobalAnnouncementAction } from './actions';
+import { createGlobalAnnouncementAction } from '../actions';
 
 const announcementFormSchema = z.object({
   title: z.string().min(3, { message: 'Title must be at least 3 characters.' }).max(255),
