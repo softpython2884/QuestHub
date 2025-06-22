@@ -2,6 +2,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { storeUserDiscordToken, getUserByEmail, createUser } from '@/lib/db';
 import { createSessionForUser } from '@/lib/authService';
+import { auth } from '@/lib/authEdge';
 import type { User } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -49,9 +50,7 @@ export async function GET(request: NextRequest) {
   try {
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: DISCORD_CLIENT_ID,
         client_secret: DISCORD_CLIENT_SECRET,
@@ -79,50 +78,66 @@ export async function GET(request: NextRequest) {
         throw new Error(`Failed to fetch Discord user details: ${errorText}`);
     }
     const discordUser = await userResponse.json();
-
-    if (!discordUser.email || !discordUser.verified) {
-      console.error(`[Discord OAuth Callback] User's Discord email is missing or not verified.`);
-      return NextResponse.redirect(new URL(`/login?error=discord_email_unverified`, request.url));
-    }
-
-    let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(discordUser.email);
-
-    if (!appUser) {
-      // Signup
-      console.log(`[Discord OAuth Callback] No user found for email ${discordUser.email}. Creating new user.`);
-      const newUserInfo = await createUser(
-        discordUser.username,
-        discordUser.email
-      );
-      appUser = { ...newUserInfo }; // Add necessary properties if createUser returns a different shape
+    
+    // Check for an existing FlowUp session to determine if we are linking or logging in.
+    const session = await auth();
+    if (session?.user?.uuid) {
+        // --- LINKING FLOW ---
+        console.log(`[Discord OAuth Callback] LINKING FLOW: Found active session for user UUID: ${session.user.uuid}.`);
+        await storeUserDiscordToken(session.user.uuid, {
+            accessToken: tokenData.access_token,
+            refreshToken: tokenData.refresh_token,
+            expiresAt: Date.now() + tokenData.expires_in * 1000,
+            scopes: tokenData.scope,
+            discordUserId: discordUser.id,
+            discordUsername: discordUser.username,
+            discordAvatar: discordUser.avatar,
+        });
+        console.log(`[Discord OAuth Callback] LINKING FLOW: Successfully linked Discord account to user ${session.user.uuid}.`);
+        const redirectTo = storedStateData.redirectTo || '/profile';
+        const redirectUrl = new URL(redirectTo, request.url);
+        redirectUrl.searchParams.set('discord_oauth_status', 'success');
+        return NextResponse.redirect(redirectUrl);
     } else {
-      console.log(`[Discord OAuth Callback] Found existing user for email ${discordUser.email}. Logging in.`);
-    }
+        // --- LOGIN/SIGNUP FLOW ---
+        if (!discordUser.email || !discordUser.verified) {
+          console.error(`[Discord OAuth Callback] User's Discord email is missing or not verified.`);
+          return NextResponse.redirect(new URL(`/login?error=discord_email_unverified`, request.url));
+        }
 
-    if (!appUser || !appUser.uuid) {
-      console.error("[Discord OAuth Callback] Failed to get or create a user in FlowUp DB.");
-      throw new Error("User session could not be established.");
-    }
-    
-    const { hashedPassword, ...userToReturn } = appUser;
-    
-    // Create session and store token
-    await createSessionForUser(userToReturn);
-    await storeUserDiscordToken(userToReturn.uuid, {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        expiresAt: Date.now() + tokenData.expires_in * 1000,
-        scopes: tokenData.scope,
-        discordUserId: discordUser.id,
-        discordUsername: discordUser.username,
-        discordAvatar: discordUser.avatar,
-    });
-    
-    // Redirect to dashboard on successful login/signup
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+        let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(discordUser.email);
+        if (!appUser) {
+          console.log(`[Discord OAuth Callback] No user found for email ${discordUser.email}. Creating new user.`);
+          const newUserInfo = await createUser(discordUser.username, discordUser.email);
+          appUser = { ...newUserInfo };
+        } else {
+          console.log(`[Discord OAuth Callback] Found existing user for email ${discordUser.email}. Logging in.`);
+        }
 
+        if (!appUser || !appUser.uuid) {
+          throw new Error("User session could not be established.");
+        }
+        
+        const { hashedPassword, ...userToReturn } = appUser;
+        await createSessionForUser(userToReturn);
+        await storeUserDiscordToken(userToReturn.uuid, {
+            accessToken: tokenData.access_token,
+            refreshToken: tokenData.refresh_token,
+            expiresAt: Date.now() + tokenData.expires_in * 1000,
+            scopes: tokenData.scope,
+            discordUserId: discordUser.id,
+            discordUsername: discordUser.username,
+            discordAvatar: discordUser.avatar,
+        });
+        
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
   } catch (error: any) {
     console.error('[Discord OAuth Callback] Final catch block error:', error);
-    return NextResponse.redirect(new URL(`/login?error=oauth_callback_error&message=${encodeURIComponent(error.message || 'Unknown error')}`, request.url));
+    const redirectTo = storedStateData.redirectTo || '/login';
+    const redirectUrl = new URL(redirectTo, request.url);
+    redirectUrl.searchParams.set('error', 'oauth_callback_error');
+    redirectUrl.searchParams.set('message', encodeURIComponent(error.message || 'Unknown error'));
+    return NextResponse.redirect(redirectUrl);
   }
 }

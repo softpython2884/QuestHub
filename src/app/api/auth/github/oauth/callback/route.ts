@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { Octokit } from 'octokit';
 import { storeUserGithubOAuthToken, getUserByEmail, createUser } from '@/lib/db';
 import { createSessionForUser } from '@/lib/authService';
+import { auth } from '@/lib/authEdge';
 import type { User } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -67,48 +68,72 @@ export async function GET(request: NextRequest) {
       throw new Error(tokenData.error_description || 'Failed to retrieve access token from GitHub.');
     }
 
-    const octokit = new Octokit({ auth: tokenData.access_token });
-    const { data: githubUser } = await octokit.rest.users.getAuthenticated();
-    
-    // Find primary, verified email
-    const { data: emails } = await octokit.rest.users.listEmailsForAuthenticatedUser();
-    const primaryEmail = emails.find(email => email.primary && email.verified)?.email;
-
-    if (!primaryEmail) {
-      return NextResponse.redirect(new URL('/login?error=github_no_verified_email', request.url));
-    }
-
-    let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(primaryEmail);
-
-    if (!appUser) {
-      console.log(`[GitHub OAuth Callback] No user found for email ${primaryEmail}. Creating new user.`);
-      const newUserInfo = await createUser(githubUser.name || githubUser.login, primaryEmail);
-      appUser = { ...newUserInfo };
+    const session = await auth();
+    if (session?.user?.uuid) {
+      // --- LINKING FLOW ---
+      console.log(`[GitHub OAuth Callback] LINKING FLOW: Found active session for user UUID: ${session.user.uuid}.`);
+      await storeUserGithubOAuthToken(
+        session.user.uuid,
+        tokenData.access_token,
+        tokenData.scope,
+        tokenData.token_type,
+        tokenData.refresh_token,
+        tokenData.expires_in
+      );
+      console.log(`[GitHub OAuth Callback] LINKING FLOW: Successfully linked GitHub account to user ${session.user.uuid}.`);
+      const redirectTo = storedStateData.redirectTo || '/profile';
+      const redirectUrl = new URL(redirectTo, request.url);
+      redirectUrl.searchParams.set('oauth_status', 'success');
+      return NextResponse.redirect(redirectUrl);
     } else {
-      console.log(`[GitHub OAuth Callback] Found existing user for email ${primaryEmail}. Logging in.`);
-    }
+      // --- LOGIN/SIGNUP FLOW ---
+      console.log(`[GitHub OAuth Callback] LOGIN/SIGNUP FLOW: No active session.`);
+      const octokit = new Octokit({ auth: tokenData.access_token });
+      const { data: githubUser } = await octokit.rest.users.getAuthenticated();
+      
+      const { data: emails } = await octokit.rest.users.listEmailsForAuthenticatedUser();
+      const primaryEmail = emails.find(email => email.primary && email.verified)?.email;
 
-    if (!appUser || !appUser.uuid) {
-      throw new Error("User session could not be established after DB operation.");
-    }
+      if (!primaryEmail) {
+        return NextResponse.redirect(new URL('/login?error=github_no_verified_email', request.url));
+      }
 
-    const { hashedPassword, ...userToReturn } = appUser;
-    
-    await createSessionForUser(userToReturn);
-    await storeUserGithubOAuthToken(
-      userToReturn.uuid,
-      tokenData.access_token,
-      tokenData.scope,
-      tokenData.token_type,
-      tokenData.refresh_token,
-      tokenData.expires_in
-    );
-    
-    console.log(`[GitHub OAuth Callback] Successfully logged in/signed up user ${userToReturn.email}. Redirecting to dashboard.`);
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+      let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(primaryEmail);
+
+      if (!appUser) {
+        console.log(`[GitHub OAuth Callback] No user found for email ${primaryEmail}. Creating new user.`);
+        const newUserInfo = await createUser(githubUser.name || githubUser.login, primaryEmail);
+        appUser = { ...newUserInfo };
+      } else {
+        console.log(`[GitHub OAuth Callback] Found existing user for email ${primaryEmail}. Logging in.`);
+      }
+
+      if (!appUser || !appUser.uuid) {
+        throw new Error("User session could not be established after DB operation.");
+      }
+
+      const { hashedPassword, ...userToReturn } = appUser;
+      
+      await createSessionForUser(userToReturn);
+      await storeUserGithubOAuthToken(
+        userToReturn.uuid,
+        tokenData.access_token,
+        tokenData.scope,
+        tokenData.token_type,
+        tokenData.refresh_token,
+        tokenData.expires_in
+      );
+      
+      console.log(`[GitHub OAuth Callback] Successfully logged in/signed up user ${userToReturn.email}. Redirecting to dashboard.`);
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
 
   } catch (error: any) {
     console.error('[GitHub OAuth Callback] Error in callback:', error);
-    return NextResponse.redirect(new URL(`/login?error=oauth_callback_error&message=${encodeURIComponent(error.message || 'Unknown error')}`, request.url));
+    const redirectTo = storedStateData.redirectTo || '/login';
+    const redirectUrl = new URL(redirectTo, request.url);
+    redirectUrl.searchParams.set('error', 'oauth_callback_error');
+    redirectUrl.searchParams.set('message', encodeURIComponent(error.message || 'Unknown error'));
+    return NextResponse.redirect(redirectUrl);
   }
 }

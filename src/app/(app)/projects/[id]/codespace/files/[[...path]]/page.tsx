@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles, ShieldAlert, Github } from 'lucide-react';
 import {
   getRepoContentsAction,
   getFileContentAction,
@@ -533,7 +533,20 @@ function FileExplorerContent() {
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Error Loading Content</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {error}
+                 {project?.githubRepoUrl && (error.includes('Access denied') || error.includes('not found') || error.includes('Not Found')) && (
+                    <div className="mt-4 pt-4 border-t border-destructive/50">
+                        <p className="font-semibold">It looks like you might not have access to this private GitHub repository yet.</p>
+                        <p className="text-xs text-muted-foreground mt-1">If you were recently invited to this project, you may need to accept the collaboration invitation directly on GitHub.</p>
+                        <Button asChild className="mt-3">
+                            <a href={`${project.githubRepoUrl}/invitations`} target="_blank" rel="noopener noreferrer">
+                                <Github className="mr-2 h-4 w-4" /> Accept GitHub Invitation
+                            </a>
+                        </Button>
+                    </div>
+                )}
+              </AlertDescription>
             </Alert>
           ) : !project?.githubRepoName ? (
               <Alert>
