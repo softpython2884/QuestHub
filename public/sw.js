@@ -1,17 +1,23 @@
-// This is a basic service worker to make the app installable.
-// It doesn't do any advanced caching yet.
 
-self.addEventListener('install', (event) => {
-  console.log('Service Worker: Installing...');
-  // event.waitUntil(caches.open(CACHE_NAME).then(cache => {
-  //   return cache.addAll(urlsToCache);
-  // }));
-});
-
-self.addEventListener('fetch', (event) => {
-  // This empty fetch handler is the bare minimum to make the app installable.
-  // In a real app, you would implement caching strategies here.
-  // For example: event.respondWith(caches.match(event.request).then(response => {
-  //   return response || fetch(event.request);
-  // }));
-});
+self.addEventListener('push', function (event) {
+  if (event.data) {
+    const data = event.data.json()
+    const options = {
+      body: data.body,
+      icon: data.icon || '/favicon.png',
+      badge: '/favicon.png',
+      vibrate: [100, 50, 100],
+      data: {
+        dateOfArrival: Date.now(),
+        primaryKey: '2',
+      },
+    }
+    event.waitUntil(self.registration.showNotification(data.title, options))
+  }
+})
+ 
+self.addEventListener('notificationclick', function (event) {
+  console.log('Notification click received.')
+  event.notification.close()
+  event.waitUntil(clients.openWindow('/'))
+})

@@ -8,7 +8,6 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 export const metadata: Metadata = {
   title: 'FlowUp',
   description: 'Your all-in-one project management and collaboration platform.',
-  manifest: '/manifest.json',
 };
 
 export default function RootLayout({

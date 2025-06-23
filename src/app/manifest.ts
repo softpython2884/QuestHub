@@ -1,0 +1,26 @@
+
+import type { MetadataRoute } from 'next'
+ 
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: 'FlowUp',
+    short_name: 'FlowUp',
+    description: 'Your all-in-one project management and collaboration platform.',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#F5F5F5',
+    theme_color: '#64B5F6',
+    icons: [
+      {
+        src: '/favicon.png',
+        sizes: '192x192',
+        type: 'image/png',
+      },
+      {
+        src: '/favicon.png',
+        sizes: '512x512',
+        type: 'image/png',
+      },
+    ],
+  }
+}
