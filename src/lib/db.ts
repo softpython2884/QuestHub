@@ -1514,7 +1514,7 @@ export async function createGlobalAnnouncement(data: {
 export async function getGlobalAnnouncements(): Promise<GlobalAnnouncement[]> {
   const connection = await getDbConnection();
   const announcements = await connection.all<Array<Omit<GlobalAnnouncement, 'authorName'|'authorAvatar'|'isPinned'> & {id: number, isPinned: 0 | 1}>>(
-    `SELECT ga.* FROM global_announcements ga ORDER BY ga.isPinned DESC, ga.createdAt DESC`
+      'SELECT ga.* FROM global_announcements ga ORDER BY ga.isPinned DESC, ga.createdAt DESC'
   );
 
   const results: GlobalAnnouncement[] = [];
@@ -1859,4 +1859,75 @@ export async function deleteOAuthApp(appUuid: string, userUuid: string): Promise
         userUuid
     );
     return result.changes ? result.changes > 0 : false;
+}
+
+// Dashboard Functions
+export async function getTasksForUserProjects(userUuid: string): Promise<Array<Task & { projectName: string }>> {
+  const connection = await getDbConnection();
+  const taskRows = await connection.all<Array<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1; projectName: string }>>(
+    `SELECT t.*, p.name as projectName
+     FROM tasks t
+     JOIN projects p ON t.projectUuid = p.uuid
+     WHERE t.projectUuid IN (SELECT projectUuid FROM project_members WHERE userUuid = ?)`,
+    userUuid
+  );
+
+  const tasksWithDetails: Array<Task & { projectName: string }> = [];
+  for (const taskRow of taskRows) {
+    const tags = await getTagsForTask(taskRow.uuid);
+    let assigneeName: string | null = null;
+    if (taskRow.assigneeUuid) {
+      const assignee = await getUserByUuid(taskRow.assigneeUuid);
+      assigneeName = assignee?.name || null;
+    }
+    tasksWithDetails.push({ ...taskRow, tags, assigneeName: assigneeName || undefined, isPinned: !!taskRow.isPinned, projectName: taskRow.projectName });
+  }
+  return tasksWithDetails;
+}
+
+export async function getAnnouncementsForUserProjects(userUuid: string, limit: number = 7): Promise<Array<ProjectAnnouncement & {projectName: string}>> {
+  const connection = await getDbConnection();
+  const announcements = await connection.all<Array<ProjectAnnouncement & {projectName: string}>>(
+    `SELECT pa.*, p.name as projectName, u.name as authorName, u.avatar as authorAvatar
+     FROM project_announcements pa
+     JOIN projects p ON pa.projectUuid = p.uuid
+     JOIN users u ON pa.authorUuid = u.uuid
+     WHERE pa.projectUuid IN (SELECT projectUuid FROM project_members WHERE userUuid = ?)
+     ORDER BY pa.createdAt DESC
+     LIMIT ?`,
+    userUuid,
+    limit
+  );
+  return announcements;
+}
+
+export async function getTaskActivityForUserProjects(userUuid: string, days: number = 7): Promise<{ date: string, count: number }[]> {
+  const connection = await getDbConnection();
+  const dates = Array.from({ length: days }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d.toISOString().split('T')[0];
+  }).reverse();
+
+  const activityData = await connection.all<{ date: string, count: number }[]>(
+    `SELECT
+        strftime('%Y-%m-%d', updatedAt) as date,
+        COUNT(uuid) as count
+     FROM tasks
+     WHERE
+        projectUuid IN (SELECT projectUuid FROM project_members WHERE userUuid = ?)
+        AND updatedAt >= date('now', '-' || ? || ' days')
+     GROUP BY date
+     ORDER BY date ASC`,
+    userUuid,
+    days
+  );
+
+  const activityMap = new Map(activityData.map(item => [item.date, item.count]));
+  const result = dates.map(date => ({
+    date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    count: activityMap.get(date) || 0,
+  }));
+
+  return result;
 }

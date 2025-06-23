@@ -4,28 +4,23 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, BarChart3, PieChart, Users, FolderKanban, Megaphone } from 'lucide-react';
-import Image from 'next/image';
+import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-
-// Mock data - replace with actual data fetching
-const mockProjects = [
-  { uuid: 'project-uuid-alpha', name: 'Project Alpha', taskCount: 5, status: 'In Progress', progress: 60, updatedAt: new Date().toISOString() },
-  { uuid: 'project-uuid-beta', name: 'Project Beta', taskCount: 8, status: 'On Hold', progress: 20, updatedAt: new Date().toISOString() },
-  { uuid: 'project-uuid-gamma', name: 'Project Gamma', taskCount: 3, status: 'Completed', progress: 100, updatedAt: new Date().toISOString() },
-];
-
-const mockTasks = [
-  { id: 't1', title: 'Design homepage', project: 'Project Alpha', dueDate: 'Tomorrow' },
-  { id: 't2', title: 'Develop API endpoints', project: 'Project Beta', dueDate: 'Next week' },
-  { id: 't3', title: 'User testing session', project: 'Project Gamma', dueDate: 'Today' },
-];
+import { useEffect, useState } from 'react';
+import { getDashboardDataAction, type DashboardData } from './actions';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Bar, XAxis, YAxis, ResponsiveContainer, Pie, Cell } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
+
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -33,13 +28,79 @@ export default function DashboardPage() {
     }
   }, [authLoading, user, router]);
 
-  if (authLoading || !user) {
+  useEffect(() => {
+    const loadDashboardData = async () => {
+        if (!user) return;
+        setIsLoading(true);
+        const result = await getDashboardDataAction();
+        if (result.data) {
+            setDashboardData(result.data);
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Error loading dashboard',
+                description: result.error || 'An unknown error occurred.',
+            });
+        }
+        setIsLoading(false);
+    }
+    if (!authLoading && user) {
+        loadDashboardData();
+    }
+  }, [authLoading, user, toast]);
+
+  const getInitials = (name?: string) => {
+    if (!name) return '?';
+    const names = name.split(' ');
+    let initials = names[0].substring(0, 1).toUpperCase();
+    if (names.length > 1) {
+      initials += names[names.length - 1].substring(0, 1).toUpperCase();
+    }
+    return initials;
+  };
+
+  if (authLoading || isLoading) {
+    return (
+      <div className="space-y-8">
+        <Skeleton className="h-32 w-full" />
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+           <Skeleton className="h-64 w-full" />
+           <Skeleton className="h-64 w-full" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+           <Skeleton className="h-64 w-full" />
+           <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !dashboardData) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
-            <PlusCircle className="h-12 w-12 animate-spin text-primary" /> 
+            <Loader2 className="h-12 w-12 animate-spin text-primary" /> 
         </div>
     );
   }
+
+  const { projects, tasks, announcements, activity } = dashboardData;
+  const activeProjectCount = projects.length;
+  const openTasks = tasks.filter(t => t.status === 'To Do' || t.status === 'In Progress');
+  const completedTaskCount = tasks.filter(t => t.status === 'Done').length;
+  const myUpcomingTasks = openTasks
+    .filter(t => t.assigneeUuid === user.uuid)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 3);
+  
+  const taskStatusData = [
+    { name: 'To Do', value: tasks.filter(t => t.status === 'To Do').length, fill: 'hsl(var(--chart-1))' },
+    { name: 'In Progress', value: tasks.filter(t => t.status === 'In Progress').length, fill: 'hsl(var(--chart-2))' },
+    { name: 'Done', value: tasks.filter(t => t.status === 'Done').length, fill: 'hsl(var(--chart-3))' },
+    { name: 'Archived', value: tasks.filter(t => t.status === 'Archived').length, fill: 'hsl(var(--chart-4))' },
+  ].filter(item => item.value > 0);
 
 
   return (
@@ -65,25 +126,25 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
+            <CardTitle className="text-sm font-medium">Your Projects</CardTitle>
             <FolderKanban className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockProjects.filter(p => p.status !== 'Completed').length}</div>
+            <div className="text-2xl font-bold">{activeProjectCount}</div>
             <p className="text-xs text-muted-foreground">
-              {mockProjects.length} total projects
+              Total projects you are a member of
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasks Due Soon</CardTitle>
+            <CardTitle className="text-sm font-medium">Open Tasks</CardTitle>
             <ListChecks className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockTasks.filter(t => t.dueDate === 'Today' || t.dueDate === 'Tomorrow').length}</div>
+            <div className="text-2xl font-bold">{openTasks.length}</div>
             <p className="text-xs text-muted-foreground">
-              Across all active projects
+              Across all your projects
             </p>
           </CardContent>
         </Card>
@@ -93,9 +154,9 @@ export default function DashboardPage() {
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div> {/* Mocked */}
+            <div className="text-2xl font-bold">{completedTaskCount}</div>
             <p className="text-xs text-muted-foreground">
-              +5 this week
+             Total tasks marked as 'Done'
             </p>
           </CardContent>
         </Card>
@@ -105,20 +166,21 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>My Projects Overview</CardTitle>
-            <CardDescription>Quick look at your key projects.</CardDescription>
+            <CardDescription>Quick look at your recently updated projects.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {mockProjects.slice(0,3).map((project) => (
+            {projects.slice(0,3).map((project) => (
               <div key={project.uuid} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                 <div>
                   <h3 className="font-semibold">{project.name}</h3>
-                  <p className="text-sm text-muted-foreground">{project.taskCount} tasks - {project.status}</p>
+                  <p className="text-sm text-muted-foreground">{tasks.filter(t => t.projectUuid === project.uuid).length} tasks</p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/projects/${project.uuid}`}>View</Link>
                 </Button>
               </div>
             ))}
+            {projects.length === 0 && <p className="text-muted-foreground text-center py-4">You are not part of any projects yet.</p>}
              <Button variant="link" asChild className="w-full mt-2">
               <Link href="/projects">View All Projects</Link>
             </Button>
@@ -127,57 +189,110 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Upcoming Tasks</CardTitle>
-            <CardDescription>Your most pressing to-dos.</CardDescription>
+            <CardTitle>My Upcoming Tasks</CardTitle>
+            <CardDescription>Your assigned tasks that are not yet completed.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {mockTasks.slice(0,3).map((task) => (
-              <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
+            {myUpcomingTasks.map((task) => (
+              <div key={task.uuid} className="flex items-center justify-between p-3 border rounded-lg">
                 <div>
                   <h3 className="font-semibold">{task.title}</h3>
-                  <p className="text-sm text-muted-foreground">{task.project} - Due: {task.dueDate}</p>
+                  <p className="text-sm text-muted-foreground">{task.projectName} - {task.status}</p>
                 </div>
-                <Button variant="ghost" size="sm">Details</Button>
+                <Button variant="ghost" size="sm" asChild>
+                   <Link href={`/projects/${task.projectUuid}?tab=tasks`}>Details</Link>
+                </Button>
               </div>
             ))}
+            {myUpcomingTasks.length === 0 && <p className="text-muted-foreground text-center py-4">You have no open assigned tasks. Great job!</p>}
             <Button variant="link" asChild className="w-full mt-2">
-              <Link href="/tasks">View All Tasks</Link>
+              <Link href="/projects">View All Tasks</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
       
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="flex flex-col items-center justify-center p-6 text-center">
-          <BarChart3 className="h-12 w-12 text-primary mb-4" />
-          <CardTitle>Activity Graph</CardTitle>
-          <CardDescription className="mt-2">
-            (Placeholder for project activity trends)
-          </CardDescription>
-           <Image src="https://placehold.co/600x300.png" alt="Placeholder Activity Graph" width={600} height={300} className="mt-4 rounded-md opacity-50" data-ai-hint="data graph" />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>Recent Activity</CardTitle>
+            <CardDescription>Tasks updated across your projects in the last 7 days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-[250px] w-full">
+              <ResponsiveContainer>
+                <BarChart data={activity} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                  <YAxis />
+                  <Tooltip cursor={false} content={<ChartTooltipContent />} />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </CardContent>
         </Card>
-        <Card className="flex flex-col items-center justify-center p-6 text-center">
-          <PieChart className="h-12 w-12 text-accent mb-4" />
-          <CardTitle>Task Status Chart</CardTitle>
-          <CardDescription className="mt-2">
-            (Placeholder for task distribution by status)
-          </CardDescription>
-          <Image src="https://placehold.co/600x300.png" alt="Placeholder Task Status Chart" width={600} height={300} className="mt-4 rounded-md opacity-50" data-ai-hint="pie chart" />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><PieChart className="mr-2 h-5 w-5 text-primary"/>Task Status Distribution</CardTitle>
+            <CardDescription>A summary of task statuses across all your projects.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center items-center">
+            {taskStatusData.length > 0 ? (
+                <ChartContainer config={{}} className="h-[250px] w-full">
+                <ResponsiveContainer>
+                    <PieChart>
+                    <Tooltip content={<ChartTooltipContent nameKey="name" />} />
+                    <Pie data={taskStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                        {taskStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                    </Pie>
+                    <Legend />
+                    </PieChart>
+                </ResponsiveContainer>
+                </ChartContainer>
+            ) : (
+                <div className="text-center text-muted-foreground p-8">
+                    <Info className="h-8 w-8 mx-auto mb-2" />
+                    No tasks to display in the chart.
+                </div>
+            )}
+          </CardContent>
         </Card>
       </div>
        <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" />Team Announcements</CardTitle>
-          <CardDescription>Latest updates from your team.</CardDescription>
+          <CardDescription>Latest updates from your projects.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-lg p-4 text-center text-muted-foreground">
-            <Megaphone className="h-8 w-8 mx-auto mb-2" />
-            No new announcements.
-            <Button variant="link" className="block mx-auto mt-2" asChild>
-              <Link href="/announcements">View All Announcements</Link>
-            </Button>
-          </div>
+          {announcements.length > 0 ? (
+             <div className="space-y-3">
+              {announcements.map((ann) => (
+                <div key={ann.uuid} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                  <div className="flex-shrink-0 pt-1"><Megaphone className="h-5 w-5 text-muted-foreground"/></div>
+                  <div className="flex-grow">
+                    <p className="font-semibold">{ann.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      In <span className="font-medium">{ann.projectName}</span> by {ann.authorName}
+                    </p>
+                  </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/projects/${ann.projectUuid}?tab=announcements`}>View</Link>
+                  </Button>
+                </div>
+              ))}
+              </div>
+          ) : (
+            <div className="border rounded-lg p-4 text-center text-muted-foreground">
+              <Megaphone className="h-8 w-8 mx-auto mb-2" />
+              No new announcements in your projects.
+            </div>
+          )}
+          <Button variant="link" className="block mx-auto mt-4" asChild>
+            <Link href="/announcements">View Global Announcements</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
