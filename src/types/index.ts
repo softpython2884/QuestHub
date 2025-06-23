@@ -270,3 +270,8 @@ export interface CreateOAuthAppFormState {
     clientSecret: string;
   };
 }
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}

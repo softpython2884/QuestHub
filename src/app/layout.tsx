@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 export const metadata: Metadata = {
   title: 'FlowUp',
   description: 'Your all-in-one project management and collaboration platform.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -22,6 +23,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+        <meta name="theme-color" content="#F5F5F5" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#1D283A" media="(prefers-color-scheme: dark)" />
       </head>
       <body className="font-body antialiased">
         <ThemeProvider

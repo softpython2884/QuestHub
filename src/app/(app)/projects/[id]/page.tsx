@@ -2252,11 +2252,18 @@ function ProjectDetailPageContent() {
                                         {project.githubRepoName || project.githubRepoUrl}
                                     </a>
                                     </p>
-                                    <Button size="lg" className="w-full sm:w-auto shadow-sm" asChild>
-                                        <Link href={`/projects/${projectUuid}/codespace/files`}>
-                                            <FileCode className="mr-2 h-5 w-5"/> Browse & Edit Repository Files
-                                        </Link>
-                                    </Button>
+                                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                        <Button size="lg" className="shadow-sm" asChild>
+                                            <a href={project.githubRepoUrl?.replace('https://github.com', 'https://github.dev')} target="_blank" rel="noopener noreferrer">
+                                                <Code2 className="mr-2 h-5 w-5"/> Open in Web Editor
+                                            </a>
+                                        </Button>
+                                        <Button size="lg" className="shadow-sm" asChild>
+                                            <Link href={`/projects/${projectUuid}/codespace/files`}>
+                                                <FileCode className="mr-2 h-5 w-5"/> Browse Repository
+                                            </Link>
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-4">
                                     <div>

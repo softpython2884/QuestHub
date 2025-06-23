@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
+import { Chatbot } from '@/components/layout/Chatbot';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -18,6 +19,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       router.push('/login');
     }
   }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+          console.log('SW registered: ', registration);
+        }).catch(registrationError => {
+          console.log('SW registration failed: ', registrationError);
+        });
+      });
+    }
+  }, []);
 
   if (isLoading) {
     return (
@@ -46,6 +59,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"> {/* This is the main content area */}
             {children}
           </main>
+          <Chatbot />
           <Toaster />
         </SidebarInset>
       </div>
