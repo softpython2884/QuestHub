@@ -3,15 +3,15 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, Search, Filter, FolderKanban, Flame, MoreHorizontal, Copy, Link as LinkIcon, ChevronDown } from "lucide-react";
+import { PlusCircle, Search, Filter, FolderKanban, Flame, MoreHorizontal, Copy, Link as LinkIcon, ChevronDown, Github, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState, useCallback, useActionState } from "react";
+import { useEffect, useState, useCallback, useActionState, useTransition } from "react";
 import type { Project, DuplicateProjectFormState } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
-import { fetchProjectsAction } from "./actions";
+import { fetchProjectsAction, importProjectsFromGithubAction } from "./actions";
 import { duplicateProjectAction } from "./[id]/actions";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,7 +19,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
 
 
 export default function ProjectsPage() {
@@ -32,7 +31,8 @@ export default function ProjectsPage() {
   
   const [projectToDuplicate, setProjectToDuplicate] = useState<Project | null>(null);
   const [duplicateFormState, duplicateFormAction, isDuplicating] = useActionState(duplicateProjectAction, { message: "", error: ""});
-
+  
+  const [isImporting, startImportTransition] = useTransition();
 
   const loadProjects = useCallback(async () => {
     if (user && !authLoading) {
@@ -56,6 +56,27 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+  
+  const handleImportFromGithub = () => {
+    startImportTransition(async () => {
+      const result = await importProjectsFromGithubAction();
+      if (result.success) {
+        toast({
+          title: "Import Complete",
+          description: `${result.importedCount} new project(s) were imported from GitHub.`
+        });
+        if (result.importedCount && result.importedCount > 0) {
+            loadProjects(); // Refresh the list
+        }
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Import Failed",
+          description: result.error,
+        });
+      }
+    });
+  };
 
   useEffect(() => {
     if (!isDuplicating && duplicateFormState) {
@@ -115,11 +136,17 @@ export default function ProjectsPage() {
           <h1 className="text-3xl font-headline font-semibold">Projects</h1>
           <p className="text-muted-foreground">Manage all your team's projects from one place.</p>
         </div>
-        <Button asChild>
-          <Link href="/projects/new">
-            <PlusCircle className="mr-2 h-5 w-5" /> Create New Project
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleImportFromGithub} disabled={isImporting}>
+            {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-4 w-4" />}
+            Import from GitHub
+          </Button>
+          <Button asChild>
+            <Link href="/projects/new">
+              <PlusCircle className="mr-2 h-5 w-5" /> Create New Project
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
