@@ -102,6 +102,7 @@ function FileExplorerContent() {
 
   const [isCreateFileModalOpen, setIsCreateFileModalOpen] = useState(false);
   const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isProcessingCreate, setIsProcessingCreate] = useState(false);
 
   const [contentToDelete, setContentToDelete] = useState<GithubRepoContentItem | null>(null);
@@ -458,6 +459,26 @@ function FileExplorerContent() {
                     </form>
                 </DialogContent>
             </Dialog>
+            <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName || isLoadingPathContent}>
+                        <UploadCloud className="mr-2 h-4 w-4" /> Upload Files
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Upload Files to /{currentPath}</DialogTitle></DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm text-muted-foreground">File upload functionality is not yet implemented in this prototype.</p>
+                        <div className="mt-4 flex h-32 w-full items-center justify-center rounded-md border-2 border-dashed">
+                            <p className="text-muted-foreground">Drag & drop or click to select files</p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                        <Button type="button" disabled>Upload</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <Dialog open={isAiScaffoldModalOpen} onOpenChange={setIsAiScaffoldModalOpen}>
                 <DialogTrigger asChild>
                      <Button variant="outline" size="sm" disabled={isViewingFile || !project?.githubRepoName || isLoadingPathContent}>
@@ -798,3 +819,5 @@ export default function GitHubFilesPage() {
         </Suspense>
     )
 }
+
+    
