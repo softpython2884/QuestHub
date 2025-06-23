@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow, HardDrive } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken, DuplicateProjectFormState } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -1813,7 +1813,7 @@ function ProjectDetailPageContent() {
                 <CardTitle>Project README</CardTitle>
                 <CardDescription>
                   Provide a general overview, setup instructions, or any other important information about this project. Supports Markdown.
-                  {project?.githubRepoUrl && (
+                  {project?.storageBackend === 'github' && project?.githubRepoUrl && (
                      <span className="block text-xs mt-1 text-green-600"><CheckCircle className="inline-block h-3 w-3 mr-1"/>README is synced with GitHub. Changes saved here will be pushed.</span>
                   )}
                 </CardDescription>
@@ -2096,7 +2096,20 @@ function ProjectDetailPageContent() {
 
         <TabsContent value="codespace" className="mt-4">
           <div className="space-y-6">
-             {currentUserMembership?.githubInvitationPending ? (
+            {project.storageBackend === 'local' ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center"><HardDrive className="mr-2 h-5 w-5 text-primary"/>Local Storage</CardTitle>
+                        <CardDescription>This project's files are stored securely on the FlowUp server.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
+                        <FileCode className="mx-auto h-12 w-12 opacity-50 mb-3" />
+                        <p className="font-medium">Local File Explorer</p>
+                        <p className="text-xs mb-4">File browsing and management for locally stored projects is coming soon.</p>
+                        <Button disabled>Browse Local Files (Coming Soon)</Button>
+                    </CardContent>
+                </Card>
+            ) : currentUserMembership?.githubInvitationPending ? (
                 <Card className="border-amber-500 bg-amber-50 dark:bg-amber-900/20">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-300">

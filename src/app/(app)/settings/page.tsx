@@ -1,10 +1,11 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive } from "lucide-react";
 import Link from 'next/link';
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +14,7 @@ import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
-import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction } from "./actions";
+import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction, getStorageBackendSettingAction, updateStorageBackendSettingAction } from "./actions";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,6 +33,9 @@ export default function SettingsPage() {
   
   const [registrationMode, setRegistrationMode] = useState<'public' | 'private'>('public');
   const [isLoadingRegMode, setIsLoadingRegMode] = useState(true);
+
+  const [storageBackend, setStorageBackend] = useState<'github' | 'local'>('github');
+  const [isLoadingStorageMode, setIsLoadingStorageMode] = useState(true);
   
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('member');
@@ -54,8 +58,14 @@ export default function SettingsPage() {
                 setRegistrationMode(mode);
                 setIsLoadingRegMode(false);
             });
+            setIsLoadingStorageMode(true);
+            getStorageBackendSettingAction().then(mode => {
+                setStorageBackend(mode);
+                setIsLoadingStorageMode(false);
+            })
         } else {
             setIsLoadingRegMode(false);
+            setIsLoadingStorageMode(false);
         }
     }
   }, [user]);
@@ -66,6 +76,18 @@ export default function SettingsPage() {
           if (result.success) {
               setRegistrationMode(newMode);
               toast({ title: 'Success', description: `Registration mode set to ${newMode}.` });
+          } else {
+              toast({ variant: 'destructive', title: 'Error', description: result.error });
+          }
+      });
+  };
+
+  const handleStorageModeChange = (newMode: 'github' | 'local') => {
+      startTransition(async () => {
+          const result = await updateStorageBackendSettingAction(newMode);
+           if (result.success) {
+              setStorageBackend(newMode);
+              toast({ title: 'Success', description: `Default storage backend for new projects set to ${newMode}.` });
           } else {
               toast({ variant: 'destructive', title: 'Error', description: result.error });
           }
@@ -264,19 +286,21 @@ export default function SettingsPage() {
               <h4 className="font-medium">Storage & Integrations</h4>
               <div className="flex items-start justify-between">
                 <Label className="flex flex-col pr-4">
-                  <span>Code Storage Backend</span>
-                  <span className="text-xs font-normal text-muted-foreground">Choose where project code is stored.</span>
+                  <span>Default Storage Backend</span>
+                  <span className="text-xs font-normal text-muted-foreground">Choose where new project files are stored.</span>
                 </Label>
-                 <RadioGroup defaultValue="github" className="flex items-center gap-4" disabled>
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="github" id="store-github" />
-                        <Label htmlFor="store-github">GitHub</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="local" id="store-local" disabled />
-                        <Label htmlFor="store-local" className="text-muted-foreground">Local (Soon)</Label>
-                    </div>
-                </RadioGroup>
+                 {isLoadingStorageMode ? <Loader2 className="h-5 w-5 animate-spin" /> :
+                    <RadioGroup value={storageBackend} onValueChange={(v) => handleStorageModeChange(v as 'github' | 'local')} className="flex items-center gap-4" disabled={isPending}>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="github" id="store-github" />
+                            <Label htmlFor="store-github" className="flex items-center gap-2"><Github className="h-4 w-4" />GitHub</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="local" id="store-local" />
+                            <Label htmlFor="store-local" className="flex items-center gap-2"><HardDrive className="h-4 w-4" />Local</Label>
+                        </div>
+                    </RadioGroup>
+                 }
               </div>
                <div className="flex items-center justify-between">
                 <Label className="flex flex-col">

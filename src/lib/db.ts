@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import sqlite3 from 'sqlite3';
@@ -334,6 +335,7 @@ export async function getDbConnection() {
       readmeContent TEXT,
       isUrgent BOOLEAN DEFAULT FALSE,
       vanityId TEXT UNIQUE,
+      storageBackend TEXT NOT NULL DEFAULT 'github',
       githubRepoUrl TEXT,
       githubRepoName TEXT,
       githubInstallationId INTEGER,
@@ -825,12 +827,13 @@ export async function createProject(name: string, description: string | undefine
   const connection = await getDbConnection();
   const projectUuid = uuidv4();
   const now = new Date().toISOString();
+  const storageBackend = await getAppSetting('storage_backend_default') || 'github';
 
   await connection.run('BEGIN TRANSACTION');
   try {
     const result = await connection.run(
-      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false
+      'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, storageBackend) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, storageBackend
     );
 
     if (!result.lastID) {

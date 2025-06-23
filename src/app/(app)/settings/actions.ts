@@ -1,3 +1,4 @@
+
 'use server';
 
 import { getAppSetting, setAppSetting, createInvitation } from '@/lib/db';
@@ -40,5 +41,25 @@ export async function generateInviteLinkAction(email: string, role: UserRole): P
         return { link };
     } catch (e: any) {
         return { error: e.message || "Failed to create invitation." };
+    }
+}
+
+
+export async function getStorageBackendSettingAction(): Promise<'github' | 'local'> {
+    const mode = await getAppSetting('storage_backend_default');
+    return (mode === 'local') ? 'local' : 'github';
+}
+
+export async function updateStorageBackendSettingAction(mode: 'github' | 'local'): Promise<{ success: boolean; error?: string }> {
+    const session = await auth();
+    if (session?.user?.role !== 'admin') {
+        return { success: false, error: 'Permission denied.' };
+    }
+    try {
+        await setAppSetting('storage_backend_default', mode);
+        revalidatePath('/settings');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to update setting.' };
     }
 }

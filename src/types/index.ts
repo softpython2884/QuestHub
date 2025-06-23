@@ -162,6 +162,7 @@ export interface Project {
   readmeContent?: string;
   isUrgent?: boolean;
   vanityId?: string | null;
+  storageBackend: 'github' | 'local';
   githubRepoUrl?: string | null;
   githubRepoName?: string | null;
   githubInstallationId?: number; // Kept for potential future use with App-specific actions
