@@ -2,10 +2,6 @@
   "name": "FlowUp",
   "short_name": "FlowUp",
   "description": "Your all-in-one project management and collaboration platform.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#64B5F6",
   "icons": [
     {
       "src": "/favicon.png",
@@ -19,5 +15,9 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#F5F5F5",
+  "theme_color": "#64B5F6"
 }

@@ -83,7 +83,7 @@ import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/compon
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -818,6 +818,7 @@ function ProjectDetailPageContent() {
   const canManageDocuments = currentUserRole === 'owner' || currentUserRole === 'co-owner' || currentUserRole === 'editor';
   const canManageAnnouncements = currentUserRole === 'owner' || currentUserRole === 'co-owner';
   const canManageCodeSpace = currentUserRole === 'owner' || currentUserRole === 'co-owner';
+  const isSecureVaultProject = project?.name === 'My Secure Vault';
 
 
   const handleEditProjectSubmit = async (values: EditProjectFormValues) => {
@@ -1396,7 +1397,7 @@ function ProjectDetailPageContent() {
             <div className="flex gap-2 flex-shrink-0">
               <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" disabled={isSecureVaultProject}>
                     <Edit3 className="mr-2 h-4 w-4" /> Edit
                   </Button>
                 </DialogTrigger>
@@ -1414,7 +1415,7 @@ function ProjectDetailPageContent() {
                           <FormItem>
                             <FormLabel>Project Name</FormLabel>
                             <FormControl>
-                              <Input {...field} />
+                              <Input {...field} disabled={isSecureVaultProject} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -2349,7 +2350,7 @@ function ProjectDetailPageContent() {
                 {canManageProjectSettings && (
                     <Dialog open={isInviteUserDialogOpen} onOpenChange={setIsInviteUserDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button size="sm" onClick={() => inviteForm.reset()}><Users className="mr-2 h-4 w-4"/>Invite Members</Button>
+                            <Button size="sm" onClick={() => inviteForm.reset()} disabled={isSecureVaultProject}><Users className="mr-2 h-4 w-4"/>Invite Members</Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[425px]">
                             <DialogHeader>
@@ -2434,7 +2435,7 @@ function ProjectDetailPageContent() {
                                         {canManageProjectSettings && member.role !== 'owner' && (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Remove User">
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Remove User" disabled={isSecureVaultProject}>
                                                         <UserX className="h-4 w-4" />
                                                     </Button>
                                                 </AlertDialogTrigger>
@@ -2487,7 +2488,7 @@ function ProjectDetailPageContent() {
                         id="project-visibility"
                         checked={project?.isPrivate === undefined ? true : project.isPrivate}
                         onCheckedChange={handleToggleVisibility}
-                        disabled={!isAdminOrOwner || isToggleVisibilityPending}
+                        disabled={isSecureVaultProject || !isAdminOrOwner || isToggleVisibilityPending}
                     />
                 </div>
                  {toggleVisibilityState?.error && <p className="text-sm text-destructive">{toggleVisibilityState.error}</p>}
@@ -2704,7 +2705,7 @@ function ProjectDetailPageContent() {
                             </div>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="sm" disabled={isDeleteProjectPending}>
+                                <Button variant="destructive" size="sm" disabled={isDeleteProjectPending || isSecureVaultProject}>
                                   <Trash2 className="mr-2 h-4 w-4"/>Delete Project
                                 </Button>
                               </AlertDialogTrigger>
