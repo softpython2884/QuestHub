@@ -4,14 +4,14 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart, Info } from 'lucide-react';
+import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart as PieChartIcon, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getDashboardDataAction, type DashboardData } from './actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Bar, XAxis, YAxis, ResponsiveContainer, Pie, Cell } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 
 export default function DashboardPage() {
@@ -225,7 +225,7 @@ export default function DashboardPage() {
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
                   <YAxis />
-                  <Tooltip cursor={false} content={<ChartTooltipContent />} />
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                   <Bar dataKey="count" fill="hsl(var(--primary))" radius={4} />
                 </BarChart>
               </ResponsiveContainer>
@@ -234,7 +234,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center"><PieChart className="mr-2 h-5 w-5 text-primary"/>Task Status Distribution</CardTitle>
+            <CardTitle className="flex items-center"><PieChartIcon className="mr-2 h-5 w-5 text-primary"/>Task Status Distribution</CardTitle>
             <CardDescription>A summary of task statuses across all your projects.</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center items-center">
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                 <ChartContainer config={{}} className="h-[250px] w-full">
                 <ResponsiveContainer>
                     <PieChart>
-                    <Tooltip content={<ChartTooltipContent nameKey="name" />} />
+                    <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
                     <Pie data={taskStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                         {taskStatusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
