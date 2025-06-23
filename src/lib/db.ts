@@ -795,6 +795,21 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   };
 }
 
+export async function getProjectByNameForUser(name: string, userUuid: string): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
+    'SELECT * FROM projects WHERE name = ? AND ownerUuid = ?',
+    name,
+    userUuid
+  );
+  if (!projectRow) return null;
+  return {
+    ...projectRow,
+    isUrgent: !!projectRow.isUrgent,
+    isPrivate: !!projectRow.isPrivate,
+  };
+}
+
 export async function updateProjectDetails(uuid: string, name: string, description: string | undefined): Promise<Project | null> {
   const connection = await getDbConnection();
   const now = new Date().toISOString();
