@@ -1,9 +1,10 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info } from "lucide-react";
 import Link from 'next/link';
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,33 +41,32 @@ export default function SettingsPage() {
             <CardDescription>Control how you receive notifications.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-              <div className="flex items-center gap-3">
-                 <MessageSquare className="h-8 w-8 text-primary" />
-                  <div className="flex flex-col">
-                    <label className="font-semibold">
-                      Discord Notifications
-                    </label>
-                     {isLoadingDiscord ? <div className="h-4 w-24 bg-muted-foreground/20 animate-pulse rounded-md mt-1"/> :
-                      <span className="text-xs text-muted-foreground">
-                        {discordConnected ? "Connected. Ready for DM alerts." : "Not Connected."}
-                      </span>
-                     }
-                  </div>
-              </div>
-              <Button size="sm" asChild>
-                <Link href="/profile">Manage</Link>
-              </Button>
-            </div>
              <div className="flex items-center justify-between">
-              <label htmlFor="push-notifications" className="flex flex-col space-y-1">
+              <label htmlFor="in-app-notifications" className="flex flex-col space-y-1">
                 <span>In-App Notifications</span>
                 <span className="font-normal leading-snug text-muted-foreground">
-                  Show alerts within FlowUp.
+                  Show alerts inside FlowUp.
                 </span>
               </label>
-              <Switch id="push-notifications" checked disabled />
+              <Switch id="in-app-notifications" checked disabled />
             </div>
+            <div className="flex items-center justify-between">
+              <label htmlFor="discord-dm-notifications" className="flex flex-col space-y-1">
+                <span>Discord Security Alerts</span>
+                <span className="font-normal leading-snug text-muted-foreground text-xs">
+                  Receive DMs for important account events.
+                </span>
+              </label>
+              <Switch id="discord-dm-notifications" disabled={!discordConnected || isLoadingDiscord} />
+            </div>
+            <p className="text-xs text-muted-foreground pt-2">Project-specific notifications can be configured within each project's settings.</p>
+            {!discordConnected && !isLoadingDiscord && 
+              <div className="text-sm text-amber-600 flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                <span>
+                    <Link href="/profile" className="underline font-medium">Connect your Discord account</Link> to enable DM notifications.
+                </span>
+              </div>}
           </CardContent>
         </Card>
         

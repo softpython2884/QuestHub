@@ -5,6 +5,7 @@ import { storeUserGithubOAuthToken, getUserByEmail, createUser } from '@/lib/db'
 import { createSessionForUser } from '@/lib/authService';
 import { auth } from '@/lib/authEdge';
 import type { User } from '@/types';
+import { sendDiscordDirectMessage } from '@/lib/discord';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -81,6 +82,18 @@ export async function GET(request: NextRequest) {
         tokenData.expires_in
       );
       console.log(`[GitHub OAuth Callback] LINKING FLOW: Successfully linked GitHub account to user ${session.user.uuid}.`);
+      
+      // Send Discord DM notification
+      await sendDiscordDirectMessage(session.user.uuid, {
+        embeds: [{
+          title: "🔒 Account Security Alert",
+          description: `Your GitHub account has been successfully linked to your FlowUp profile. If you did not initiate this action, please review your account security immediately.`,
+          color: 0x2b2d31, // GitHub Black
+          timestamp: new Date().toISOString(),
+          footer: { text: "FlowUp Security" }
+        }]
+      });
+
       const redirectTo = storedStateData.redirectTo || '/profile';
       const redirectUrl = new URL(redirectTo, request.url);
       redirectUrl.searchParams.set('oauth_status', 'success');
