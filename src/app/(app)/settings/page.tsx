@@ -1,15 +1,18 @@
 
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound } from "lucide-react";
 import Link from 'next/link';
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
 import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
   const { setTheme } = useTheme();
@@ -119,6 +122,92 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+       {user?.role === 'admin' && (
+        <Card className="border-primary/50">
+          <CardHeader>
+            <CardTitle className="text-2xl font-headline flex items-center"><Shield className="mr-2 h-6 w-6 text-primary"/>Admin Panel</CardTitle>
+            <CardDescription>Global settings for this FlowUp instance. Changes here affect all users.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4 rounded-lg border p-4">
+              <h4 className="font-medium">Instance Configuration</h4>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="server-name" className="flex flex-col">
+                  <span>Server Name</span>
+                  <span className="text-xs font-normal text-muted-foreground">Appears in titles and notifications.</span>
+                </Label>
+                <Input id="server-name" className="max-w-xs" placeholder="FlowUp" disabled />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="global-webhook" className="flex flex-col">
+                  <span>Global Webhook URL</span>
+                  <span className="text-xs font-normal text-muted-foreground">Send all platform events to this single webhook.</span>
+                </Label>
+                 <Input id="global-webhook" className="max-w-xs" placeholder="https://your-service.com/webhook" disabled />
+              </div>
+            </div>
+            
+            <div className="space-y-4 rounded-lg border p-4">
+              <h4 className="font-medium">User & Project Policies</h4>
+               <div className="flex items-start justify-between">
+                <Label className="flex flex-col pr-4">
+                  <span>Registration Mode</span>
+                  <span className="text-xs font-normal text-muted-foreground">Control how new users can sign up.</span>
+                </Label>
+                <RadioGroup defaultValue="public" className="flex items-center gap-4" disabled>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="public" id="reg-public" />
+                        <Label htmlFor="reg-public">Public</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="invite" id="reg-invite" />
+                        <Label htmlFor="reg-invite">Invite-Only</Label>
+                    </div>
+                </RadioGroup>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="allow-public-github" className="flex flex-col">
+                  <span>Allow Public GitHub Repos</span>
+                  <span className="text-xs font-normal text-muted-foreground">Allow users to set project repositories to public.</span>
+                </Label>
+                <Switch id="allow-public-github" disabled />
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <h4 className="font-medium">Storage & Integrations</h4>
+              <div className="flex items-start justify-between">
+                <Label className="flex flex-col pr-4">
+                  <span>Code Storage Backend</span>
+                  <span className="text-xs font-normal text-muted-foreground">Choose where project code is stored.</span>
+                </Label>
+                 <RadioGroup defaultValue="github" className="flex items-center gap-4" disabled>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="github" id="store-github" />
+                        <Label htmlFor="store-github">GitHub</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="local" id="store-local" disabled />
+                        <Label htmlFor="store-local" className="text-muted-foreground">Local (Soon)</Label>
+                    </div>
+                </RadioGroup>
+              </div>
+               <div className="flex items-center justify-between">
+                <Label className="flex flex-col">
+                  <span>Plugin System</span>
+                  <span className="text-xs font-normal text-muted-foreground">Enable or disable third-party plugins.</span>
+                </Label>
+                <Button variant="outline" disabled>Manage Plugins (Soon)</Button>
+              </div>
+            </div>
+
+          </CardContent>
+          <CardFooter>
+            <Button disabled>Save Admin Settings (Coming Soon)</Button>
+          </CardFooter>
+        </Card>
+      )}
     </div>
   );
 }

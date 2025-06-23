@@ -21,6 +21,7 @@ import { Button } from '../ui/button';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
+  { href: '/discover', label: 'Discover', icon: Compass },
   { href: '/team', label: 'Team', icon: Users },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
@@ -28,7 +29,7 @@ const navItems = [
   { href: '/secure-vault', label: 'Secure Vault', icon: ShieldCheck, adminOnly: false },
 ];
 
-const adminNavItems = [
+const adminNavItems: any[] = [
     // The "Team" link was here and has been removed as it's replaced by "Discover".
 ];
 
