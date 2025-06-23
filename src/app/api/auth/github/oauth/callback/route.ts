@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
 
   if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET || !NEXT_PUBLIC_APP_URL) {
     console.error('[GitHub OAuth Callback] OAuth environment variables not configured.');
-    return NextResponse.redirect(new URL('/login?error=oauth_config_error', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL || request.url);
+    errorUrl.searchParams.set('error', 'oauth_config_error');
+    return NextResponse.redirect(errorUrl);
   }
 
   const storedStateCookie = request.cookies.get('github_oauth_state');
@@ -26,7 +28,9 @@ export async function GET(request: NextRequest) {
 
   if (!storedStateCookie) {
     console.error('[GitHub OAuth Callback] Missing OAuth state cookie.');
-    return NextResponse.redirect(new URL('/login?error=oauth_state_missing', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_missing');
+    return NextResponse.redirect(errorUrl);
   }
   
   let storedStateData;
@@ -34,19 +38,26 @@ export async function GET(request: NextRequest) {
     storedStateData = JSON.parse(storedStateCookie.value);
   } catch (e) {
     console.error('[GitHub OAuth Callback] Error parsing OAuth state cookie:', e);
-    return NextResponse.redirect(new URL('/login?error=oauth_state_invalid_parse', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_invalid_parse');
+    return NextResponse.redirect(errorUrl);
   }
 
   if (!stateFromGitHub || stateFromGitHub !== storedStateData.csrf) {
     console.error('[GitHub OAuth Callback] OAuth state mismatch.', { stateFromGitHub, storedStateCSRF: storedStateData.csrf });
-    return NextResponse.redirect(new URL('/login?error=oauth_state_mismatch', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_mismatch');
+    return NextResponse.redirect(errorUrl);
   }
 
   if (!code) {
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
     console.error(`[GitHub OAuth Callback] Authorization failed on GitHub's side. Error: ${error}, Desc: ${errorDescription}`);
-    return NextResponse.redirect(new URL(`/login?error=oauth_provider_error&message=${encodeURIComponent(errorDescription || error || 'Unknown GitHub error')}`, request.url));
+    const errorUrl = new URL(`/login`, NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_provider_error');
+    errorUrl.searchParams.set('message', encodeURIComponent(errorDescription || error || 'Unknown GitHub error'));
+    return NextResponse.redirect(errorUrl);
   }
 
   try {
@@ -83,19 +94,18 @@ export async function GET(request: NextRequest) {
       );
       console.log(`[GitHub OAuth Callback] LINKING FLOW: Successfully linked GitHub account to user ${session.user.uuid}.`);
       
-      // Send Discord DM notification
       await sendDiscordDirectMessage(session.user.uuid, {
         embeds: [{
           title: "🔒 Account Security Alert",
           description: `Your GitHub account has been successfully linked to your FlowUp profile. If you did not initiate this action, please review your account security immediately.`,
-          color: 0x2b2d31, // GitHub Black
+          color: 0x2b2d31,
           timestamp: new Date().toISOString(),
           footer: { text: "FlowUp Security" }
         }]
       });
 
       const redirectTo = storedStateData.redirectTo || '/profile';
-      const redirectUrl = new URL(redirectTo, request.url);
+      const redirectUrl = new URL(redirectTo, NEXT_PUBLIC_APP_URL);
       redirectUrl.searchParams.set('oauth_status', 'success');
       return NextResponse.redirect(redirectUrl);
     } else {
@@ -108,7 +118,9 @@ export async function GET(request: NextRequest) {
       const primaryEmail = emails.find(email => email.primary && email.verified)?.email;
 
       if (!primaryEmail) {
-        return NextResponse.redirect(new URL('/login?error=github_no_verified_email', request.url));
+        const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+        errorUrl.searchParams.set('error', 'github_no_verified_email');
+        return NextResponse.redirect(errorUrl);
       }
 
       let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(primaryEmail);
@@ -138,13 +150,13 @@ export async function GET(request: NextRequest) {
       );
       
       console.log(`[GitHub OAuth Callback] Successfully logged in/signed up user ${userToReturn.email}. Redirecting to dashboard.`);
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL('/dashboard', NEXT_PUBLIC_APP_URL));
     }
 
   } catch (error: any) {
     console.error('[GitHub OAuth Callback] Error in callback:', error);
     const redirectTo = storedStateData.redirectTo || '/login';
-    const redirectUrl = new URL(redirectTo, request.url);
+    const redirectUrl = new URL(redirectTo, NEXT_PUBLIC_APP_URL);
     redirectUrl.searchParams.set('error', 'oauth_callback_error');
     redirectUrl.searchParams.set('message', encodeURIComponent(error.message || 'Unknown error'));
     return NextResponse.redirect(redirectUrl);

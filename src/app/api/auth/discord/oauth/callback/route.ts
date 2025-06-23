@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
 
   if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET || !NEXT_PUBLIC_APP_URL) {
     console.error('[Discord OAuth Callback] OAuth environment variables not configured.');
-    return NextResponse.redirect(new URL('/login?error=oauth_config_error', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL || request.url);
+    errorUrl.searchParams.set('error', 'oauth_config_error');
+    return NextResponse.redirect(errorUrl);
   }
 
   const storedStateCookie = request.cookies.get('discord_oauth_state');
@@ -25,7 +27,9 @@ export async function GET(request: NextRequest) {
 
   if (!storedStateCookie) {
     console.error('[Discord OAuth Callback] Missing OAuth state cookie.');
-    return NextResponse.redirect(new URL('/login?error=oauth_state_missing', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_missing');
+    return NextResponse.redirect(errorUrl);
   }
 
   let storedStateData;
@@ -33,19 +37,26 @@ export async function GET(request: NextRequest) {
     storedStateData = JSON.parse(storedStateCookie.value);
   } catch (e) {
     console.error('[Discord OAuth Callback] Error parsing OAuth state cookie:', e);
-    return NextResponse.redirect(new URL('/login?error=oauth_state_invalid_parse', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_invalid_parse');
+    return NextResponse.redirect(errorUrl);
   }
   
   if (!stateFromDiscord || stateFromDiscord !== storedStateData.csrf) {
     console.error('[Discord OAuth Callback] OAuth state mismatch.');
-    return NextResponse.redirect(new URL('/login?error=oauth_state_mismatch', request.url));
+    const errorUrl = new URL('/login', NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_state_mismatch');
+    return NextResponse.redirect(errorUrl);
   }
   
   if (!code) {
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
     console.error(`[Discord OAuth Callback] Authorization failed on Discord's side. Error: ${error}, Desc: ${errorDescription}`);
-    return NextResponse.redirect(new URL(`/login?error=oauth_provider_error&message=${encodeURIComponent(errorDescription || error || "Unknown Discord error")}`, request.url));
+    const errorUrl = new URL(`/login`, NEXT_PUBLIC_APP_URL);
+    errorUrl.searchParams.set('error', 'oauth_provider_error');
+    errorUrl.searchParams.set('message', encodeURIComponent(errorDescription || error || "Unknown Discord error"));
+    return NextResponse.redirect(errorUrl);
   }
 
   try {
@@ -80,7 +91,6 @@ export async function GET(request: NextRequest) {
     }
     const discordUser = await userResponse.json();
     
-    // Check for an existing FlowUp session to determine if we are linking or logging in.
     const session = await auth();
     if (session?.user?.uuid) {
         // --- LINKING FLOW ---
@@ -96,26 +106,27 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[Discord OAuth Callback] LINKING FLOW: Successfully linked Discord account to user ${session.user.uuid}.`);
         
-        // Send Discord DM notification
         await sendDiscordDirectMessage(session.user.uuid, {
           embeds: [{
             title: "🔒 Account Security Alert",
             description: `Your Discord account has been successfully linked to your FlowUp profile. If you did not initiate this action, please review your account security immediately.`,
-            color: 0x5865F2, // Discord Blurple
+            color: 0x5865F2,
             timestamp: new Date().toISOString(),
             footer: { text: "FlowUp Security" }
           }]
         });
 
         const redirectTo = storedStateData.redirectTo || '/profile';
-        const redirectUrl = new URL(redirectTo, request.url);
+        const redirectUrl = new URL(redirectTo, NEXT_PUBLIC_APP_URL);
         redirectUrl.searchParams.set('discord_oauth_status', 'success');
         return NextResponse.redirect(redirectUrl);
     } else {
         // --- LOGIN/SIGNUP FLOW ---
         if (!discordUser.email || !discordUser.verified) {
           console.error(`[Discord OAuth Callback] User's Discord email is missing or not verified.`);
-          return NextResponse.redirect(new URL(`/login?error=discord_email_unverified`, request.url));
+          const errorUrl = new URL(`/login`, NEXT_PUBLIC_APP_URL);
+          errorUrl.searchParams.set('error', 'discord_email_unverified');
+          return NextResponse.redirect(errorUrl);
         }
 
         let appUser: (User & { hashedPassword?: string }) | null = await getUserByEmail(discordUser.email);
@@ -143,12 +154,12 @@ export async function GET(request: NextRequest) {
             discordAvatar: discordUser.avatar,
         });
         
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/dashboard', NEXT_PUBLIC_APP_URL));
     }
   } catch (error: any) {
     console.error('[Discord OAuth Callback] Final catch block error:', error);
     const redirectTo = storedStateData.redirectTo || '/login';
-    const redirectUrl = new URL(redirectTo, request.url);
+    const redirectUrl = new URL(redirectTo, NEXT_PUBLIC_APP_URL);
     redirectUrl.searchParams.set('error', 'oauth_callback_error');
     redirectUrl.searchParams.set('message', encodeURIComponent(error.message || 'Unknown error'));
     return NextResponse.redirect(redirectUrl);
