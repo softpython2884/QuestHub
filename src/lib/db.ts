@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -296,6 +296,21 @@ export async function getDbConnection() {
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_apps (
+      uuid TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      ownerUuid TEXT NOT NULL,
+      clientId TEXT UNIQUE NOT NULL,
+      clientSecretHashed TEXT NOT NULL,
+      redirectUris TEXT NOT NULL, -- JSON string array
+      website TEXT,
+      logoUrl TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS projects (
@@ -1779,4 +1794,73 @@ export async function getPublicProfile(userUuid: string): Promise<(User & { proj
     );
     
     return { ...user, projects, pinnedProjects };
+}
+
+
+// OAuth Provider Functions
+export async function createOAuthApp(data: {
+    name: string;
+    description: string | null;
+    ownerUuid: string;
+    redirectUris: string[];
+    website: string | null;
+}): Promise<OAuthApp> {
+    const connection = await getDbConnection();
+    const appUuid = uuidv4();
+    const clientId = `fup_${uuidv4().replace(/-/g, '')}`;
+    const clientSecret = `fups_${uuidv4().replace(/-/g, '')}`;
+    const clientSecretHashed = await bcrypt.hash(clientSecret, 10);
+    const now = new Date().toISOString();
+
+    await connection.run(
+        `INSERT INTO oauth_apps 
+        (uuid, name, description, ownerUuid, clientId, clientSecretHashed, redirectUris, website, createdAt, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        appUuid,
+        data.name,
+        data.description,
+        data.ownerUuid,
+        clientId,
+        clientSecretHashed,
+        JSON.stringify(data.redirectUris),
+        data.website,
+        now,
+        now
+    );
+
+    return {
+        uuid: appUuid,
+        name: data.name,
+        description: data.description,
+        ownerUuid: data.ownerUuid,
+        clientId,
+        clientSecret, // Return unhashed secret only on creation
+        redirectUris: data.redirectUris,
+        website: data.website,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+
+export async function getOAuthAppsForUser(userUuid: string): Promise<OAuthApp[]> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<any[]>(
+        'SELECT uuid, name, description, ownerUuid, clientId, redirectUris, website, logoUrl, createdAt, updatedAt FROM oauth_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
+        userUuid
+    );
+
+    return rows.map(row => ({
+        ...row,
+        redirectUris: JSON.parse(row.redirectUris || '[]'),
+    }));
+}
+
+export async function deleteOAuthApp(appUuid: string, userUuid: string): Promise<boolean> {
+    const connection = await getDbConnection();
+    const result = await connection.run(
+        'DELETE FROM oauth_apps WHERE uuid = ? AND ownerUuid = ?',
+        appUuid,
+        userUuid
+    );
+    return result.changes ? result.changes > 0 : false;
 }

@@ -245,3 +245,28 @@ export interface DuplicateProjectFormState {
   error?: string;
   duplicatedProject?: Project;
 }
+
+export interface OAuthApp {
+  uuid: string;
+  name: string;
+  description?: string | null;
+  ownerUuid: string;
+  clientId: string;
+  clientSecret?: string; // Only available on creation
+  redirectUris: string[];
+  website?: string | null;
+  logoUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOAuthAppFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: { [key: string]: string[] | undefined };
+  createdApp?: {
+    name: string;
+    clientId: string;
+    clientSecret: string;
+  };
+}

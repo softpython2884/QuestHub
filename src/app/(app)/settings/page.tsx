@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Bell, Palette, Shield } from "lucide-react";
+import { User, Bell, Palette, Shield, Code2 } from "lucide-react";
+import Link from 'next/link';
 
 export default function SettingsPage() {
   return (
@@ -21,15 +22,9 @@ export default function SettingsPage() {
             <CardDescription>Update your personal information.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue="Admin User" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" defaultValue="admin@flowup.com" />
-            </div>
-             <Button className="w-full">Save Changes</Button>
+             <Button className="w-full" asChild>
+              <Link href="/profile">Go to Profile Page</Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -81,7 +76,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-1"> {/* Security settings might take full width on smaller screens or be part of a larger section */}
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><Shield className="mr-2 h-5 w-5 text-primary"/> Security</CardTitle>
             <CardDescription>Manage your account security.</CardDescription>
@@ -89,7 +84,18 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
              <Button variant="outline" className="w-full">Change Password</Button>
              <Button variant="outline" className="w-full">Enable Two-Factor Authentication</Button>
-             {/* More security settings */}
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><Code2 className="mr-2 h-5 w-5 text-primary"/> Developer Settings</CardTitle>
+            <CardDescription>Manage your API keys and OAuth applications.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" asChild>
+              <Link href="/settings/developer">Manage Applications</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

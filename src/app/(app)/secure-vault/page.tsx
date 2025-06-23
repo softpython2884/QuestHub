@@ -29,7 +29,7 @@ export default function SecureVaultPage() {
         });
       } else if (result.projectUuid) {
         setStatus('redirecting');
-        router.replace(`/projects/${result.projectUuid}?tab=codespace`);
+        router.replace(`/projects/${result.projectUuid}/codespace/files`);
       } else {
         setErrorMessage('An unknown error occurred.');
         setStatus('error');
