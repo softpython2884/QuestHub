@@ -18,6 +18,7 @@ import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction } from '
 import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info } from 'lucide-react';
 import type { OAuthApp, CreateOAuthAppFormState } from '@/types';
 import { Loader2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 const oAuthAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),

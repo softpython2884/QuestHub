@@ -15,7 +15,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import { fetchDiscordUserDetailsAction, fetchGithubUserDetailsAction } from '../../projects/[id]/actions';
-import { DiscordIcon } from '@/components/icons/DiscordIcon';
 
 interface ProfileData extends User {
     projects: Project[];
@@ -129,7 +128,7 @@ export default function PublicProfilePage() {
                         )}
                         {profile.showDiscordOnProfile && socials.discord && (
                              <span className="text-muted-foreground flex items-center gap-1" title={`${socials.discord.username}#${socials.discord.discriminator}`}>
-                                <DiscordIcon className="h-6 w-6" />
+                                <MessageSquare className="h-6 w-6" />
                             </span>
                         )}
                          {profile.websiteUrl && (

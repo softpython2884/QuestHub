@@ -1,13 +1,31 @@
+'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Bell, Palette, Shield, Code2, MessageSquare } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop } from "lucide-react";
 import Link from 'next/link';
+import { useTheme } from "next-themes";
+import { useAuth } from "@/hooks/useAuth";
+import { useState, useEffect } from "react";
+import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
 
 export default function SettingsPage() {
+  const { setTheme } = useTheme();
+  const { user } = useAuth();
+  const [discordConnected, setDiscordConnected] = useState(false);
+  const [isLoadingDiscord, setIsLoadingDiscord] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+        setIsLoadingDiscord(true);
+        fetchDiscordUserDetailsAction().then(details => {
+            setDiscordConnected(!!details);
+            setIsLoadingDiscord(false);
+        });
+    }
+  }, [user]);
+
   return (
     <div className="space-y-8">
       <div>
@@ -16,7 +34,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><Bell className="mr-2 h-5 w-5 text-primary"/> Notification Preferences</CardTitle>
@@ -25,14 +42,16 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
               <div className="flex items-center gap-3">
-                 <MessageSquare className="h-8 w-8 text-[#5865F2]" />
+                 <MessageSquare className="h-8 w-8 text-primary" />
                   <div className="flex flex-col">
-                    <Label htmlFor="discord-notifications" className="font-semibold">
+                    <label className="font-semibold">
                       Discord Notifications
-                    </Label>
-                    <span className="text-xs text-muted-foreground">
-                      Receive DMs for important events.
-                    </span>
+                    </label>
+                     {isLoadingDiscord ? <div className="h-4 w-24 bg-muted-foreground/20 animate-pulse rounded-md mt-1"/> :
+                      <span className="text-xs text-muted-foreground">
+                        {discordConnected ? "Connected. Ready for DM alerts." : "Not Connected."}
+                      </span>
+                     }
                   </div>
               </div>
               <Button size="sm" asChild>
@@ -40,15 +59,14 @@ export default function SettingsPage() {
               </Button>
             </div>
              <div className="flex items-center justify-between">
-              <Label htmlFor="push-notifications" className="flex flex-col space-y-1">
+              <label htmlFor="push-notifications" className="flex flex-col space-y-1">
                 <span>In-App Notifications</span>
                 <span className="font-normal leading-snug text-muted-foreground">
                   Show alerts within FlowUp.
                 </span>
-              </Label>
-              <Switch id="push-notifications" disabled />
+              </label>
+              <Switch id="push-notifications" checked disabled />
             </div>
-            <p className="text-sm text-muted-foreground text-center pt-2">More notification channels coming soon!</p>
           </CardContent>
         </Card>
         
@@ -58,16 +76,15 @@ export default function SettingsPage() {
             <CardDescription>Customize the look and feel.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-             <div className="flex items-center justify-between">
-              <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
-                <span>Dark Mode</span>
-                 <span className="font-normal leading-snug text-muted-foreground">
-                  Toggle between light and dark themes.
-                </span>
-              </Label>
-              <Switch id="dark-mode" disabled />
+             <div className="space-y-2">
+                <label className="text-sm font-medium">Theme</label>
+                <div className="grid grid-cols-3 gap-2">
+                    <Button variant="outline" onClick={() => setTheme('light')}><Sun className="mr-2"/>Light</Button>
+                    <Button variant="outline" onClick={() => setTheme('dark')}><Moon className="mr-2"/>Dark</Button>
+                    <Button variant="outline" onClick={() => setTheme('system')}><Laptop className="mr-2"/>System</Button>
+                </div>
             </div>
-            <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
+             <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
           </CardContent>
         </Card>
 
@@ -78,8 +95,15 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
              <Button variant="outline" className="w-full" disabled>Change Password (Coming Soon)</Button>
-             <Button variant="outline" className="w-full" disabled>Enable Two-Factor Authentication (Coming Soon)</Button>
-             <p className="text-xs text-muted-foreground text-center">2FA will require a connected Discord account for DMs.</p>
+              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+                 <label htmlFor="2fa" className="flex flex-col space-y-1">
+                    <span>Two-Factor Authentication</span>
+                    <span className="font-normal leading-snug text-muted-foreground text-xs">
+                        {discordConnected ? "Ready to enable. Requires Discord DMs." : "Connect Discord to enable 2FA."}
+                    </span>
+                </label>
+                <Switch id="2fa" disabled={!discordConnected || isLoadingDiscord} />
+             </div>
           </CardContent>
         </Card>
         
