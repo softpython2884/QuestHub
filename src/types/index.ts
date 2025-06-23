@@ -176,6 +176,7 @@ export interface Project {
   discordNotifySettings?: boolean;
   starCount?: number;
   isStarred?: boolean;
+  memberCount?: number;
 }
 
 // Represents an announcement within a specific project

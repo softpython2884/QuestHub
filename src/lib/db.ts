@@ -1014,6 +1014,24 @@ export async function getProjectsForUser(userUuid: string): Promise<Project[]> {
   }));
 }
 
+export async function getProjectsForUserWithMemberCount(userUuid: string): Promise<Array<Project & { memberCount: number }>> {
+  const connection = await getDbConnection();
+  const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1, memberCount: number }>>(
+    `SELECT p.*, (SELECT COUNT(*) FROM project_members WHERE projectUuid = p.uuid) as memberCount
+     FROM projects p
+     JOIN project_members pm ON p.uuid = pm.projectUuid
+     WHERE pm.userUuid = ?
+     ORDER BY p.updatedAt DESC`,
+    userUuid
+  );
+  return projectsData.map(p => ({
+    ...p,
+    isUrgent: !!p.isUrgent,
+    isPrivate: !!p.isPrivate,
+    memberCount: p.memberCount,
+  }));
+}
+
 export async function getAllProjects(): Promise<Project[]> {
     const connection = await getDbConnection();
     const projectsData = await connection.all<Array<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>>(
@@ -1103,6 +1121,22 @@ export async function getProjectMembers(projectUuid: string): Promise<ProjectMem
     user: { uuid: m.userUuid, name: m.name, email: m.email, avatar: m.avatar },
     githubInvitationPending: !!m.githubInvitationPending,
   }));
+}
+
+export async function getUsersFromUserProjects(userUuid: string): Promise<User[]> {
+  const connection = await getDbConnection();
+  // Using a subquery to find all projects the user is a member of.
+  // Then, get all unique users who are members of any of those projects.
+  const users = await connection.all<User[]>(`
+    SELECT DISTINCT u.uuid, u.name, u.email, u.role, u.avatar, u.bio, u.websiteUrl
+    FROM users u
+    JOIN project_members pm ON u.uuid = pm.userUuid
+    WHERE pm.projectUuid IN (
+      SELECT projectUuid FROM project_members WHERE userUuid = ?
+    )
+    ORDER BY u.name ASC
+  `, userUuid);
+  return users;
 }
 
 export async function setGithubInvitationPendingStatus(projectUuid: string, userUuid: string, isPending: boolean): Promise<void> {

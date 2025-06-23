@@ -21,7 +21,7 @@ import { Button } from '../ui/button';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
-  { href: '/discover', label: 'Discover', icon: Compass },
+  { href: '/team', label: 'Team', icon: Users },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
   { href: '/suggestions', label: 'Suggestions', icon: Lightbulb, adminOnly: false },
