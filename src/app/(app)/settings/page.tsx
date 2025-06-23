@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Bell, Palette, Shield, Code2 } from "lucide-react";
+import { User, Bell, Palette, Shield, Code2, MessageSquare } from "lucide-react";
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -16,17 +16,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5 text-primary"/> Profile Settings</CardTitle>
-            <CardDescription>Update your personal information.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <Button className="w-full" asChild>
-              <Link href="/profile">Go to Profile Page</Link>
-            </Button>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
@@ -34,25 +23,32 @@ export default function SettingsPage() {
             <CardDescription>Control how you receive notifications.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="email-notifications" className="flex flex-col space-y-1">
-                <span>Email Notifications</span>
-                <span className="font-normal leading-snug text-muted-foreground">
-                  Receive updates and alerts via email.
-                </span>
-              </Label>
-              <Switch id="email-notifications" defaultChecked />
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-3">
+                 <MessageSquare className="h-8 w-8 text-[#5865F2]" />
+                  <div className="flex flex-col">
+                    <Label htmlFor="discord-notifications" className="font-semibold">
+                      Discord Notifications
+                    </Label>
+                    <span className="text-xs text-muted-foreground">
+                      Receive DMs for important events.
+                    </span>
+                  </div>
+              </div>
+              <Button size="sm" asChild>
+                <Link href="/profile">Manage</Link>
+              </Button>
             </div>
              <div className="flex items-center justify-between">
               <Label htmlFor="push-notifications" className="flex flex-col space-y-1">
-                <span>Push Notifications</span>
+                <span>In-App Notifications</span>
                 <span className="font-normal leading-snug text-muted-foreground">
-                  Get real-time alerts on your device.
+                  Show alerts within FlowUp.
                 </span>
               </Label>
-              <Switch id="push-notifications" />
+              <Switch id="push-notifications" disabled />
             </div>
-            <Button className="w-full">Save Preferences</Button>
+            <p className="text-sm text-muted-foreground text-center pt-2">More notification channels coming soon!</p>
           </CardContent>
         </Card>
         
@@ -69,10 +65,9 @@ export default function SettingsPage() {
                   Toggle between light and dark themes.
                 </span>
               </Label>
-              <Switch id="dark-mode" />
+              <Switch id="dark-mode" disabled />
             </div>
-            {/* More appearance settings can go here */}
-            <p className="text-sm text-muted-foreground text-center pt-4">Theme selection coming soon!</p>
+            <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
           </CardContent>
         </Card>
 
@@ -82,8 +77,9 @@ export default function SettingsPage() {
             <CardDescription>Manage your account security.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-             <Button variant="outline" className="w-full">Change Password</Button>
-             <Button variant="outline" className="w-full">Enable Two-Factor Authentication</Button>
+             <Button variant="outline" className="w-full" disabled>Change Password (Coming Soon)</Button>
+             <Button variant="outline" className="w-full" disabled>Enable Two-Factor Authentication (Coming Soon)</Button>
+             <p className="text-xs text-muted-foreground text-center">2FA will require a connected Discord account for DMs.</p>
           </CardContent>
         </Card>
         

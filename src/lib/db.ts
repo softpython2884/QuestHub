@@ -71,164 +71,160 @@ const DEFAULT_PROJECT_TAGS: Array<Omit<Tag, 'uuid' | 'projectUuid'>> = [
 ];
 
 
-const DEFAULT_PROJECT_README_CONTENT = `# 📝 Bienvenue sur FlowUp – Guide Markdown
+const DEFAULT_PROJECT_README_CONTENT = `# 📝 Welcome to FlowUp – Markdown Guide
 
-Ce document vous montre comment structurer vos fichiers \`.md\` (Markdown) dans FlowUp. Le Markdown vous permet de créer des documents lisibles, structurés et interactifs pour votre équipe (documentation, notes, wiki, README, etc.).
-
----
-
-## 🔤 Titres et sous-titres
-
-Utilisez \`#\` pour structurer votre document :
-
-\`\`\`markdown
-# Titre principal (H1)
-## Sous-titre (H2)
-### Sous-sous-titre (H3)
-\`\`\`
-
-Exemple :
-
-# Titre H1
-## Titre H2
-### Titre H3
+This document shows you how to structure your \`.md\` (Markdown) files in FlowUp. Markdown allows you to create readable, structured, and interactive documents for your team (documentation, notes, wiki, README, etc.).
 
 ---
 
-## ✍️ Style de texte
+## 🔤 Titles and subtitles
+
+Use \`#\` to structure your document:
 
 \`\`\`markdown
-Texte en **gras**, *italique*, ~~barré~~.
+# Main title (H1)
+## Subtitle (H2)
+### Sub-subtitle (H3)
 \`\`\`
 
-Exemple :
-Texte en **gras**, *italique*, ~~barré~~.
+Example:
+
+# H1 Title
+## H2 Title
+### H3 Title
 
 ---
 
-## 📋 Listes
-
-### Listes à puces
+## ✍️ Text style
 
 \`\`\`markdown
-- Élément 1
-- Élément 2
-  - Sous-élément
+**Bold** text, *italic*, ~~strikethrough~~.
 \`\`\`
 
-### Listes numérotées
+Example:
+**Bold** text, *italic*, ~~strikethrough~~.
+
+---
+
+## 📋 Lists
+
+### Bulleted lists
 
 \`\`\`markdown
-1. Étape 1
-2. Étape 2
+- Item 1
+- Item 2
+  - Sub-item
+\`\`\`
+
+### Numbered lists
+
+\`\`\`markdown
+1. Step 1
+2. Step 2
 \`\`\`
 
 ---
 
-## 📦 Blocs de code
+## 📦 Code blocks
 
-Utilisez des accents graves (\`\`\`) pour insérer du code :
+Use backticks (\`\`\`) to insert code:
 
 \`\`\`js
 console.log('Hello FlowUp')
 \`\`\`
 
-\`\`\`js
-console.log('Hello FlowUp')
-\`\`\`
-
 ---
 
-## 🔗 Liens
+## 🔗 Links
 
 \`\`\`markdown
-[Nom du lien](https://www.exemple.com)
+[Link name](https://www.example.com)
 \`\`\`
 
-Exemple :
-[Visitez FlowUp](https://example.com)
+Example:
+[Visit FlowUp](https://example.com)
 
 ---
 
 ## 🖼️ Images
 
 \`\`\`markdown
-![Texte alternatif](https://placehold.co/400x200.png)
+![Alt text](https://placehold.co/400x200.png)
 \`\`\`
 
-Exemple :
+Example:
 
-![Image de démonstration](https://placehold.co/400x200.png)
+![Demo Image](https://placehold.co/400x200.png)
 
 ---
 
-## 🧾 Citations
+## 🧾 Quotes
 
 \`\`\`markdown
-> Ceci est une citation.
+> This is a quote.
 \`\`\`
 
-> Ceci est une citation.
+> This is a quote.
 
 ---
 
-## ☑️ Listes de tâches
+## ☑️ Task lists
 
 \`\`\`markdown
-- [x] Étape terminée
-- [ ] Étape à faire
+- [x] Completed task
+- [ ] To-do task
 \`\`\`
 
-- [x] Étape terminée
-- [ ] Étape à faire
+- [x] Completed task
+- [ ] To-do task
 
 ---
 
-## 🧮 Tableaux
+## 🧮 Tables
 
 \`\`\`markdown
-| Titre 1 | Titre 2 |
-|---------|---------|
-| Valeur 1 | Valeur 2 |
+| Header 1 | Header 2 |
+|----------|----------|
+| Value 1  | Value 2  |
 \`\`\`
 
-Exemple :
+Example:
 
-| Nom     | Rôle       |
-|---------|------------|
-| Alice   | Développeuse |
-| Bob     | Designer    |
-
----
-
-## ⚠️ Limitations sur FlowUp
-
-Certains éléments Markdown **ne sont pas toujours pris en charge**, comme :
-
-- Le **soulignement** (\`<u>texte</u>\`)
-- Le **HTML brut**
-- Les **équations LaTeX** (\`$E = mc^2$\`)
+| Name  | Role      |
+|-------|-----------|
+| Alice | Developer |
+| Bob   | Designer  |
 
 ---
 
-## ✅ Bonnes pratiques
+## ⚠️ Limitations on FlowUp
 
-- Utilisez des titres pour structurer votre document
-- Favorisez les listes pour les instructions
-- Ajoutez des liens ou images pour enrichir la lecture
-- Utilisez les blocs de code pour montrer du code ou des commandes
+Some Markdown elements **are not always supported**, such as:
 
----
-
-## 📚 Ressources
-
-- [Cheat Sheet Markdown (en anglais)](https://www.markdownguide.org/cheat-sheet/)
-- [MarkText – éditeur Markdown](https://marktext.app/)
-- [Markdown sur GitHub](https://guides.github.com/features/mastering-markdown/)
+- **Underline** (\`<u>text</u>\`)
+- **Raw HTML**
+- **LaTeX equations** (\`$E = mc^2$\`)
 
 ---
 
-💡 **Astuce FlowUp** : Utilisez les Markdown pour créer des wikis de projet, des spécifications techniques, ou des notes de sprint !
+## ✅ Best practices
+
+- Use titles to structure your document
+- Prefer lists for instructions
+- Add links or images to enrich the content
+- Use code blocks to show code or commands
+
+---
+
+## 📚 Resources
+
+- [Markdown Cheat Sheet](https://www.markdownguide.org/cheat-sheet/)
+- [MarkText – Markdown editor](https://marktext.app/)
+- [Markdown on GitHub](https://guides.github.com/features/mastering-markdown/)
+
+---
+
+💡 **FlowUp Tip**: Use Markdown to create project wikis, technical specifications, or sprint notes!
 `;
 
 

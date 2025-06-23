@@ -42,7 +42,7 @@ export interface UserDiscordOAuthToken {
   scopes: string;
   discordUserId: string;
   discordUsername: string;
-  discordAvatar?: string;
+  discordAvatar?: string | null;
 }
 
 

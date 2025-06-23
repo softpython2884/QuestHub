@@ -1,3 +1,4 @@
+
 import * as React from 'react';
 
 export const DiscordIcon = (props: React.SVGProps<SVGSVGElement>) => (
