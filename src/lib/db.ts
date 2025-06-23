@@ -259,6 +259,21 @@ export async function getDbConnection() {
       showGithubOnProfile BOOLEAN DEFAULT FALSE
     );
 
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_invitations (
+      token TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      expiresAt TEXT NOT NULL,
+      usedAt TEXT,
+      createdByUuid TEXT NOT NULL,
+      FOREIGN KEY (createdByUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS user_github_installations (
       user_uuid TEXT PRIMARY KEY,
       github_installation_id INTEGER NOT NULL,
@@ -524,6 +539,11 @@ export async function getDbConnection() {
       'admin'
     );
   }
+  
+  const regMode = await db.get("SELECT * FROM app_settings WHERE key = 'registration_mode'");
+  if (!regMode) {
+    await db.run("INSERT INTO app_settings (key, value) VALUES ('registration_mode', 'public')");
+  }
 
   const memberUser = await db.get('SELECT * FROM users WHERE email = ?', 'member@flowup.com');
   if (!memberUser) {
@@ -536,6 +556,41 @@ export async function getDbConnection() {
   }
   return db;
 }
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  const connection = await getDbConnection();
+  const setting = await connection.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', key);
+  return setting?.value || null;
+}
+
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  const connection = await getDbConnection();
+  await connection.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', key, value);
+}
+
+export async function createInvitation(email: string, role: UserRole, createdByUuid: string): Promise<{ token: string; link: string }> {
+  const connection = await getDbConnection();
+  const token = uuidv4();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000 * 7).toISOString(); // 7 days expiration
+  await connection.run(
+    'INSERT INTO user_invitations (token, email, role, expiresAt, createdByUuid) VALUES (?, ?, ?, ?, ?)',
+    token, email, role, expiresAt, createdByUuid
+  );
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+  const link = `${appUrl}/signup?token=${token}`;
+  return { token, link };
+}
+
+export async function getInvitationByToken(token: string): Promise<{ token: string; email: string; role: UserRole; expiresAt: string; usedAt: string | null } | null> {
+  const connection = await getDbConnection();
+  return connection.get('SELECT * FROM user_invitations WHERE token = ?', token);
+}
+
+export async function markInvitationAsUsed(token: string): Promise<void> {
+  const connection = await getDbConnection();
+  await connection.run('UPDATE user_invitations SET usedAt = ? WHERE token = ?', new Date().toISOString(), token);
+}
+
 
 export async function createUser(name: string, email: string, password?: string, role: UserRole = 'member'): Promise<Omit<User, 'hashedPassword'>> {
   const connection = await getDbConnection();

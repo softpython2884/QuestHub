@@ -12,7 +12,7 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password?: string) => Promise<void>;
-  signup: (name: string, email: string, password?: string, role?: UserRole) => Promise<void>;
+  signup: (name: string, email: string, password?: string, role?: UserRole, invitationToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   refreshUser: () => Promise<void>; 
@@ -73,12 +73,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signup = async (name: string, email: string, password?: string, role: UserRole = 'member') => {
+  const signup = async (name: string, email: string, password?: string, role: UserRole = 'member', invitationToken?: string) => {
     setIsLoading(true);
     setError(null);
     console.log('[AuthContext] signup called for email:', email);
     try {
-      const newUser = await authService.signup(name, email, password, role); 
+      const newUser = await authService.signup(name, email, password, role, invitationToken); 
       if (newUser) {
         setUser(newUser);
         console.log('[AuthContext] Signup successful. User set in context. Cookie should be set by server action.');
@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
     console.log('[AuthContext] logout called.');

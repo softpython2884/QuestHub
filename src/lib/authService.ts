@@ -3,7 +3,7 @@
 
 import type { User, UserRole } from '@/types';
 import * as bcrypt from 'bcryptjs';
-import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid } from './db';
+import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid, getAppSetting, getInvitationByToken, markInvitationAsUsed } from './db';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import { auth } from '@/lib/authEdge';
@@ -67,12 +67,36 @@ export const login = async (email: string, password?: string): Promise<User | nu
   throw new Error('Invalid email or password.');
 };
 
-export const signup = async (name: string, email: string, password?: string, role: UserRole = 'member'): Promise<User | null> => {
+export const signup = async (
+  name: string,
+  email: string,
+  password?: string,
+  role: UserRole = 'member',
+  invitationToken?: string
+): Promise<User | null> => {
   console.log('[authService.signup] Attempting signup for email:', email);
   if (!password) {
-     console.error('[authService.signup] Password is required.');
+    console.error('[authService.signup] Password is required.');
     throw new Error('Password is required for signup.');
   }
+  
+  const registrationMode = await getAppSetting('registration_mode');
+
+  if (registrationMode === 'private') {
+    if (!invitationToken) {
+      throw new Error('Registration is by invitation only.');
+    }
+    const invitation = await getInvitationByToken(invitationToken);
+    if (!invitation || invitation.usedAt || new Date(invitation.expiresAt) < new Date()) {
+      throw new Error('This invitation is invalid or has expired.');
+    }
+    if (invitation.email.toLowerCase() !== email.toLowerCase()) {
+      throw new Error('This invitation is for a different email address.');
+    }
+    // If invitation is valid, the role from the invite should be used.
+    role = invitation.role;
+  }
+  
   await new Promise(resolve => setTimeout(resolve, 500));
 
   try {
@@ -84,6 +108,9 @@ export const signup = async (name: string, email: string, password?: string, rol
 
     const newUser = await dbCreateUser(name, email, password, role);
     if (newUser) {
+        if (registrationMode === 'private' && invitationToken) {
+          await markInvitationAsUsed(invitationToken);
+        }
         const { hashedPassword, ...userToReturn } = newUser;
         await createSessionForUser(userToReturn);
         console.log('[authService.signup] Signup SUCCESSFUL for email:', email, 'UUID:', userToReturn.uuid);

@@ -18,7 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Mail, User as UserIcon, KeyRound, Github, MessageSquare } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -26,7 +27,12 @@ const formSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
 });
 
-export function SignupForm() {
+interface SignupFormProps {
+  prefilledEmail?: string;
+  invitationToken?: string;
+}
+
+export function SignupForm({ prefilledEmail, invitationToken }: SignupFormProps) {
   const { signup, isLoading, error: authError, clearError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -39,9 +45,15 @@ export function SignupForm() {
     },
   });
 
+  useEffect(() => {
+    if (prefilledEmail) {
+      form.setValue('email', prefilledEmail);
+    }
+  }, [prefilledEmail, form]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     clearError();
-    await signup(values.name, values.email, values.password);
+    await signup(values.name, values.email, values.password, undefined, invitationToken);
   }
 
   return (
@@ -91,7 +103,8 @@ export function SignupForm() {
                     {...field}
                     name="email"
                     autoComplete="email"
-                    className="pl-10"
+                    className={cn("pl-10", !!prefilledEmail && "bg-muted/50 cursor-not-allowed")}
+                    readOnly={!!prefilledEmail}
                   />
                 </FormControl>
               </div>

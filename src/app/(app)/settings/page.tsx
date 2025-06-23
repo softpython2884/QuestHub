@@ -4,21 +4,41 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send } from "lucide-react";
 import Link from 'next/link';
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
+import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction } from "./actions";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { UserRole } from "@/types";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
 
 export default function SettingsPage() {
   const { setTheme } = useTheme();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+
   const [discordConnected, setDiscordConnected] = useState(false);
   const [isLoadingDiscord, setIsLoadingDiscord] = useState(true);
+  
+  const [registrationMode, setRegistrationMode] = useState<'public' | 'private'>('public');
+  const [isLoadingRegMode, setIsLoadingRegMode] = useState(true);
+  
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('member');
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [copied, setCopied] = useState(false);
+
 
   useEffect(() => {
     if (user) {
@@ -27,8 +47,48 @@ export default function SettingsPage() {
             setDiscordConnected(!!details);
             setIsLoadingDiscord(false);
         });
+
+        if (user.role === 'admin') {
+            setIsLoadingRegMode(true);
+            getRegistrationModeAction().then(mode => {
+                setRegistrationMode(mode);
+                setIsLoadingRegMode(false);
+            });
+        } else {
+            setIsLoadingRegMode(false);
+        }
     }
   }, [user]);
+
+  const handleRegModeChange = (newMode: 'public' | 'private') => {
+      startTransition(async () => {
+          const result = await updateRegistrationModeAction(newMode);
+          if (result.success) {
+              setRegistrationMode(newMode);
+              toast({ title: 'Success', description: `Registration mode set to ${newMode}.` });
+          } else {
+              toast({ variant: 'destructive', title: 'Error', description: result.error });
+          }
+      });
+  };
+  
+  const handleGenerateInvite = async () => {
+      setIsGeneratingLink(true);
+      const result = await generateInviteLinkAction(inviteEmail, inviteRole);
+      if (result.link) {
+          setGeneratedLink(result.link);
+      } else {
+          toast({ variant: 'destructive', title: 'Error', description: result.error });
+      }
+      setIsGeneratingLink(false);
+  };
+  
+  const copyInviteLink = () => {
+      if (!generatedLink) return;
+      navigator.clipboard.writeText(generatedLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="space-y-8">
@@ -155,17 +215,42 @@ export default function SettingsPage() {
                   <span>Registration Mode</span>
                   <span className="text-xs font-normal text-muted-foreground">Control how new users can sign up.</span>
                 </Label>
-                <RadioGroup defaultValue="public" className="flex items-center gap-4" disabled>
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="public" id="reg-public" />
-                        <Label htmlFor="reg-public">Public</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="invite" id="reg-invite" />
-                        <Label htmlFor="reg-invite">Invite-Only</Label>
-                    </div>
-                </RadioGroup>
+                 {isLoadingRegMode ? <Loader2 className="h-5 w-5 animate-spin" /> :
+                    <RadioGroup value={registrationMode} onValueChange={(v) => handleRegModeChange(v as 'public' | 'private')} className="flex items-center gap-4" disabled={isPending}>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="public" id="reg-public" />
+                            <Label htmlFor="reg-public">Public</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="private" id="reg-invite" />
+                            <Label htmlFor="reg-invite">Invite-Only</Label>
+                        </div>
+                    </RadioGroup>
+                 }
               </div>
+              {registrationMode === 'private' && (
+                  <Card className="bg-muted/50 p-4">
+                      <CardTitle className="text-base mb-2">Invite New User</CardTitle>
+                      <CardDescription className="text-xs mb-3">Generate a single-use registration link for a new user. The link will expire in 7 days.</CardDescription>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                          <Input placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} disabled={isGeneratingLink} />
+                          <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as UserRole)} disabled={isGeneratingLink}>
+                              <SelectTrigger className="w-full sm:w-[180px]">
+                                  <SelectValue placeholder="Select a role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="member">Member</SelectItem>
+                                  <SelectItem value="manager">Manager</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <Button onClick={handleGenerateInvite} disabled={isGeneratingLink || !inviteEmail}>
+                              {isGeneratingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4"/>}
+                              Generate Link
+                          </Button>
+                      </div>
+                  </Card>
+              )}
               <div className="flex items-center justify-between">
                 <Label htmlFor="allow-public-github" className="flex flex-col">
                   <span>Allow Public GitHub Repos</span>
@@ -208,6 +293,26 @@ export default function SettingsPage() {
           </CardFooter>
         </Card>
       )}
+
+      <Dialog open={!!generatedLink} onOpenChange={() => setGeneratedLink(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Invite Link Generated</DialogTitle>
+                <DialogDescription>
+                    Share this link with {inviteEmail}. It can only be used once and will expire in 7 days.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center space-x-2">
+                <Input value={generatedLink || ''} readOnly />
+                <Button variant="outline" size="icon" onClick={copyInviteLink}>
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+            </div>
+            <DialogFooter>
+                <Button onClick={() => setGeneratedLink(null)}>Close</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
