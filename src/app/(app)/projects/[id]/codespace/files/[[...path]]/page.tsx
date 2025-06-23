@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import { useEffect, useState, Suspense, useCallback, useMemo } from 'react';
+import { useEffect, useState, Suspense, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles, ShieldAlert, Github } from 'lucide-react';
+import { ArrowLeft, Folder, FileText, FileCode, Loader2, AlertTriangle, Home, ChevronRight, ExternalLink, Image as ImageIcon, Download, Edit, Save, UploadCloud, FolderPlus, FilePlus, Trash2, RefreshCw, FileEdit, Sparkles, ShieldAlert, Github, X, Check } from 'lucide-react';
 import {
   getRepoContentsAction,
   getFileContentAction,
@@ -30,6 +31,7 @@ import {
   editFileWithAIAction,
   type EditFileContentAIOutput,
   fetchProjectMemberRoleAction,
+  uploadGithubFileAction,
 } from '@/app/(app)/projects/[id]/actions';
 import type { GithubRepoContentItem, Project, ProjectMemberRole } from '@/types';
 import ReactMarkdown from 'react-markdown';
@@ -40,6 +42,7 @@ import { useForm } from 'react-hook-form';
 import { useActionState, startTransition } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { cn } from '@/lib/utils';
 
 
 const TEXT_EXTENSIONS = ['.txt', '.log', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.go', '.sh', '.gitignore', '.env', '.config', '.cfg', '.ini', '.sql', '.r', '.swift', '.kt', '.kts', '.rs', '.toml', '.lua', '.pl', '.dart', '.ex', '.exs', '.erl', '.hrl', '.vue', '.svelte', '.tf', '.tfvars', '.hcl', '.gradle', '.diff', '.patch', '.csv', '.tsv', '.ps1', '.psm1', '.fish', '.zsh', '.bash'];
@@ -104,6 +107,10 @@ function FileExplorerContent() {
   const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isProcessingCreate, setIsProcessingCreate] = useState(false);
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [contentToDelete, setContentToDelete] = useState<GithubRepoContentItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -346,6 +353,56 @@ function FileExplorerContent() {
     }
   };
 
+  const handleFilesSelected = (files: FileList | null) => {
+    if (files) {
+        setFilesToUpload(prev => [...prev, ...Array.from(files)]);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (filesToUpload.length === 0 || !project || !canEditCode) return;
+    setIsUploading(true);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for(const file of filesToUpload) {
+        try {
+            const base64Content = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                reader.onerror = error => reject(error);
+            });
+            
+            const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+            const result = await uploadGithubFileAction(project.uuid, fullPath, base64Content, `Upload ${file.name}`);
+            
+            if (result.success) {
+                successCount++;
+            } else {
+                errorCount++;
+                toast({ variant: "destructive", title: `Upload Error: ${file.name}`, description: result.error, duration: 5000 });
+            }
+        } catch(e: any) {
+            errorCount++;
+            toast({ variant: "destructive", title: `Upload Error: ${file.name}`, description: e.message, duration: 5000 });
+        }
+    }
+
+    setIsUploading(false);
+    setFilesToUpload([]);
+    setIsUploadModalOpen(false);
+
+    if (successCount > 0) {
+        toast({ title: "Upload Complete", description: `${successCount} out of ${successCount + errorCount} file(s) uploaded successfully.` });
+        loadContent(currentPath);
+    } else if (errorCount > 0) {
+        toast({ variant: "destructive", title: "Upload Failed", description: `All ${errorCount} files failed to upload.` });
+    }
+  };
+
+
   const getBreadcrumbs = () => {
     const crumbs = [{ name: project?.githubRepoName || 'Repository Root', path: '', isRoot: true }];
     let currentCrumbPath = '';
@@ -467,15 +524,39 @@ function FileExplorerContent() {
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Upload Files to /{currentPath}</DialogTitle></DialogHeader>
-                    <div className="py-4">
-                        <p className="text-sm text-muted-foreground">File upload functionality is not yet implemented in this prototype.</p>
-                        <div className="mt-4 flex h-32 w-full items-center justify-center rounded-md border-2 border-dashed">
-                            <p className="text-muted-foreground">Drag & drop or click to select files</p>
-                        </div>
+                    <div
+                        className={cn("mt-4 flex h-48 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed transition-colors", isDragging ? "border-primary bg-primary/10" : "border-border hover:border-primary/50")}
+                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFilesSelected(e.dataTransfer.files); }}
+                        onClick={() => fileInputRef.current?.click()}
+                        >
+                        <UploadCloud className="h-10 w-10 text-muted-foreground" />
+                        <p className="mt-2 text-sm text-muted-foreground">Drag & drop files here, or click to select</p>
+                        <Input type="file" ref={fileInputRef} multiple className="hidden" onChange={(e) => handleFilesSelected(e.target.files)} />
                     </div>
+                    {filesToUpload.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                        <h4 className="font-medium">Selected files: ({filesToUpload.length})</h4>
+                        <ScrollArea className="h-32">
+                            <div className="space-y-1 pr-4">
+                            {filesToUpload.map((file, i) => (
+                                <div key={i} className="flex items-center justify-between rounded-md bg-muted/50 p-2 text-sm">
+                                <span className="truncate">{file.name}</span>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setFilesToUpload(files => files.filter((_, idx) => idx !== i))}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                                </div>
+                            ))}
+                            </div>
+                        </ScrollArea>
+                        </div>
+                    )}
                     <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                        <Button type="button" disabled>Upload</Button>
+                        <DialogClose asChild><Button type="button" variant="ghost" disabled={isUploading}>Cancel</Button></DialogClose>
+                        <Button type="button" disabled={isUploading || filesToUpload.length === 0} onClick={handleUpload}>
+                            {isUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</> : `Upload ${filesToUpload.length} File(s)`}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -1878,6 +1879,67 @@ export async function createGithubFileAction(
   }
 }
 
+export async function uploadGithubFileAction(
+  projectUuid: string,
+  filePath: string,
+  base64Content: string,
+  commitMessage?: string
+): Promise<{ success: boolean; error?: string; file?: GithubRepoContentItem }> {
+  const session = await auth();
+  if (!session?.user?.uuid || !session.user.name || !session.user.email) {
+    return { success: false, error: "Authentication required." };
+  }
+
+  const project = await dbGetProjectByUuid(projectUuid);
+  if (!project || !project.githubRepoName) {
+    return { success: false, error: "Project not found or not linked to GitHub." };
+  }
+
+  const userRole = await dbGetProjectMemberRole(projectUuid, session.user.uuid);
+  if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+    return { success: false, error: "You do not have permission to upload files." };
+  }
+
+  const oauthToken = await dbGetUserGithubOAuthToken(session.user.uuid);
+  if (!oauthToken || !oauthToken.accessToken) {
+    return { success: false, error: "GitHub account not linked or token missing." };
+  }
+
+  const [owner, repo] = project.githubRepoName.split('/');
+  if (!owner || !repo) return { success: false, error: "Invalid GitHub repository name." };
+
+  const octokit = new Octokit({ auth: oauthToken.accessToken });
+
+  try {
+    try {
+      await octokit.rest.repos.getContent({ owner, repo, path: filePath });
+      return { success: false, error: `File already exists at path: ${filePath}.` };
+    } catch (error: any) {
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
+
+    const response = await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: filePath,
+      message: commitMessage || `Upload ${filePath.split('/').pop()}`,
+      content: base64Content,
+      committer: { name: session.user.name, email: session.user.email },
+      author: { name: session.user.name, email: session.user.email },
+    });
+
+    if (response.status === 201) {
+      return { success: true, file: response.data.content as GithubRepoContentItem };
+    }
+    return { success: false, error: `GitHub API returned status ${response.status} for file upload.` };
+  } catch (error: any) {
+    console.error(`[uploadGithubFileAction] Error uploading file ${filePath}:`, error);
+    return { success: false, error: `Failed to upload file: ${error.message || 'Unknown error'}` };
+  }
+}
+
 
 export async function createGithubFolderAction(
   projectUuid: string,
@@ -2118,7 +2180,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
