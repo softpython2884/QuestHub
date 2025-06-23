@@ -14,7 +14,7 @@ import {
   SidebarMenuSkeleton,
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/Logo';
-import { LayoutDashboard, FolderKanban, Megaphone, Settings, Users, ShieldCheck, BookText, Compass } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Megaphone, Settings, Users, ShieldCheck, BookText, Compass, Lightbulb } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/button';
 
@@ -24,6 +24,7 @@ const navItems = [
   { href: '/discover', label: 'Discover', icon: Compass },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
+  { href: '/suggestions', label: 'Suggestions', icon: Lightbulb, adminOnly: false },
   { href: '/secure-vault', label: 'Secure Vault', icon: ShieldCheck, adminOnly: false },
 ];
 

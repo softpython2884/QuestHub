@@ -276,3 +276,23 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
 }
+
+export type SuggestionStatus = 'open' | 'under_review' | 'planned' | 'done';
+
+export interface Suggestion {
+    uuid: string;
+    title: string;
+    description: string;
+    authorUuid: string;
+    authorName?: string;
+    authorAvatar?: string;
+    status: SuggestionStatus;
+    createdAt: string;
+    voteCount: number;
+}
+
+export interface SuggestionVote {
+    suggestionUuid: string;
+    userUuid: string;
+    voteType: 'up' | 'down';
+}

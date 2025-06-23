@@ -1,10 +1,9 @@
 
-
 'use server';
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -493,6 +492,26 @@ export async function getDbConnection() {
         FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE,
         FOREIGN KEY (projectUuid) REFERENCES projects(uuid) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS suggestions (
+        uuid TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        authorUuid TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (authorUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS suggestion_votes (
+        suggestionUuid TEXT NOT NULL,
+        userUuid TEXT NOT NULL,
+        voteType TEXT NOT NULL, -- 'up' or 'down'
+        PRIMARY KEY (suggestionUuid, userUuid),
+        FOREIGN KEY (suggestionUuid) REFERENCES suggestions(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
   `);
 
   const adminUser = await db.get('SELECT * FROM users WHERE email = ?', 'admin@flowup.com');
@@ -1968,4 +1987,79 @@ export async function getTaskActivityForUserProjects(userUuid: string, days: num
   }));
 
   return result;
+}
+
+// Suggestions Functions
+export async function createSuggestion(data: {
+    authorUuid: string;
+    title: string;
+    description: string;
+}): Promise<Suggestion> {
+    const connection = await getDbConnection();
+    const suggestionUuid = uuidv4();
+    const now = new Date().toISOString();
+
+    await connection.run(
+        'INSERT INTO suggestions (uuid, title, description, authorUuid, createdAt, status) VALUES (?, ?, ?, ?, ?, ?)',
+        suggestionUuid, data.title, data.description, data.authorUuid, now, 'open'
+    );
+    // Automatically upvote by the creator
+    await voteOnSuggestion(suggestionUuid, data.authorUuid, 'up');
+    
+    const newSuggestion = await getSuggestions(data.authorUuid).then(suggestions => suggestions.find(s => s.uuid === suggestionUuid));
+    if (!newSuggestion) throw new Error("Failed to retrieve new suggestion");
+    return newSuggestion;
+}
+
+export async function getSuggestions(currentUserUuid: string): Promise<Array<Suggestion & { userVote: SuggestionVote['voteType'] | null }>> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<Array<Omit<Suggestion, 'authorName' | 'authorAvatar' | 'voteCount'> & { authorName: string, authorAvatar: string, voteCount: number }>>(
+        `SELECT 
+            s.uuid, s.title, s.description, s.status, s.createdAt, s.authorUuid,
+            u.name as authorName, u.avatar as authorAvatar,
+            (SELECT COUNT(*) FROM suggestion_votes WHERE suggestionUuid = s.uuid AND voteType = 'up') -
+            (SELECT COUNT(*) FROM suggestion_votes WHERE suggestionUuid = s.uuid AND voteType = 'down') as voteCount
+         FROM suggestions s
+         JOIN users u ON s.authorUuid = u.uuid
+         ORDER BY voteCount DESC, s.createdAt DESC`
+    );
+
+    const userVotes = await connection.all<{ suggestionUuid: string, voteType: SuggestionVote['voteType'] }>(
+        'SELECT suggestionUuid, voteType FROM suggestion_votes WHERE userUuid = ?', currentUserUuid
+    );
+    const userVoteMap = new Map(userVotes.map(v => [v.suggestionUuid, v.voteType]));
+
+    return rows.map(row => ({
+        ...row,
+        userVote: userVoteMap.get(row.uuid) || null
+    }));
+}
+
+export async function voteOnSuggestion(suggestionUuid: string, userUuid: string, voteType: SuggestionVote['voteType']): Promise<void> {
+    const connection = await getDbConnection();
+    await connection.run('BEGIN TRANSACTION');
+    try {
+        const existingVote = await connection.get<{ voteType: SuggestionVote['voteType'] }>(
+            'SELECT voteType FROM suggestion_votes WHERE suggestionUuid = ? AND userUuid = ?',
+            suggestionUuid, userUuid
+        );
+
+        if (existingVote) {
+            if (existingVote.voteType === voteType) {
+                // User is clicking the same button again, so remove the vote
+                await connection.run('DELETE FROM suggestion_votes WHERE suggestionUuid = ? AND userUuid = ?', suggestionUuid, userUuid);
+            } else {
+                // User is changing their vote
+                await connection.run('UPDATE suggestion_votes SET voteType = ? WHERE suggestionUuid = ? AND userUuid = ?', voteType, suggestionUuid, userUuid);
+            }
+        } else {
+            // New vote
+            await connection.run('INSERT INTO suggestion_votes (suggestionUuid, userUuid, voteType) VALUES (?, ?, ?)', suggestionUuid, userUuid, voteType);
+        }
+        await connection.run('COMMIT');
+    } catch (error) {
+        await connection.run('ROLLBACK');
+        console.error("Error voting on suggestion:", error);
+        throw error;
+    }
 }

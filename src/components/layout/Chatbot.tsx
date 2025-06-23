@@ -87,7 +87,7 @@ export function Chatbot() {
                 <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                    {message.role === 'model' && (
                      <Avatar className="h-8 w-8">
-                        <AvatarImage src="https://placehold.co/40x40.png" alt="Flowy" data-ai-hint="bot mascot" />
+                        <AvatarImage src="/favicon.png" alt="Flowy Avatar" />
                         <AvatarFallback>AI</AvatarFallback>
                     </Avatar>
                    )}
@@ -107,7 +107,7 @@ export function Chatbot() {
               {isLoading && (
                   <div className="flex items-start gap-3 justify-start">
                       <Avatar className="h-8 w-8">
-                          <AvatarImage src="https://placehold.co/40x40.png" alt="Flowy" data-ai-hint="bot mascot" />
+                          <AvatarImage src="/favicon.png" alt="Flowy Avatar" />
                           <AvatarFallback>AI</AvatarFallback>
                       </Avatar>
                       <div className="bg-muted rounded-lg px-3 py-2 text-sm flex items-center">
