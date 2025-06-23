@@ -28,7 +28,7 @@ const navItems = [
 ];
 
 const adminNavItems = [
-    { href: '/team', label: 'Team', icon: Users, adminOnly: true },
+    // The "Team" link was here and has been removed as it's replaced by "Discover".
 ];
 
 const bottomNavItems = [
@@ -87,7 +87,7 @@ export function AppSidebar() {
       <SidebarContent className="p-2 flex flex-col justify-between">
         <SidebarMenu>
           {renderNavItems(navItems)}
-          {user?.role === 'admin' && <hr className="my-2 border-sidebar-border" />}
+          {user?.role === 'admin' && adminNavItems.length > 0 && <hr className="my-2 border-sidebar-border" />}
           {renderNavItems(adminNavItems.filter(item => item.adminOnly))}
         </SidebarMenu>
       </SidebarContent>
