@@ -12,7 +12,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { ChatMessage } from '@/types';
 
-export const WorkspaceAssistantInputSchema = z.object({
+const WorkspaceAssistantInputSchema = z.object({
   history: z.array(
     z.object({
       role: z.enum(['user', 'model']),
@@ -22,7 +22,7 @@ export const WorkspaceAssistantInputSchema = z.object({
 });
 export type WorkspaceAssistantInput = z.infer<typeof WorkspaceAssistantInputSchema>;
 
-export const WorkspaceAssistantOutputSchema = z.object({
+const WorkspaceAssistantOutputSchema = z.object({
   response: z.string().describe("The AI's response to the user's latest message."),
 });
 export type WorkspaceAssistantOutput = z.infer<typeof WorkspaceAssistantOutputSchema>;
