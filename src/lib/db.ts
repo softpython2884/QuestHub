@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import sqlite3 from 'sqlite3';
@@ -318,6 +319,7 @@ export async function getDbConnection() {
       isPrivate BOOLEAN DEFAULT TRUE,
       readmeContent TEXT,
       isUrgent BOOLEAN DEFAULT FALSE,
+      vanityId TEXT UNIQUE,
       githubRepoUrl TEXT,
       githubRepoName TEXT,
       githubInstallationId INTEGER,
@@ -806,6 +808,21 @@ export async function getProjectByUuid(uuid: string): Promise<Project | null> {
   };
 }
 
+export async function getProjectByVanityId(vanityId: string): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
+    'SELECT * FROM projects WHERE vanityId = ?',
+    vanityId
+  );
+  if (!projectRow) return null;
+  return {
+    ...projectRow,
+    isUrgent: !!projectRow.isUrgent,
+    isPrivate: !!projectRow.isPrivate,
+  };
+}
+
+
 export async function getProjectByNameForUser(name: string, userUuid: string): Promise<Project | null> {
   const connection = await getDbConnection();
   const projectRow = await connection.get<Project & { isUrgent: 0 | 1, isPrivate: 0 | 1 }>(
@@ -871,6 +888,27 @@ export async function updateProjectVisibility(projectUuid: string, isPrivate: bo
   if (result.changes === 0) return null;
   return getProjectByUuid(projectUuid);
 }
+
+export async function setProjectVanityId(projectUuid: string, vanityId: string | null): Promise<Project | null> {
+  const connection = await getDbConnection();
+  const now = new Date().toISOString();
+  
+  if (vanityId !== null) {
+    const existingProject = await connection.get('SELECT uuid FROM projects WHERE vanityId = ? AND uuid != ?', vanityId, projectUuid);
+    if (existingProject) {
+      throw new Error('This vanity ID is already in use.');
+    }
+  }
+
+  const result = await connection.run(
+    'UPDATE projects SET vanityId = ?, updatedAt = ? WHERE uuid = ?',
+    vanityId, now, projectUuid
+  );
+
+  if (result.changes === 0) return null;
+  return getProjectByUuid(projectUuid);
+}
+
 
 export async function updateProjectGithubRepo(projectUuid: string, repoUrl: string | null, repoName: string | null, installationId?: number | null): Promise<Project | null> {
   const connection = await getDbConnection();

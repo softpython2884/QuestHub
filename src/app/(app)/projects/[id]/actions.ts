@@ -1,6 +1,7 @@
 
 
 
+
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -42,7 +43,8 @@ import {
   deleteProject as dbDeleteProject,
   updateProjectWebhookDetails as dbUpdateProjectWebhookDetails,
   createProject as dbCreateProject,
-  setGithubInvitationPendingStatus as dbSetGithubInvitationPendingStatus, // Added
+  setGithubInvitationPendingStatus as dbSetGithubInvitationPendingStatus,
+  setProjectVanityId as dbSetProjectVanityId,
 } from '@/lib/db';
 import { z } from 'zod';
 import { auth } from '@/lib/authEdge';
@@ -2443,4 +2445,56 @@ export async function checkGithubAccessAction(projectUuid: string): Promise<{ su
   await dbSetGithubInvitationPendingStatus(projectUuid, session.user.uuid, false);
   console.log(`[checkGithubAccessAction] User ${session.user.uuid} access to project ${projectUuid} confirmed. Flag updated.`);
   return { success: true };
+}
+
+export interface SetVanityIdFormState {
+  message?: string;
+  error?: string;
+  project?: Project;
+}
+
+const SetVanityIdSchema = z.object({
+    projectUuid: z.string().uuid(),
+    vanityId: z.string().max(30, { message: "Vanity ID cannot exceed 30 characters."}).regex(/^[a-zA-Z0-9_-]+$/, {
+      message: "Vanity ID can only contain letters, numbers, hyphens (-), and underscores (_).",
+    }).optional().or(z.literal('')),
+});
+
+
+export async function setProjectVanityIdAction(
+  prevState: SetVanityIdFormState,
+  formData: FormData
+): Promise<SetVanityIdFormState> {
+  const session = await auth();
+  if (!session?.user?.uuid) return { error: "Authentication required." };
+
+  const validatedFields = SetVanityIdSchema.safeParse({
+    projectUuid: formData.get('projectUuid'),
+    vanityId: formData.get('vanityId'),
+  });
+
+  if (!validatedFields.success) {
+    return { error: `Invalid input: ${validatedFields.error.flatten().fieldErrors.vanityId?.[0] || 'Validation failed.'}` };
+  }
+
+  const { projectUuid, vanityId } = validatedFields.data;
+
+  try {
+    const project = await dbGetProjectByUuid(projectUuid);
+    if (!project || project.ownerUuid !== session.user.uuid) {
+      return { error: "You do not have permission to perform this action." };
+    }
+    if (project.isPrivate) {
+        return { error: "Vanity IDs can only be set for public projects." };
+    }
+
+    const finalVanityId = vanityId && vanityId.trim() !== '' ? vanityId.trim() : null;
+    const updatedProject = await dbSetProjectVanityId(projectUuid, finalVanityId);
+
+    if (!updatedProject) return { error: "Failed to update vanity ID." };
+
+    return { message: "Vanity ID updated successfully!", project: updatedProject };
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred." };
+  }
 }

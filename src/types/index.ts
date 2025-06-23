@@ -161,6 +161,7 @@ export interface Project {
   isPrivate?: boolean;
   readmeContent?: string;
   isUrgent?: boolean;
+  vanityId?: string | null;
   githubRepoUrl?: string | null;
   githubRepoName?: string | null;
   githubInstallationId?: number; // Kept for potential future use with App-specific actions
