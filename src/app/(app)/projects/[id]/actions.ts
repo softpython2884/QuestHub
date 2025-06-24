@@ -2,6 +2,7 @@
 
 
 
+
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -1718,8 +1719,19 @@ export async function getFileContentAction(
         if (data.type !== 'file' || typeof data.content !== 'string' || typeof data.sha !== 'string') {
             return { error: "Path does not point to a valid file or content is missing." };
         }
+        
+        let content: string;
+        // The `content` from GitHub API is always base64 encoded.
+        // We decode it to a UTF-8 string only if the API response indicates the original file was text.
+        // Otherwise, we pass the base64 string through for binary files like images.
         // @ts-ignore
-        const content = Buffer.from(data.content, data.encoding as BufferEncoding || 'base64').toString('utf8');
+        if (data.encoding === 'utf-8') {
+            content = Buffer.from(data.content, 'base64').toString('utf8');
+        } else {
+            // Assumes 'base64' encoding for binary files. Keep the base64 string.
+            content = data.content;
+        }
+        
         // @ts-ignore
         return { content, sha: data.sha, name: data.name, path: data.path, html_url: data.html_url, download_url: data.download_url, encoding: data.encoding, size: data.size };
     } catch (error: any) {
