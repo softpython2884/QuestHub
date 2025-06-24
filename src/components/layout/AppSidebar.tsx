@@ -14,13 +14,14 @@ import {
   SidebarMenuSkeleton,
 } from '@/components/ui/sidebar';
 import { Logo } from '@/components/Logo';
-import { LayoutDashboard, FolderKanban, Megaphone, Settings, Users, ShieldCheck, BookText, Compass, Lightbulb, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Megaphone, Settings, Users, ShieldCheck, BookText, Compass, Lightbulb, MessageSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/button';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
+  { href: '/studio', label: 'AI Studio', icon: Sparkles },
   { href: '/discover', label: 'Discover', icon: Compass },
   { href: '/team', label: 'Team', icon: Users },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
