@@ -115,13 +115,12 @@ export default function ConversationPage() {
             });
             setInput(currentInput);
         } else {
-            setMessages(prev => {
-                // If the message from the server is already in our list (e.g. from polling), do nothing.
-                if (prev.some(m => m.uuid === result.uuid)) {
-                    return prev;
+            // The polling mechanism will take care of updating the final message state,
+            // which replaces the optimistic one. We can force a refresh if we want it to be faster.
+            getMessagesAction(conversationId).then(freshMessages => {
+                if (!('error' in freshMessages)) {
+                    setMessages(freshMessages);
                 }
-                // Otherwise, add the confirmed message. This will also discard the optimistic one.
-                return [...prev, result];
             });
         }
         setTimeout(() => setIsSending(false), 1000); // 1s cooldown
