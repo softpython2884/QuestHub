@@ -4,9 +4,12 @@
 import {
     getProjectsForUserWithMemberCount,
     getUsersFromUserProjects,
+    getOrCreateDmConversation,
+    getOrCreateProjectConversation,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import type { Project, User } from '@/types';
+import { redirect } from 'next/navigation';
 
 
 interface TeamData {
@@ -47,4 +50,28 @@ export async function searchTeam(query: string): Promise<TeamData> {
         projects: filteredProjects,
         users: filteredUsers,
     };
+}
+
+export async function startConversationAction(
+  { projectUuid, otherUserUuid }: { projectUuid?: string, otherUserUuid?: string }
+): Promise<{ error?: string; conversationId?: string }> {
+    const session = await auth();
+    const currentUserUuid = session?.user?.uuid;
+    if (!currentUserUuid) {
+        return { error: 'Authentication required' };
+    }
+
+    try {
+        let conversationId: string;
+        if (projectUuid) {
+            conversationId = await getOrCreateProjectConversation(projectUuid);
+        } else if (otherUserUuid) {
+            conversationId = await getOrCreateDmConversation(currentUserUuid, otherUserUuid);
+        } else {
+            return { error: 'A project or user must be specified.' };
+        }
+        return { conversationId };
+    } catch (e: any) {
+        return { error: e.message || "Failed to start conversation." };
+    }
 }

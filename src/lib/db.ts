@@ -4,7 +4,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -527,6 +527,33 @@ export async function getDbConnection() {
         PRIMARY KEY (suggestionUuid, userUuid),
         FOREIGN KEY (suggestionUuid) REFERENCES suggestions(uuid) ON DELETE CASCADE,
         FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS conversations (
+        uuid TEXT PRIMARY KEY,
+        type TEXT NOT NULL, -- 'dm' or 'project'
+        projectUuid TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (projectUuid) REFERENCES projects (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS conversation_members (
+        conversationUuid TEXT NOT NULL,
+        userUuid TEXT NOT NULL,
+        PRIMARY KEY (conversationUuid, userUuid),
+        FOREIGN KEY (conversationUuid) REFERENCES conversations (uuid) ON DELETE CASCADE,
+        FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+        uuid TEXT PRIMARY KEY,
+        conversationUuid TEXT NOT NULL,
+        authorUuid TEXT NOT NULL,
+        content TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (conversationUuid) REFERENCES conversations (uuid) ON DELETE CASCADE,
+        FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
   `);
@@ -2154,4 +2181,195 @@ export async function voteOnSuggestion(suggestionUuid: string, userUuid: string,
         console.error("Error voting on suggestion:", error);
         throw error;
     }
+}
+
+// Chat functions
+export async function getConversationsForUser(userUuid: string): Promise<Conversation[]> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<any[]>(`
+        SELECT
+            c.uuid,
+            c.type,
+            c.projectUuid,
+            c.updatedAt,
+            (SELECT content FROM messages WHERE conversationUuid = c.uuid ORDER BY createdAt DESC LIMIT 1) as lastMessage,
+            (SELECT u.name FROM users u JOIN messages m ON u.uuid = m.authorUuid WHERE m.conversationUuid = c.uuid ORDER BY m.createdAt DESC LIMIT 1) as lastMessageAuthor
+        FROM conversations c
+        JOIN conversation_members cm ON c.uuid = cm.conversationUuid
+        WHERE cm.userUuid = ?
+        ORDER BY c.updatedAt DESC
+    `, userUuid);
+
+    const conversations: Conversation[] = [];
+    for (const row of rows) {
+        let name = 'Conversation';
+        let avatar = undefined;
+        let otherUserUuid = undefined;
+
+        if (row.type === 'dm') {
+            const otherMember = await connection.get<{ userUuid: string, name: string, avatar?: string }>(`
+                SELECT u.uuid as userUuid, u.name, u.avatar
+                FROM conversation_members cm
+                JOIN users u ON cm.userUuid = u.uuid
+                WHERE cm.conversationUuid = ? AND cm.userUuid != ?
+            `, row.uuid, userUuid);
+            if (otherMember) {
+                name = otherMember.name;
+                avatar = otherMember.avatar;
+                otherUserUuid = otherMember.userUuid;
+            }
+        } else if (row.type === 'project' && row.projectUuid) {
+            const project = await getProjectByUuid(row.projectUuid);
+            if (project) {
+                name = project.name;
+                avatar = '/project-icon.png'; // Placeholder for project avatar
+            }
+        }
+        
+        conversations.push({
+            uuid: row.uuid,
+            type: row.type,
+            name,
+            avatar,
+            lastMessage: row.lastMessage,
+            lastMessageAt: row.updatedAt,
+            lastMessageAuthor: row.lastMessageAuthor,
+            unreadCount: 0, // Placeholder
+            projectUuid: row.projectUuid,
+            otherUserUuid,
+        });
+    }
+
+    return conversations;
+}
+
+export async function getMessagesForConversation(conversationUuid: string): Promise<Message[]> {
+    const connection = await getDbConnection();
+    const messages = await connection.all<any[]>(`
+        SELECT m.*, u.name as authorName, u.avatar as authorAvatar
+        FROM messages m
+        JOIN users u ON m.authorUuid = u.uuid
+        WHERE m.conversationUuid = ?
+        ORDER BY m.createdAt ASC
+    `, conversationUuid);
+    return messages;
+}
+
+export async function createMessage(conversationUuid: string, authorUuid: string, content: string): Promise<Message> {
+    const connection = await getDbConnection();
+    const messageUuid = uuidv4();
+    const now = new Date().toISOString();
+
+    await connection.run('BEGIN TRANSACTION');
+    try {
+        await connection.run(
+            'INSERT INTO messages (uuid, conversationUuid, authorUuid, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+            messageUuid, conversationUuid, authorUuid, content, now
+        );
+        await connection.run(
+            'UPDATE conversations SET updatedAt = ? WHERE uuid = ?',
+            now, conversationUuid
+        );
+        await connection.run('COMMIT');
+    } catch (e) {
+        await connection.run('ROLLBACK');
+        throw e;
+    }
+    
+    const author = await getUserByUuid(authorUuid);
+
+    return {
+        uuid: messageUuid,
+        conversationUuid,
+        authorUuid,
+        authorName: author?.name,
+        authorAvatar: author?.avatar,
+        content,
+        createdAt: now
+    };
+}
+
+export async function getOrCreateDmConversation(user1Uuid: string, user2Uuid: string): Promise<string> {
+    const connection = await getDbConnection();
+    // Sort UUIDs to ensure the conversation ID is consistent regardless of who initiates
+    const sortedUuids = [user1Uuid, user2Uuid].sort();
+    
+    // Find if a DM conversation already exists between these two users
+    const existingConversation = await connection.get<{ conversationUuid: string }>(`
+        SELECT cm1.conversationUuid
+        FROM conversation_members cm1
+        JOIN conversation_members cm2 ON cm1.conversationUuid = cm2.conversationUuid
+        JOIN conversations c ON cm1.conversationUuid = c.uuid
+        WHERE cm1.userUuid = ? AND cm2.userUuid = ? AND c.type = 'dm'
+    `, sortedUuids[0], sortedUuids[1]);
+
+    if (existingConversation) {
+        return existingConversation.conversationUuid;
+    }
+
+    // Create a new conversation
+    const conversationUuid = uuidv4();
+    const now = new Date().toISOString();
+    await connection.run('BEGIN TRANSACTION');
+    try {
+        await connection.run(
+            'INSERT INTO conversations (uuid, type, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
+            conversationUuid, 'dm', now, now
+        );
+        await connection.run(
+            'INSERT INTO conversation_members (conversationUuid, userUuid) VALUES (?, ?), (?, ?)',
+            conversationUuid, user1Uuid,
+            conversationUuid, user2Uuid
+        );
+        await connection.run('COMMIT');
+    } catch (e) {
+        await connection.run('ROLLBACK');
+        throw e;
+    }
+    return conversationUuid;
+}
+
+export async function getOrCreateProjectConversation(projectUuid: string): Promise<string> {
+    const connection = await getDbConnection();
+
+    const existingConversation = await connection.get<{ uuid: string }>(
+        'SELECT uuid FROM conversations WHERE projectUuid = ? AND type = ?',
+        projectUuid, 'project'
+    );
+    if (existingConversation) {
+        return existingConversation.uuid;
+    }
+
+    const project = await getProjectByUuid(projectUuid);
+    if (!project) {
+        throw new Error("Project not found");
+    }
+
+    const members = await getProjectMembers(projectUuid);
+    if (members.length < 2) {
+        throw new Error("Project chats require at least two members.");
+    }
+    
+    const conversationUuid = uuidv4();
+    const now = new Date().toISOString();
+    
+    await connection.run('BEGIN TRANSACTION');
+    try {
+        await connection.run(
+            'INSERT INTO conversations (uuid, type, projectUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+            conversationUuid, 'project', projectUuid, now, now
+        );
+        for (const member of members) {
+            await connection.run(
+                'INSERT INTO conversation_members (conversationUuid, userUuid) VALUES (?, ?)',
+                conversationUuid, member.userUuid
+            );
+        }
+        await connection.run('COMMIT');
+    } catch(e) {
+        await connection.run('ROLLBACK');
+        throw e;
+    }
+
+    return conversationUuid;
 }

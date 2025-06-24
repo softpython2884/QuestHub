@@ -298,3 +298,28 @@ export interface SuggestionVote {
     userUuid: string;
     voteType: 'up' | 'down';
 }
+
+export interface Message {
+    uuid: string;
+    conversationUuid: string;
+    authorUuid: string;
+    authorName?: string;
+    authorAvatar?: string;
+    content: string;
+    createdAt: string;
+}
+
+export type ConversationType = 'dm' | 'project';
+
+export interface Conversation {
+    uuid: string;
+    type: ConversationType;
+    name: string; // User name for DM, project name for project chat
+    avatar?: string;
+    lastMessage?: string;
+    lastMessageAt?: string;
+    lastMessageAuthor?: string;
+    unreadCount: number;
+    projectUuid?: string; // Only for project chats
+    otherUserUuid?: string; // Only for DMs
+}

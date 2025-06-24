@@ -7,22 +7,24 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, User } from "@/types";
 import { useEffect, useState, useTransition } from "react";
-import { getTeamData, searchTeam } from "./actions";
+import { getTeamData, searchTeam, startConversationAction } from "./actions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Users, MessageSquare, FolderKanban } from "lucide-react";
+import { Search, Users, MessageSquare, FolderKanban, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 type ProjectWithMemberCount = Project & { memberCount: number };
 
 export default function TeamPage() {
     const { user } = useAuth();
+    const router = useRouter();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isSearching, startSearchTransition] = useTransition();
+    const [isStartingChat, setIsStartingChat] = useState<string | null>(null);
 
     const [projects, setProjects] = useState<ProjectWithMemberCount[]>([]);
     const [teamMembers, setTeamMembers] = useState<User[]>([]);
@@ -76,12 +78,27 @@ export default function TeamPage() {
         return initials;
     };
 
+    const handleStartChat = async (params: { projectUuid?: string, otherUserUuid?: string }) => {
+        const id = params.projectUuid || params.otherUserUuid;
+        if (!id) return;
+        
+        setIsStartingChat(id);
+        const result = await startConversationAction(params);
+        setIsStartingChat(null);
+
+        if (result.error) {
+            toast({ variant: 'destructive', title: 'Error', description: result.error });
+        } else if (result.conversationId) {
+            router.push(`/chat/${result.conversationId}`);
+        }
+    };
+
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-headline font-semibold">Team & Chat</h1>
-                <p className="text-muted-foreground">Connect with your team members and collaborate in project groups.</p>
+                <h1 className="text-3xl font-headline font-semibold">Team</h1>
+                <p className="text-muted-foreground">Find team members and project groups to start a conversation.</p>
             </div>
             
             <div className="relative">
@@ -128,9 +145,9 @@ export default function TeamPage() {
                                         <Users className="h-3 w-3" />
                                         <span>{p.memberCount} members</span>
                                     </div>
-                                    <Button variant="outline" className="w-full" disabled>
-                                        <MessageSquare className="mr-2 h-4 w-4" />
-                                        Open Chat (Soon)
+                                    <Button variant="outline" className="w-full" onClick={() => handleStartChat({ projectUuid: p.uuid })} disabled={isStartingChat === p.uuid}>
+                                        {isStartingChat === p.uuid ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <MessageSquare className="mr-2 h-4 w-4" />}
+                                        Open Chat
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -156,8 +173,8 @@ export default function TeamPage() {
                                             <p className="text-xs text-muted-foreground">@{u.name.toLowerCase().replace(/\s+/g, '')}</p>
                                         </div>
                                     </Link>
-                                    <Button variant="outline" size="icon" disabled title="Direct Message (Coming Soon)">
-                                        <MessageSquare className="h-5 w-5" />
+                                    <Button variant="outline" size="icon" title="Direct Message" onClick={() => handleStartChat({ otherUserUuid: u.uuid })} disabled={isStartingChat === u.uuid}>
+                                        {isStartingChat === u.uuid ? <Loader2 className="h-5 w-5 animate-spin"/> : <MessageSquare className="h-5 w-5" />}
                                     </Button>
                                 </CardContent>
                             </Card>
