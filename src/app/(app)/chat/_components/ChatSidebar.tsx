@@ -37,9 +37,12 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
             toast({ variant: 'destructive', title: 'Chat Error', description: 'Could not refresh conversations.'});
         }
       } else {
-        if (JSON.stringify(result) !== JSON.stringify(conversations)) {
-          setConversations(result);
-        }
+        setConversations(currentConversations => {
+            if (JSON.stringify(result) !== JSON.stringify(currentConversations)) {
+              return result;
+            }
+            return currentConversations;
+        });
         if (error) setError(null);
       }
     };
@@ -47,7 +50,7 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
     const intervalId = setInterval(pollConversations, 5000);
 
     return () => clearInterval(intervalId);
-  }, [conversations, error, toast]);
+  }, [error, toast]);
 
   const getInitials = (name?: string) => {
     if (!name) return '??';
