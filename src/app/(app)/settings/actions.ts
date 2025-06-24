@@ -64,7 +64,7 @@ export async function updateStorageBackendSettingAction(mode: 'github' | 'local'
     }
 }
 
-export async function runDatabaseMigrationsAction(): Promise<{ success: boolean; message: string; error?: string }> {
+export async function runDatabaseMigrationsAction(prevState: any, formData: FormData): Promise<{ success: boolean; message: string; error?: string }> {
     const session = await auth();
     if (session?.user?.role !== 'admin') {
         return { success: false, message: '', error: 'Permission denied.' };

@@ -319,10 +319,12 @@ export default function SettingsPage() {
                   <span>Database Schema</span>
                   <span className="text-xs font-normal text-muted-foreground">Apply new schema updates after a code update.</span>
                 </Label>
-                 <Button variant="outline" onClick={() => runMigrationAction()} disabled={isMigrating}>
-                    {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Database className="mr-2 h-4 w-4"/>}
-                     Update Database Schema
-                 </Button>
+                <form action={runMigrationAction}>
+                  <Button variant="outline" type="submit" disabled={isMigrating}>
+                      {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Database className="mr-2 h-4 w-4"/>}
+                       Update Database Schema
+                  </Button>
+                </form>
               </div>
                <div className="flex items-center justify-between">
                 <Label className="flex flex-col">
