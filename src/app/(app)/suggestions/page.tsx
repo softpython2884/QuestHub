@@ -35,8 +35,9 @@ type SuggestionFormValues = z.infer<typeof suggestionFormSchema>;
 export default function SuggestionsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [suggestions, setSuggestions] = useOptimistic<SuggestionWithVote[], { suggestionUuid: string; voteType: SuggestionVote['voteType'] }>(
-    [],
+  const [suggestions, setSuggestions] = useState<SuggestionWithVote[]>([]);
+  const [optimisticSuggestions, addOptimisticVote] = useOptimistic<SuggestionWithVote[], { suggestionUuid: string; voteType: SuggestionVote['voteType'] }>(
+    suggestions,
     (state, { suggestionUuid, voteType }) => {
         return state.map(s => {
             if (s.uuid !== suggestionUuid) return s;
@@ -65,8 +66,7 @@ export default function SuggestionsPage() {
   const [createState, createFormAction, isCreating] = useActionState(createSuggestionAction, { success: false, error: null });
   const form = useForm<SuggestionFormValues>({ resolver: zodResolver(suggestionFormSchema), defaultValues: { title: '', description: '' } });
 
-  useEffect(() => {
-    async function loadSuggestions() {
+  const loadSuggestions = async () => {
       setIsLoading(true);
       const result = await getSuggestionsAction();
       if ('error' in result) {
@@ -75,7 +75,9 @@ export default function SuggestionsPage() {
         setSuggestions(result);
       }
       setIsLoading(false);
-    }
+  };
+  
+  useEffect(() => {
     loadSuggestions();
   }, []);
 
@@ -85,7 +87,7 @@ export default function SuggestionsPage() {
       setIsCreateDialogOpen(false);
       form.reset();
       // Re-fetch suggestions to see the new one
-      getSuggestionsAction().then(res => !('error' in res) && setSuggestions(res));
+      loadSuggestions();
     } else if (createState.error) {
       toast({ variant: 'destructive', title: 'Error', description: createState.error });
     }
@@ -93,13 +95,13 @@ export default function SuggestionsPage() {
 
   const handleVote = async (suggestionUuid: string, voteType: SuggestionVote['voteType']) => {
     startTransition(() => {
-        setSuggestions({ suggestionUuid, voteType });
+        addOptimisticVote({ suggestionUuid, voteType });
     });
     const result = await voteOnSuggestionAction(suggestionUuid, voteType);
     if (result.error) {
         toast({ variant: 'destructive', title: 'Vote Error', description: result.error });
-        // Revert optimistic update by re-fetching
-        getSuggestionsAction().then(res => !('error' in res) && setSuggestions(res));
+        // Revert optimistic update by re-fetching. Since the action revalidates, this might be redundant but safe.
+        loadSuggestions();
     }
   };
 
@@ -158,7 +160,7 @@ export default function SuggestionsPage() {
         <div className="grid gap-4 md:grid-cols-2">
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-48 w-full"/>)}
         </div>
-      ) : suggestions.length === 0 ? (
+      ) : optimisticSuggestions.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
             <MessageSquare className="mx-auto h-12 w-12 mb-4"/>
             <h3 className="text-lg font-semibold">No Suggestions Yet</h3>
@@ -166,7 +168,7 @@ export default function SuggestionsPage() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {suggestions.map(s => (
+          {optimisticSuggestions.map(s => (
             <Card key={s.uuid} className="flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-start gap-2">
