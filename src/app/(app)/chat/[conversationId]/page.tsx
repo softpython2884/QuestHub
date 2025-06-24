@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef, useOptimistic, startTransition } from 'react';
@@ -30,7 +29,11 @@ export default function ConversationPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [input, setInput] = useState('');
     const [isSending, setIsSending] = useState(false);
-    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
 
     useEffect(() => {
         if (conversationId) {
@@ -69,9 +72,7 @@ export default function ConversationPage() {
 
 
     useEffect(() => {
-        if (scrollAreaRef.current) {
-            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
-        }
+        scrollToBottom();
     }, [optimisticMessages]);
 
     const getInitials = (name?: string) => {
@@ -131,8 +132,8 @@ export default function ConversationPage() {
     
     return (
         <div className="flex flex-col h-full">
-            <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
-                <div className="space-y-4">
+            <ScrollArea className="flex-grow">
+                <div className="p-4 space-y-4">
                     {optimisticMessages.map(message => (
                          <div key={message.uuid} className={cn('flex items-start gap-3', message.authorUuid === user?.uuid ? 'justify-end' : 'justify-start', message.pending && 'opacity-60')}>
                             {message.authorUuid !== user?.uuid && (
@@ -166,6 +167,7 @@ export default function ConversationPage() {
                             )}
                         </div>
                     ))}
+                    <div ref={messagesEndRef} />
                 </div>
             </ScrollArea>
              <div className="p-4 border-t bg-background">
