@@ -1,0 +1,67 @@
+<script src="js/GlslCanvas.js"></script> 
+
+<body style="margin:0;overflow:hidden">
+    <canvas 
+    id ="WebglOut"
+    class="glslCanvas" 
+    data-fragment-url="shaders\rainbow.frag" 
+    style="position: absolute;width: 100%;height: 100%;" 
+    />    
+</body>
+
+<script type="text/javascript">
+
+ window.onload =()=>{
+  let canvas = document.querySelector('.glslCanvas');
+  canvas.setAttribute("width",window.innerWidth);
+  canvas.setAttribute("height",window.innerHeight);
+}
+
+function livelyPropertyListener(name, val)
+{
+  switch(name) {
+    case "speed":
+      glslCanvases[0].setUniform("u_speed",val/100);
+      break;
+    case "stripes":
+      glslCanvases[0].setUniform("u_stripes",val/10);
+      break;
+    case "fixedColor":
+      if(val == true)
+      {
+        glslCanvases[0].setUniform("u_fixedColor",1.0);
+      }
+      else
+      {
+        glslCanvases[0].setUniform("u_fixedColor",0.0);
+      }
+      break;
+    case "color1":
+      tmp = hexToRgb(val);
+      glslCanvases[0].setUniform("u_color1", tmp.r/255, tmp.g/255, tmp.b/255);
+      break;
+      /*
+    case "fpsLock":
+      if(val == true)
+      {
+        responseTime = 33;
+      }
+      else
+      {
+        responseTime = -1;
+      }
+      break;
+      */
+  }   
+}
+
+function hexToRgb(hex) {
+  var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
+}
+
+</script>

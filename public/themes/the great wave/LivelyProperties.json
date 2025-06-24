@@ -1,0 +1,35 @@
+{
+  "uiCheck": {
+    "type": "checkbox",
+    "value": true,
+    "text": "UI"
+  },
+   "label2": {
+  	"type": "label",
+  	"value": "Weather"
+  },
+   "apiInput": {
+    "text": "API Key",
+    "type": "textbox",
+    "value": "openweathermap.org key"
+  },
+   "cityInput": {
+    "text": "Location",
+    "type": "textbox",
+    "value": ""
+  },
+   "unit": {
+    "type": "dropdown",
+    "value": 0,
+    "text": "Unit",
+    "items": [
+      "Metric",
+      "Imperial",
+    ]
+  },
+  "btnRefresh" : {
+  "text" : "Click to Update",
+  "type" : "button",
+  "value" : "Refresh"
+  },
+}

@@ -1,0 +1,76 @@
+<script src="js/GlslCanvas.js"></script> 
+
+
+<body style="margin:0;overflow:hidden">
+    <canvas 
+    id ="WebglOut"
+    class="glslCanvas" 
+    data-fragment-url="shaders\space.frag" 
+    style="position: absolute;width: 100%;height: 100%;" 
+    />	
+
+</body>
+
+<script type="text/javascript">
+
+ window.onload =()=>{
+  let canvas = document.querySelector('.glslCanvas');
+  canvas.setAttribute("width",window.innerWidth);
+  canvas.setAttribute("height",window.innerHeight);
+}
+
+function livelyPropertyListener(name, val)
+{
+	if(name =="star1")
+	{
+		glslCanvases[0].setUniform("u_star1Count",90.0 - val);
+	}
+	else if(name =="star2")
+	{
+		glslCanvases[0].setUniform("u_star2Count",90.0 - val);
+	}
+	else if(name =="loop1")
+	{
+		glslCanvases[0].setUniform("u_loop1",val);
+	}
+	else if(name =="loop2")
+	{
+		glslCanvases[0].setUniform("u_loop2",val);
+	}
+	else if(name =="rate")  
+	{
+		glslCanvases[0].setUniform("u_rate",val/100);
+	}
+	else if(name =="freq0")  
+	{
+		glslCanvases[0].setUniform("u_freq0",val/100);
+	}
+	else if(name =="freq1")  
+	{
+		glslCanvases[0].setUniform("u_freq1",val/100);
+	}
+	else if(name =="freq2")  
+	{
+		glslCanvases[0].setUniform("u_freq2",val/100);
+	}
+	else if(name =="freq3")  
+	{
+		glslCanvases[0].setUniform("u_freq3",val/100);
+	}
+
+	else if(name =="fpsLock")  
+	{
+		if(val == true)
+		{
+			responseTime = 33;
+		}
+		else
+		{
+			responseTime = -1;
+		}
+	}
+
+
+}
+
+</script>
