@@ -1,7 +1,7 @@
 
 'use server';
 
-import { getAppSetting, setAppSetting, createInvitation } from '@/lib/db';
+import { getAppSetting, setAppSetting, createInvitation, getDbConnection } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
 import type { UserRole } from '@/types';
@@ -61,5 +61,62 @@ export async function updateStorageBackendSettingAction(mode: 'github' | 'local'
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to update setting.' };
+    }
+}
+
+export async function runDatabaseMigrationsAction(): Promise<{ success: boolean; message: string; error?: string }> {
+    const session = await auth();
+    if (session?.user?.role !== 'admin') {
+        return { success: false, message: '', error: 'Permission denied.' };
+    }
+
+    try {
+        const db = await getDbConnection();
+        let messages = [];
+
+        // --- Migration: Add columns to users table ---
+        const userCols = await db.all(`PRAGMA table_info(users);`);
+        if (!userCols.some(col => col.name === 'bio')) {
+            await db.run('ALTER TABLE users ADD COLUMN bio TEXT;');
+            messages.push('Added bio column to users table.');
+        }
+        if (!userCols.some(col => col.name === 'websiteUrl')) {
+            await db.run('ALTER TABLE users ADD COLUMN websiteUrl TEXT;');
+            messages.push('Added websiteUrl column to users table.');
+        }
+        if (!userCols.some(col => col.name === 'showDiscordOnProfile')) {
+            await db.run('ALTER TABLE users ADD COLUMN showDiscordOnProfile BOOLEAN DEFAULT FALSE;');
+            messages.push('Added showDiscordOnProfile column to users table.');
+        }
+        if (!userCols.some(col => col.name === 'showGithubOnProfile')) {
+            await db.run('ALTER TABLE users ADD COLUMN showGithubOnProfile BOOLEAN DEFAULT FALSE;');
+            messages.push('Added showGithubOnProfile column to users table.');
+        }
+        
+        // --- Migration: Add columns to projects table ---
+        const projectCols = await db.all(`PRAGMA table_info(projects);`);
+        if (!projectCols.some(col => col.name === 'vanityId')) {
+            await db.run('ALTER TABLE projects ADD COLUMN vanityId TEXT UNIQUE;');
+            messages.push('Added vanityId column to projects table.');
+        }
+        if (!projectCols.some(col => col.name === 'storageBackend')) {
+            await db.run("ALTER TABLE projects ADD COLUMN storageBackend TEXT NOT NULL DEFAULT 'github';");
+            messages.push('Added storageBackend column to projects table.');
+        }
+        if (!projectCols.some(col => col.name === 'githubWebhookId')) {
+            await db.run('ALTER TABLE projects ADD COLUMN githubWebhookId INTEGER;');
+            await db.run('ALTER TABLE projects ADD COLUMN githubWebhookSecret TEXT;');
+            messages.push('Added githubWebhookId and githubWebhookSecret columns to projects table.');
+        }
+        
+
+        if (messages.length === 0) {
+            return { success: true, message: 'Database schema is already up to date.' };
+        }
+
+        return { success: true, message: `Migrations applied successfully: ${messages.join(' ')}` };
+    } catch (e: any) {
+        console.error("Database migration failed:", e);
+        return { success: false, message: '', error: e.message || 'An unknown error occurred during migration.' };
     }
 }

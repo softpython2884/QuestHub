@@ -5,16 +5,16 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database } from "lucide-react";
 import Link from 'next/link';
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useActionState } from "react";
 import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
-import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction, getStorageBackendSettingAction, updateStorageBackendSettingAction } from "./actions";
+import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction, getStorageBackendSettingAction, updateStorageBackendSettingAction, runDatabaseMigrationsAction } from "./actions";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,6 +43,8 @@ export default function SettingsPage() {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [migrationState, runMigrationAction, isMigrating] = useActionState(runDatabaseMigrationsAction, { success: false, message: '', error: undefined });
+
 
   useEffect(() => {
     if (user) {
@@ -69,6 +71,16 @@ export default function SettingsPage() {
         }
     }
   }, [user]);
+  
+  useEffect(() => {
+      if (migrationState.message && !isMigrating) {
+          if (migrationState.success) {
+              toast({ title: 'Database Migration', description: migrationState.message });
+          } else if (migrationState.error) {
+              toast({ variant: 'destructive', title: 'Migration Failed', description: migrationState.error });
+          }
+      }
+  }, [migrationState, isMigrating, toast]);
 
   const handleRegModeChange = (newMode: 'public' | 'private') => {
       startTransition(async () => {
@@ -283,7 +295,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-4 rounded-lg border p-4">
-              <h4 className="font-medium">Storage & Integrations</h4>
+              <h4 className="font-medium">Storage & Maintenance</h4>
               <div className="flex items-start justify-between">
                 <Label className="flex flex-col pr-4">
                   <span>Default Storage Backend</span>
@@ -301,6 +313,16 @@ export default function SettingsPage() {
                         </div>
                     </RadioGroup>
                  }
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="flex flex-col">
+                  <span>Database Schema</span>
+                  <span className="text-xs font-normal text-muted-foreground">Apply new schema updates after a code update.</span>
+                </Label>
+                 <Button variant="outline" onClick={() => runMigrationAction()} disabled={isMigrating}>
+                    {isMigrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Database className="mr-2 h-4 w-4"/>}
+                     Update Database Schema
+                 </Button>
               </div>
                <div className="flex items-center justify-between">
                 <Label className="flex flex-col">
