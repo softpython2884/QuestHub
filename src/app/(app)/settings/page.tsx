@@ -1,13 +1,11 @@
 
-
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database } from "lucide-react";
+import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database, Star } from "lucide-react";
 import Link from 'next/link';
-import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect, useTransition, useActionState } from "react";
 import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
@@ -20,10 +18,9 @@ import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { UserRole } from "@/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
-  const { setTheme } = useTheme();
   const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -44,7 +41,6 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
 
   const [migrationState, runMigrationAction, isMigrating] = useActionState(runDatabaseMigrationsAction, { success: false, message: '', error: undefined });
-
 
   useEffect(() => {
     if (user) {
@@ -170,18 +166,20 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary"/> Appearance</CardTitle>
-            <CardDescription>Customize the look and feel.</CardDescription>
+            <CardDescription>Customize the look and feel of the application.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="space-y-2">
-                <label className="text-sm font-medium">Theme</label>
-                <div className="grid grid-cols-3 gap-2">
-                    <Button variant="outline" onClick={() => setTheme('light')}><Sun className="mr-2"/>Light</Button>
-                    <Button variant="outline" onClick={() => setTheme('dark')}><Moon className="mr-2"/>Dark</Button>
-                    <Button variant="outline" onClick={() => setTheme('system')}><Laptop className="mr-2"/>System</Button>
-                </div>
-            </div>
-             <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
+          <CardContent>
+              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-primary/30">
+                  <div className="flex items-center gap-3">
+                    <Star className="h-6 w-6 text-primary" />
+                    <div>
+                        <h4 className="font-semibold">Space Theme</h4>
+                        <p className="text-xs text-muted-foreground">The default immersive experience.</p>
+                    </div>
+                  </div>
+                  <Check className="h-5 w-5 text-green-500" />
+              </div>
+              <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
           </CardContent>
         </Card>
 
@@ -192,7 +190,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
              <Button variant="outline" className="w-full" disabled>Change Password (Coming Soon)</Button>
-              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                  <label htmlFor="2fa" className="flex flex-col space-y-1">
                     <span>Two-Factor Authentication</span>
                     <span className="font-normal leading-snug text-muted-foreground text-xs">

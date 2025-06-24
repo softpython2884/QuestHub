@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    /* Default theme (light) - Kept for reference but not used */
     --background: 210 40% 98%;
     --foreground: 224 71.4% 4.1%;
     --card: 0 0% 100%;
@@ -24,24 +25,10 @@
     --input: 215 27.9% 90%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 180 60% 45%;
-    --chart-3: 43 74% 66%;
-    --chart-4: 27 87% 67%;
-    --chart-5: 12 76% 61%;
-    
-    --sidebar-background: 224 71.4% 4.1%;
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 210 20% 98%;
-    --sidebar-primary-foreground: 224 71.4% 4.1%;
-    --sidebar-accent: 224 71.4% 15%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 224 71.4% 15%;
-    --sidebar-ring: 215 20.2% 65.1%;
   }
 
   .dark {
+    /* Base Dark Theme - Now overridden by theme-space */
     --background: 224 71.4% 4.1%;
     --foreground: 210 20% 98%;
     --card: 224 71.4% 10%;
@@ -61,20 +48,47 @@
     --border: 215 27.9% 16.9%;
     --input: 215 27.9% 16.9%;
     --ring: 216 12.2% 83.9%;
-    
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+  }
 
-    --sidebar-background: 224 71.4% 4.1%;
+  /* Space Theme Override */
+  .theme-space {
+    --background: 224 71% 4%; /* Deep space blue */
+    --foreground: 210 40% 98%; /* Light, almost white text */
+    
+    /* Glassmorphism styles */
+    --card: 215 28% 17% / 0.1; /* Semi-transparent dark blue */
+    --card-foreground: 210 40% 98%;
+    
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    
+    --primary: 217 91% 60%; /* Bright blue for accents */
+    --primary-foreground: 210 40% 98%;
+    
+    --secondary: 215 28% 17% / 0.5; /* Darker, more opaque secondary elements */
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 215 28% 17% / 0.2;
+    --muted-foreground: 215 20% 65%; /* Softer gray for muted text */
+    
+    --accent: 217 91% 60% / 0.1; /* Transparent accent for hover states */
+    --accent-foreground: 210 40% 98%;
+    
+    --destructive: 0 72% 51%; /* Red for destructive actions */
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 217 91% 60% / 0.2; /* Glowing blue border */
+    --input: 215 28% 17% / 0.3; /* Transparent input background */
+    --ring: 217 91% 70%;
+    --radius: 0.75rem;
+
+    --sidebar-background: 224 71.4% 4.1% / 0.8;
     --sidebar-foreground: 210 20% 98%;
     --sidebar-primary: 210 20% 98%;
     --sidebar-primary-foreground: 224 71.4% 4.1%;
-    --sidebar-accent: 215 27.9% 16.9%;
+    --sidebar-accent: 215 27.9% 16.9% / 0.5;
     --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 215 27.9% 16.9%;
+    --sidebar-border: 215 27.9% 16.9% / 0.5;
     --sidebar-ring: 215 20.2% 65.1%;
   }
 }

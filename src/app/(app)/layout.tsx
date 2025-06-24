@@ -9,6 +9,7 @@ import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { Chatbot } from '@/components/layout/Chatbot';
+import { SpaceTheme } from '@/components/layout/SpaceTheme';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -52,7 +53,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex min-h-screen bg-background theme-space">
+        <SpaceTheme />
         <AppSidebar />
         <SidebarInset>
           <AppHeader />

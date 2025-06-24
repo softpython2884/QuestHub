@@ -16,7 +16,6 @@ import {
 import { Logo } from '@/components/Logo';
 import { LayoutDashboard, FolderKanban, Megaphone, Settings, Users, ShieldCheck, BookText, Compass, Lightbulb, MessageSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '../ui/button';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
