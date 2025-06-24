@@ -1,0 +1,14 @@
+{
+  "AppVersion": "0.8.0.0",
+  "Title": "Rainbow RGB [Customisable]",
+  "Thumbnail": "lively_t.jpg",
+  "Preview": "lively_p.gif",
+  "Desc": "Shadertoy port.",
+  "Author": "akufishi",
+  "License": null,
+  "Contact": "https://www.shadertoy.com/view/lscBRf",
+  "Type": 1,
+  "FileName": "rainbow.html",
+  "Arguments": null,
+  "IsAbsolutePath": false
+}

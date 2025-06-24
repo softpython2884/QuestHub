@@ -1,0 +1,56 @@
+{
+  "label1": {
+    "type": "label",
+    "value": "Mesh"
+  },
+  "meshAmbient": {
+    "text": "Ambient",
+    "type": "color",
+    "value": "#555555"
+  },
+  "meshDiffuse": {
+    "text": "Diffuse",
+    "type": "color",
+    "value": "#ffffff"
+  },
+  "meshSlices": {
+    "max": 800,
+    "min": 1,
+    "tick": 800,
+    "text": "Slices",
+    "type": "slider",
+    "value": 250
+  },
+  "label2": {
+    "type": "label",
+    "value": "Light"
+  },
+  "lightAmbient": {
+    "text": "Ambient",
+    "type": "color",
+    "value": "#2c0393"
+  },
+  "lightDiffuse": {
+    "text": "Diffuse",
+    "type": "color",
+    "value": "#530ffc"
+  },
+  /*
+  "lightCount": {
+    "max": 7,
+    "min": 1,
+    "tick": 7,
+    "text": "Count",
+    "type": "slider",
+    "value": 1
+  },
+  */
+   "lightDistance": {
+    "max": 1000,
+    "min": 0,
+    "tick": 1001,
+    "text": "Distance",
+    "type": "slider",
+    "value": 100
+  }
+}
