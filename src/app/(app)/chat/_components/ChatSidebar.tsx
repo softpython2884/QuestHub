@@ -7,12 +7,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Conversation } from '@/types';
 import { cn } from '@/lib/utils';
-import { Users, Hash, AlertTriangle, MessageSquarePlus } from 'lucide-react';
+import { Users, Hash, AlertTriangle, MessageSquarePlus, Search } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useState, useEffect } from 'react';
 import { getConversationsAction } from '../actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
 
 
 interface ChatSidebarProps {
@@ -26,6 +27,7 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
   const [isLoading, setIsLoading] = useState(initialConversations.length === 0);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const pollConversations = async () => {
@@ -57,11 +59,24 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
     const names = name.split(' ');
     return (names[0][0] + (names.length > 1 ? names[names.length - 1][0] : '')).toUpperCase();
   };
+  
+  const filteredConversations = conversations.filter(convo =>
+    convo.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="w-full max-w-xs border-r bg-muted/20 flex flex-col">
       <div className="p-4 border-b">
         <h2 className="text-xl font-semibold tracking-tight">Conversations</h2>
+         <div className="relative mt-2">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+                placeholder="Search conversations..."
+                className="pl-8 h-9 bg-background"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+        </div>
       </div>
       <ScrollArea className="flex-1">
         {isLoading ? (
@@ -82,15 +97,15 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
                 <p className="text-sm font-semibold">Error</p>
                 <p className="text-xs">{error}</p>
             </div>
-        ) : conversations.length === 0 ? (
+        ) : filteredConversations.length === 0 ? (
              <div className="p-4 text-center text-muted-foreground mt-8">
                 <MessageSquarePlus className="mx-auto h-10 w-10 mb-2"/>
-                <h3 className="font-semibold">No Conversations</h3>
-                <p className="text-sm">Start a chat from the Team page.</p>
+                <h3 className="font-semibold">{searchTerm ? "No Results Found" : "No Conversations"}</h3>
+                <p className="text-sm">{searchTerm ? "Try a different search term." : "Start a chat from the Team page."}</p>
              </div>
         ) : (
           <div className="p-2 space-y-1">
-            {conversations.map(convo => (
+            {filteredConversations.map(convo => (
               <Link
                 key={convo.uuid}
                 href={`/chat/${convo.uuid}`}

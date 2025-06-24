@@ -5,16 +5,21 @@ import { useEffect, useState, useRef, startTransition } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { getMessagesAction, sendMessageAction } from '../actions';
+import { getMessagesAction, sendMessageAction, editMessageAction, deleteMessageAction } from '../actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { formatDistanceToNow } from 'date-fns';
+
 
 export default function ConversationPage() {
     const params = useParams();
@@ -27,6 +32,10 @@ export default function ConversationPage() {
     const [input, setInput] = useState('');
     const [isSending, setIsSending] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+    const [editedContent, setEditedContent] = useState('');
+    const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,14 +65,16 @@ export default function ConversationPage() {
                 console.error('Polling error:', freshMessages.error);
                 return;
             }
-            // Only update if there are new messages we don't have locally
-            if (freshMessages.length > messages.length) {
-                setMessages(freshMessages);
-            }
+            setMessages(currentMessages => {
+                if (JSON.stringify(freshMessages) !== JSON.stringify(currentMessages)) {
+                    return freshMessages;
+                }
+                return currentMessages;
+            });
         }, 3000);
 
         return () => clearInterval(poll);
-    }, [conversationId, user, messages.length]); // depend on messages.length to reset interval with new state
+    }, [conversationId, user]);
 
 
     useEffect(() => {
@@ -81,47 +92,54 @@ export default function ConversationPage() {
         if (!input.trim() || !user || isSending) return;
 
         setIsSending(true);
-        const currentInput = input;
-        setInput('');
-
         const optimisticMessage: Message = {
             uuid: `optimistic-${Date.now()}`,
             conversationUuid: conversationId,
             authorUuid: user.uuid,
             authorName: user.name,
             authorAvatar: user.avatar,
-            content: currentInput.trim(),
+            content: input.trim(),
             createdAt: new Date().toISOString(),
             pending: true,
         };
-
+        
         startTransition(() => {
             setMessages(prev => [...prev, optimisticMessage]);
         });
         
-        try {
-            const result = await sendMessageAction(conversationId, currentInput.trim());
-            
-            if ('error' in result) {
-                toast({ variant: 'destructive', title: 'Error', description: result.error });
-                // Revert: remove optimistic message
-                setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
-                setInput(currentInput);
-            } else {
-                // Success: replace optimistic message with the real one
-                setMessages(prev => 
-                    prev.map(m => 
-                        m.uuid === optimisticMessage.uuid ? result : m
-                    )
-                );
-            }
-        } catch (error) {
-             toast({ variant: 'destructive', title: 'Error', description: 'Failed to send message. Please check your connection.' });
+        const result = await sendMessageAction(conversationId, input.trim());
+        setInput('');
+        
+        if ('error' in result) {
+             toast({ variant: 'destructive', title: 'Error', description: result.error });
              setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
-             setInput(currentInput);
-        } finally {
-             setIsSending(false);
         }
+        
+        setTimeout(() => setIsSending(false), 1000); // Anti-spam delay
+    };
+
+    const handleStartEdit = (message: Message) => {
+        setEditingMessage(message);
+        setEditedContent(message.content);
+    };
+    
+    const handleCancelEdit = () => {
+        setEditingMessage(null);
+        setEditedContent('');
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingMessage || !editedContent.trim()) return;
+
+        await editMessageAction(editingMessage.uuid, editedContent);
+        // The revalidation will update the message list
+        handleCancelEdit();
+    };
+
+    const handleDeleteMessage = async () => {
+        if (!deletingMessage) return;
+        await deleteMessageAction(deletingMessage.uuid);
+        setDeletingMessage(null);
     };
 
     if (isLoading) {
@@ -133,26 +151,60 @@ export default function ConversationPage() {
             <ScrollArea className="flex-grow">
                 <div className="p-4 space-y-4">
                     {messages.map(message => (
-                         <div key={message.uuid} className={cn('flex items-start gap-3', message.authorUuid === user?.uuid ? 'justify-end' : 'justify-start', message.pending && 'opacity-60')}>
+                        <div key={message.uuid} className={cn('group flex items-start gap-3', message.authorUuid === user?.uuid ? 'justify-end' : 'justify-start', message.pending && 'opacity-60')}>
+                             {message.authorUuid === user?.uuid && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 shrink-0">
+                                            <MoreHorizontal className="h-4 w-4"/>
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuItem onSelect={() => handleStartEdit(message)} disabled={message.isDeleted}>
+                                            <Edit className="mr-2 h-4 w-4"/> Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={() => setDeletingMessage(message)} className="text-destructive" disabled={message.isDeleted}>
+                                            <Trash2 className="mr-2 h-4 w-4"/> Delete
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                             )}
+
                             {message.authorUuid !== user?.uuid && (
                                 <Avatar className="h-8 w-8">
                                     <AvatarImage src={message.authorAvatar} alt={message.authorName} />
                                     <AvatarFallback>{getInitials(message.authorName)}</AvatarFallback>
                                 </Avatar>
                             )}
+
                             <div className="max-w-[75%] space-y-1">
                                 {message.authorUuid !== user?.uuid && <p className="text-xs text-muted-foreground ml-2">{message.authorName}</p>}
                                 <div className={cn('rounded-lg px-3 py-2 text-sm break-words', message.authorUuid === user?.uuid ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                                    <ReactMarkdown 
-                                        remarkPlugins={[remarkGfm]} 
-                                        className="prose prose-sm dark:prose-invert max-w-none"
-                                        components={{
-                                            a: ({node, ...props}) => <a {...props} className="underline text-inherit hover:opacity-80" target="_blank" rel="noopener noreferrer" />
-                                        }}
-                                    >
-                                        {message.content}
-                                    </ReactMarkdown>
+                                    {message.isDeleted ? (
+                                        <p className="italic text-muted-foreground">This message has been deleted.</p>
+                                    ) : editingMessage?.uuid === message.uuid ? (
+                                        <div className="space-y-2">
+                                            <Textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} rows={3} className="bg-background text-foreground"/>
+                                            <div className="flex gap-2">
+                                                <Button size="sm" variant="secondary" onClick={handleCancelEdit}>Cancel</Button>
+                                                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <ReactMarkdown 
+                                            remarkPlugins={[remarkGfm]} 
+                                            className="prose prose-sm dark:prose-invert max-w-none"
+                                            components={{
+                                                a: ({node, ...props}) => <a {...props} className="underline text-inherit hover:opacity-80" target="_blank" rel="noopener noreferrer" />
+                                            }}
+                                        >
+                                            {message.content}
+                                        </ReactMarkdown>
+                                    )}
                                 </div>
+                                 {message.isEdited && !message.isDeleted && (
+                                    <span className="text-xs text-muted-foreground ml-2">(edited)</span>
+                                 )}
                             </div>
                             {message.authorUuid === user?.uuid && user && (
                                 <Avatar className="h-8 w-8">
@@ -179,6 +231,19 @@ export default function ConversationPage() {
                     </Button>
                 </form>
             </div>
+            
+            <AlertDialog open={!!deletingMessage} onOpenChange={(open) => !open && setDeletingMessage(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>This action cannot be undone. This will permanently delete the message.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteMessage} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

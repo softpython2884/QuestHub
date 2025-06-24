@@ -109,6 +109,20 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
             messages.push('Added githubWebhookId and githubWebhookSecret columns to projects table.');
         }
         
+        // --- Migration: Add columns to messages table ---
+        const messageCols = await db.all(`PRAGMA table_info(messages);`);
+        if (!messageCols.some(col => col.name === 'updatedAt')) {
+            await db.run('ALTER TABLE messages ADD COLUMN updatedAt TEXT;');
+            messages.push('Added updatedAt column to messages table.');
+        }
+        if (!messageCols.some(col => col.name === 'isEdited')) {
+            await db.run('ALTER TABLE messages ADD COLUMN isEdited BOOLEAN NOT NULL DEFAULT FALSE;');
+            messages.push('Added isEdited column to messages table.');
+        }
+        if (!messageCols.some(col => col.name === 'isDeleted')) {
+            await db.run('ALTER TABLE messages ADD COLUMN isDeleted BOOLEAN NOT NULL DEFAULT FALSE;');
+            messages.push('Added isDeleted column to messages table.');
+        }
 
         if (messages.length === 0) {
             return { success: true, message: 'Database schema is already up to date.' };

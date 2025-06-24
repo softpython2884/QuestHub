@@ -560,6 +560,9 @@ export async function getDbConnection() {
         authorUuid TEXT NOT NULL,
         content TEXT NOT NULL,
         createdAt TEXT NOT NULL,
+        updatedAt TEXT,
+        isEdited BOOLEAN NOT NULL DEFAULT FALSE,
+        isDeleted BOOLEAN NOT NULL DEFAULT FALSE,
         FOREIGN KEY (conversationUuid) REFERENCES conversations (uuid) ON DELETE CASCADE,
         FOREIGN KEY (authorUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
@@ -2192,6 +2195,71 @@ export async function voteOnSuggestion(suggestionUuid: string, userUuid: string,
 }
 
 // Chat functions
+export async function getMessageByUuid(uuid: string): Promise<Message | null> {
+    const connection = await getDbConnection();
+    const message = await connection.get<any>(
+        `SELECT m.*, u.name as authorName, u.avatar as authorAvatar
+         FROM messages m
+         JOIN users u ON m.authorUuid = u.uuid
+         WHERE m.uuid = ?`, uuid
+    );
+    if (!message) return null;
+    return {
+        ...message,
+        isEdited: !!message.isEdited,
+        isDeleted: !!message.isDeleted,
+    };
+}
+
+export async function editMessage(messageUuid: string, newContent: string, userUuid: string): Promise<Message | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    
+    const message = await connection.get('SELECT * FROM messages WHERE uuid = ?', messageUuid);
+    if (!message || message.authorUuid !== userUuid) {
+        throw new Error("Message not found or permission denied.");
+    }
+
+    const result = await connection.run(
+        'UPDATE messages SET content = ?, isEdited = ?, updatedAt = ? WHERE uuid = ?',
+        newContent, true, now, messageUuid
+    );
+    
+    if (result.changes === 0) return null;
+    
+    const updatedMessage = await getMessageByUuid(messageUuid);
+    if (updatedMessage) {
+        // Trigger conversation update timestamp
+        await connection.run('UPDATE conversations SET updatedAt = ? WHERE uuid = ?', now, updatedMessage.conversationUuid);
+    }
+    return updatedMessage;
+}
+
+export async function softDeleteMessage(messageUuid: string, userUuid: string): Promise<Message | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+
+    const message = await connection.get('SELECT * FROM messages WHERE uuid = ?', messageUuid);
+    if (!message || message.authorUuid !== userUuid) {
+        throw new Error("Message not found or permission denied.");
+    }
+    
+    const result = await connection.run(
+        'UPDATE messages SET isDeleted = ?, content = ?, updatedAt = ? WHERE uuid = ?',
+        true, 'This message has been deleted.', now, messageUuid
+    );
+
+    if (result.changes === 0) return null;
+    
+    const updatedMessage = await getMessageByUuid(messageUuid);
+     if (updatedMessage) {
+        // Trigger conversation update timestamp
+        await connection.run('UPDATE conversations SET updatedAt = ? WHERE uuid = ?', now, updatedMessage.conversationUuid);
+    }
+    return updatedMessage;
+}
+
+
 export async function markConversationAsRead(conversationUuid: string, userUuid: string): Promise<void> {
     const connection = await getDbConnection();
     const now = new Date().toISOString();
@@ -2279,7 +2347,11 @@ export async function getMessagesForConversation(conversationUuid: string): Prom
         WHERE m.conversationUuid = ?
         ORDER BY m.createdAt ASC
     `, conversationUuid);
-    return messages;
+    return messages.map(m => ({
+        ...m,
+        isEdited: !!m.isEdited,
+        isDeleted: !!m.isDeleted,
+    }));
 }
 
 export async function createMessage(conversationUuid: string, authorUuid: string, content: string): Promise<Message> {
@@ -2290,8 +2362,8 @@ export async function createMessage(conversationUuid: string, authorUuid: string
     await connection.run('BEGIN TRANSACTION');
     try {
         await connection.run(
-            'INSERT INTO messages (uuid, conversationUuid, authorUuid, content, createdAt) VALUES (?, ?, ?, ?, ?)',
-            messageUuid, conversationUuid, authorUuid, content, now
+            'INSERT INTO messages (uuid, conversationUuid, authorUuid, content, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+            messageUuid, conversationUuid, authorUuid, content, now, now
         );
         await connection.run(
             'UPDATE conversations SET updatedAt = ? WHERE uuid = ?',
@@ -2312,7 +2384,9 @@ export async function createMessage(conversationUuid: string, authorUuid: string
         authorName: author?.name,
         authorAvatar: author?.avatar,
         content,
-        createdAt: now
+        createdAt: now,
+        isEdited: false,
+        isDeleted: false,
     };
 }
 

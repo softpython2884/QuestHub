@@ -308,6 +308,8 @@ export interface Message {
     content: string;
     createdAt: string;
     pending?: boolean;
+    isEdited?: boolean;
+    isDeleted?: boolean;
 }
 
 export type ConversationType = 'dm' | 'project';
