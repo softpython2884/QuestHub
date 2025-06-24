@@ -65,7 +65,7 @@ export default function ConversationPage() {
                 console.error('Polling error:', freshMessages.error);
                 return;
             }
-            setMessages(currentMessages => {
+             setMessages(currentMessages => {
                 if (JSON.stringify(freshMessages) !== JSON.stringify(currentMessages)) {
                     return freshMessages;
                 }
@@ -113,6 +113,9 @@ export default function ConversationPage() {
         if ('error' in result) {
              toast({ variant: 'destructive', title: 'Error', description: result.error });
              setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
+        } else {
+            // Replace optimistic message with the real one from the server
+            setMessages(prev => prev.map(m => m.uuid === optimisticMessage.uuid ? { ...result, pending: false } : m));
         }
         
         setTimeout(() => setIsSending(false), 1000); // Anti-spam delay
@@ -195,7 +198,7 @@ export default function ConversationPage() {
                                             remarkPlugins={[remarkGfm]} 
                                             className="prose prose-sm dark:prose-invert max-w-none"
                                             components={{
-                                                a: ({node, ...props}) => <a {...props} className="underline text-inherit hover:opacity-80" target="_blank" rel="noopener noreferrer" />
+                                                a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.authorUuid === user?.uuid ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
                                             }}
                                         >
                                             {message.content}
