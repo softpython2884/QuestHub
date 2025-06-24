@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef, useOptimistic, startTransition } from 'react';
@@ -115,15 +114,14 @@ export default function ConversationPage() {
             });
             setInput(currentInput);
         } else {
-            // The polling mechanism will take care of updating the final message state,
-            // which replaces the optimistic one. We can force a refresh if we want it to be faster.
+            // Force a refresh immediately to replace optimistic state with real data from server
             getMessagesAction(conversationId).then(freshMessages => {
                 if (!('error' in freshMessages)) {
                     setMessages(freshMessages);
                 }
             });
         }
-        setTimeout(() => setIsSending(false), 1000); // 1s cooldown
+        setTimeout(() => setIsSending(false), 1000); // 1s cooldown to prevent spam
     };
 
     if (isLoading) {
