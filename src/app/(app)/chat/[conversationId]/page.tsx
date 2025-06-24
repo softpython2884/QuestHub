@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef, useOptimistic } from 'react';
+import { useEffect, useState, useRef, useOptimistic, startTransition } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -61,29 +61,36 @@ export default function ConversationPage() {
         e.preventDefault();
         if (!input.trim() || !user) return;
 
-        const optimisticMessage: Message = {
-            uuid: `optimistic-${Date.now()}`,
-            conversationUuid: conversationId,
-            authorUuid: user.uuid,
-            authorName: user.name,
-            authorAvatar: user.avatar,
-            content: input.trim(),
-            createdAt: new Date().toISOString(),
-        };
-
-        addOptimisticMessage(optimisticMessage);
         const currentInput = input;
         setInput('');
+
+        startTransition(() => {
+            const optimisticMessage: Message = {
+                uuid: `optimistic-${Date.now()}`,
+                conversationUuid: conversationId,
+                authorUuid: user.uuid,
+                authorName: user.name,
+                authorAvatar: user.avatar,
+                content: currentInput.trim(),
+                createdAt: new Date().toISOString(),
+            };
+            addOptimisticMessage(optimisticMessage);
+        });
 
         const result = await sendMessageAction(conversationId, currentInput);
         
         if ('error' in result) {
             toast({ variant: 'destructive', title: 'Error', description: result.error });
+            // Revert optimistic update by refetching
+             getMessagesAction(conversationId).then(freshMessages => {
+                if (!('error' in freshMessages)) {
+                    setMessages(freshMessages);
+                }
+            });
             setInput(currentInput);
         } else {
-            // The optimistic update is automatically replaced by the real state update.
-            // We ensure the real state `messages` gets the confirmed message.
-            // The revalidation in the action will handle updating other parts like the sidebar.
+            // The server action returns the confirmed message. Update the real state.
+            // React will discard the optimistic message and re-render with the new state.
             setMessages(prev => [...prev, result]);
         }
     };
