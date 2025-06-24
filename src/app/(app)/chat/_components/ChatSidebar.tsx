@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -95,16 +96,24 @@ export function ChatSidebar({ initialConversations }: ChatSidebarProps) {
                   activeConversationId === convo.uuid && 'bg-primary text-primary-foreground hover:bg-primary/90'
                 )}
               >
-                <Avatar className="h-9 w-9">
-                  {convo.avatar ? (
-                    <AvatarImage src={convo.avatar} alt={convo.name} />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center rounded-full bg-muted">
-                        {convo.type === 'project' ? <Hash className="h-5 w-5"/> : <Users className="h-5 w-5"/>}
-                    </div>
+                <div className="relative">
+                  <Avatar className="h-9 w-9">
+                    {convo.avatar ? (
+                      <AvatarImage src={convo.avatar} alt={convo.name} />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-muted">
+                          {convo.type === 'project' ? <Hash className="h-5 w-5"/> : <Users className="h-5 w-5"/>}
+                      </div>
+                    )}
+                    <AvatarFallback>{getInitials(convo.name)}</AvatarFallback>
+                  </Avatar>
+                   {convo.hasUnread && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                    </span>
                   )}
-                  <AvatarFallback>{getInitials(convo.name)}</AvatarFallback>
-                </Avatar>
+                </div>
                 <div className="flex-1 truncate">
                   <p className="font-medium truncate">{convo.name}</p>
                   {convo.lastMessage && (

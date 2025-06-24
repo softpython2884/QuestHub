@@ -320,7 +320,7 @@ export interface Conversation {
     lastMessage?: string;
     lastMessageAt?: string;
     lastMessageAuthor?: string;
-    unreadCount: number;
+    hasUnread: boolean;
     projectUuid?: string; // Only for project chats
     otherUserUuid?: string; // Only for DMs
 }

@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import sqlite3 from 'sqlite3';
@@ -544,6 +543,15 @@ export async function getDbConnection() {
         PRIMARY KEY (conversationUuid, userUuid),
         FOREIGN KEY (conversationUuid) REFERENCES conversations (uuid) ON DELETE CASCADE,
         FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS conversation_read_status (
+        conversationUuid TEXT NOT NULL,
+        userUuid TEXT NOT NULL,
+        lastReadAt TEXT NOT NULL,
+        PRIMARY KEY (conversationUuid, userUuid),
+        FOREIGN KEY (conversationUuid) REFERENCES conversations(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -2184,6 +2192,20 @@ export async function voteOnSuggestion(suggestionUuid: string, userUuid: string,
 }
 
 // Chat functions
+export async function markConversationAsRead(conversationUuid: string, userUuid: string): Promise<void> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    await connection.run(
+        `INSERT INTO conversation_read_status (conversationUuid, userUuid, lastReadAt)
+         VALUES (?, ?, ?)
+         ON CONFLICT(conversationUuid, userUuid) DO UPDATE SET
+         lastReadAt = excluded.lastReadAt`,
+        conversationUuid,
+        userUuid,
+        now
+    );
+}
+
 export async function getConversationsForUser(userUuid: string): Promise<Conversation[]> {
     const connection = await getDbConnection();
     const rows = await connection.all<any[]>(`
@@ -2193,12 +2215,15 @@ export async function getConversationsForUser(userUuid: string): Promise<Convers
             c.projectUuid,
             c.updatedAt,
             (SELECT content FROM messages WHERE conversationUuid = c.uuid ORDER BY createdAt DESC LIMIT 1) as lastMessage,
-            (SELECT u.name FROM users u JOIN messages m ON u.uuid = m.authorUuid WHERE m.conversationUuid = c.uuid ORDER BY m.createdAt DESC LIMIT 1) as lastMessageAuthor
+            (SELECT u.name FROM users u JOIN messages m ON u.uuid = m.authorUuid WHERE m.conversationUuid = c.uuid ORDER BY m.createdAt DESC LIMIT 1) as lastMessageAuthor,
+            (SELECT m.authorUuid FROM messages m WHERE m.conversationUuid = c.uuid ORDER BY m.createdAt DESC LIMIT 1) as lastMessageAuthorUuid,
+            crs.lastReadAt
         FROM conversations c
         JOIN conversation_members cm ON c.uuid = cm.conversationUuid
+        LEFT JOIN conversation_read_status crs ON c.uuid = crs.conversationUuid AND crs.userUuid = ?
         WHERE cm.userUuid = ?
         ORDER BY c.updatedAt DESC
-    `, userUuid);
+    `, userUuid, userUuid);
 
     const conversations: Conversation[] = [];
     for (const row of rows) {
@@ -2226,6 +2251,8 @@ export async function getConversationsForUser(userUuid: string): Promise<Convers
             }
         }
         
+        const hasUnread = !!(row.lastMessage && row.lastMessageAuthorUuid !== userUuid && (!row.lastReadAt || new Date(row.updatedAt) > new Date(row.lastReadAt)));
+
         conversations.push({
             uuid: row.uuid,
             type: row.type,
@@ -2234,7 +2261,7 @@ export async function getConversationsForUser(userUuid: string): Promise<Convers
             lastMessage: row.lastMessage,
             lastMessageAt: row.updatedAt,
             lastMessageAuthor: row.lastMessageAuthor,
-            unreadCount: 0, // Placeholder
+            hasUnread,
             projectUuid: row.projectUuid,
             otherUserUuid,
         });

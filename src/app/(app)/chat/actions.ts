@@ -5,6 +5,7 @@ import {
     getConversationsForUser,
     getMessagesForConversation,
     createMessage,
+    markConversationAsRead,
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
@@ -22,11 +23,14 @@ export async function getConversationsAction(): Promise<Conversation[] | { error
 }
 
 export async function getMessagesAction(conversationUuid: string): Promise<Message[] | { error: string }> {
-    // TODO: Add a check to ensure the current user is part of this conversation
     const userUuid = await getCurrentUserUuid();
     if (!userUuid) return { error: "Authentication required" };
 
     try {
+        // Mark conversation as read when messages are fetched
+        await markConversationAsRead(conversationUuid, userUuid);
+        // Revalidate the chat path to update the sidebar unread status for all users
+        revalidatePath('/chat');
         return await getMessagesForConversation(conversationUuid);
     } catch (e: any) {
         return { error: e.message || "Failed to fetch messages." };
