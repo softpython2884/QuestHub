@@ -102,3 +102,12 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Added for Space Theme background */
+@layer components {
+  .space-bg {
+    @apply absolute inset-0 bg-cover bg-center;
+    background-image: url('/deep_space/materials/background.png');
+    animation: space-pan 120s linear infinite alternate;
+  }
+}

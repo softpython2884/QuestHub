@@ -92,11 +92,20 @@ export default {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
+        'space-pan': {
+          '0%': {
+            transform: 'scale(1.05) translate(2%, -2%)',
+          },
+          '100%': {
+            transform: 'scale(1.15) translate(-2%, 2%)',
+          },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'fade-in': 'fade-in 0.5s ease-in-out',
+        'space-pan': 'space-pan 120s linear infinite alternate',
       },
       typography: ({ theme }: { theme: any }) => ({
         DEFAULT: { // Light theme prose

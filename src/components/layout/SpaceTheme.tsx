@@ -1,15 +1,12 @@
 
 'use client';
 
+// This component will now render a single div styled by globals.css
+// to create an animated background effect.
 export function SpaceTheme() {
   return (
-    <div className="fixed inset-0 -z-10 h-full w-full">
-      <iframe
-        src="/deep_space/index.html"
-        className="absolute inset-0 h-full w-full border-none"
-        title="Interactive Background"
-        data-ai-hint="space animation"
-      />
+    <div className="fixed inset-0 -z-10 h-full w-full overflow-hidden">
+      <div className="space-bg" data-ai-hint="space background"></div>
       <div className="absolute inset-0 h-full w-full bg-black/50" />
     </div>
   );
