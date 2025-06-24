@@ -56,8 +56,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <AppSidebar />
         <SidebarInset>
           <AppHeader />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 animate-fade-in">
-            {children}
+          <main className="flex-1 overflow-y-auto pointer-events-none">
+            <div className="p-4 sm:p-6 lg:p-8 animate-fade-in pointer-events-auto">
+              {children}
+            </div>
           </main>
           <Chatbot />
           <Toaster />
