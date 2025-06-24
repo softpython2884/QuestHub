@@ -107,10 +107,10 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20 shadow-lg">
         <CardHeader>
-          <CardTitle className="text-3xl font-headline text-primary">
+          <CardTitle className="text-2xl font-headline sm:text-3xl text-primary">
             Welcome back, {user.name}!
           </CardTitle>
-          <CardDescription className="text-lg">
+          <CardDescription className="text-base sm:text-lg">
             Here&apos;s what&apos;s happening in your FlowUp workspace today.
           </CardDescription>
         </CardHeader>
