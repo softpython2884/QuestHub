@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { SpaceTheme } from '@/components/layout/SpaceTheme';
 
 export const metadata: Metadata = {
   title: 'FlowUp',
@@ -25,8 +26,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
-        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#111827" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0a0f1e" />
       </head>
       <body className="font-body antialiased">
         <ThemeProvider
@@ -35,6 +35,7 @@ export default function RootLayout({
           forcedTheme="dark"
           disableTransitionOnChange
         >
+          <SpaceTheme />
           <AuthProvider>
             {children}
             <Toaster />

@@ -1,8 +1,6 @@
 
 'use client';
 
-// This component will now render a single div styled by globals.css
-// to create an animated background effect.
 export function SpaceTheme() {
   return (
     <div className="fixed inset-0 -z-10 h-full w-full overflow-hidden">

@@ -4,83 +4,32 @@
 
 @layer base {
   :root {
-    /* Default theme (light) - Kept for reference but not used */
-    --background: 210 40% 98%;
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 215 27.9% 95.3%;
-    --secondary-foreground: 224 71.4% 4.1%;
-    --muted: 215 27.9% 95.3%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 215 27.9% 95.3%;
-    --accent-foreground: 224 71.4% 4.1%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 90%;
-    --input: 215 27.9% 90%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    /* Base Dark Theme - Now overridden by theme-space */
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
-    --card: 224 71.4% 10%;
-    --card-foreground: 210 20% 98%;
-    --popover: 224 71.4% 4.1%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 210 20% 98%;
-    --primary-foreground: 224 71.4% 4.1%;
-    --secondary: 215 27.9% 16.9%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --accent: 215 27.9% 16.9%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 216 12.2% 83.9%;
-  }
-
-  /* Space Theme Override */
-  .theme-space {
-    --background: 224 71% 4%; /* Deep space blue */
-    --foreground: 210 40% 98%; /* Light, almost white text */
-    
-    /* Glassmorphism styles */
-    --card: 215 28% 17% / 0.1; /* Semi-transparent dark blue */
+    --background: 224 71% 4%;
+    --foreground: 210 40% 98%;
+    --card: 215 28% 17% / 0.1;
     --card-foreground: 210 40% 98%;
-    
     --popover: 224 71.4% 4.1%;
     --popover-foreground: 210 20% 98%;
-    
-    --primary: 217 91% 60%; /* Bright blue for accents */
+    --primary: 217 91% 60%;
     --primary-foreground: 210 40% 98%;
-    
-    --secondary: 215 28% 17% / 0.5; /* Darker, more opaque secondary elements */
+    --secondary: 215 28% 17% / 0.5;
     --secondary-foreground: 210 40% 98%;
-    
     --muted: 215 28% 17% / 0.2;
-    --muted-foreground: 215 20% 65%; /* Softer gray for muted text */
-    
-    --accent: 217 91% 60% / 0.1; /* Transparent accent for hover states */
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60% / 0.1;
     --accent-foreground: 210 40% 98%;
-    
-    --destructive: 0 72% 51%; /* Red for destructive actions */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
-    
-    --border: 217 91% 60% / 0.2; /* Glowing blue border */
-    --input: 215 28% 17% / 0.3; /* Transparent input background */
+    --border: 217 91% 60% / 0.2;
+    --input: 215 28% 17% / 0.3;
     --ring: 217 91% 70%;
     --radius: 0.75rem;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 173 58% 50%;
+    --chart-3: 0 72% 51%;
+    --chart-4: 43 94% 50%;
+    --chart-5: 270 90% 65%;
 
     --sidebar-background: 224 71.4% 4.1% / 0.8;
     --sidebar-foreground: 210 20% 98%;
@@ -90,6 +39,34 @@
     --sidebar-accent-foreground: 210 20% 98%;
     --sidebar-border: 215 27.9% 16.9% / 0.5;
     --sidebar-ring: 215 20.2% 65.1%;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 210 40% 98%;
+    --card: 215 28% 17% / 0.1;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 215 28% 17% / 0.5;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 17% / 0.2;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60% / 0.1;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 91% 60% / 0.2;
+    --input: 215 28% 17% / 0.3;
+    --ring: 217 91% 70%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 173 58% 50%;
+    --chart-3: 0 72% 51%;
+    --chart-4: 43 94% 50%;
+    --chart-5: 270 90% 65%;
   }
 }
 
@@ -103,7 +80,6 @@
   }
 }
 
-/* Added for Space Theme background */
 @layer components {
   .space-bg {
     @apply absolute inset-0 bg-cover bg-center;

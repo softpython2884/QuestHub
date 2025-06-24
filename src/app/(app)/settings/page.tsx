@@ -4,7 +4,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database, Star } from "lucide-react";
+import { Bell, Shield, Code2, MessageSquare, Info, Copy, Check, Send, Github, HardDrive, Database } from "lucide-react";
 import Link from 'next/link';
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect, useTransition, useActionState } from "react";
@@ -18,7 +18,6 @@ import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { UserRole } from "@/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -163,26 +162,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary"/> Appearance</CardTitle>
-            <CardDescription>Customize the look and feel of the application.</CardDescription>
-          </CardHeader>
-          <CardContent>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-primary/30">
-                  <div className="flex items-center gap-3">
-                    <Star className="h-6 w-6 text-primary" />
-                    <div>
-                        <h4 className="font-semibold">Space Theme</h4>
-                        <p className="text-xs text-muted-foreground">The default immersive experience.</p>
-                    </div>
-                  </div>
-                  <Check className="h-5 w-5 text-green-500" />
-              </div>
-              <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><Shield className="mr-2 h-5 w-5 text-primary"/> Security</CardTitle>
