@@ -29,15 +29,14 @@ const getJwtSecretOrThrow = (): string => {
 
 export async function auth(): Promise<Session | null> {
   const jwtSecret = getJwtSecretOrThrow(); 
-  const cookieStore = cookies();
-  const tokenCookieValue = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  const tokenCookie = cookies().get(AUTH_COOKIE_NAME);
 
-  if (!tokenCookieValue) {
+  if (!tokenCookie || !tokenCookie.value) {
     return null;
   }
 
   try {
-    const decoded = jwt.verify(tokenCookieValue, jwtSecret) as DecodedToken;
+    const decoded = jwt.verify(tokenCookie.value, jwtSecret) as DecodedToken;
     const userFromDb = await dbGetUserByUuid(decoded.uuid);
     
     if (!userFromDb) {
