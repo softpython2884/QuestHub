@@ -1163,7 +1163,7 @@ function ProjectDetailPageContent() {
       } else if ((event.key === 'Enter' || event.key === 'Tab') && activeSuggestionIndex >= 0 && activeSuggestionIndex < tagSuggestions.length) {
         event.preventDefault(); 
         event.stopPropagation(); 
-        handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], fieldApi, formApi);
+        handleTagSuggestionClick(tagSuggestions[activeSuggestionIndex], field, formApi);
         return; 
       } else if (event.key === 'Escape') {
         event.preventDefault();
@@ -1465,7 +1465,7 @@ function ProjectDetailPageContent() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 gap-1 sm:grid-cols-4 md:grid-cols-6">
           <TabsTrigger value="tasks"><CheckSquare className="mr-2 h-4 w-4"/>Tasks</TabsTrigger>
           <TabsTrigger value="readme"><BookOpen className="mr-2 h-4 w-4"/>README</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="mr-2 h-4 w-4"/>Documents</TabsTrigger>

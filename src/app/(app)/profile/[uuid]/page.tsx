@@ -121,12 +121,12 @@ export default function PublicProfilePage() {
                     <h1 className="text-3xl font-bold text-center">{profile.name}</h1>
                     <p className="text-muted-foreground">@{profile.name.toLowerCase().replace(/\s+/g, '')}</p>
                     <div className="flex items-center gap-4 mt-4">
-                        {profile.showGithubOnProfile && socials.github && (
+                        {profile.showGithubOnProfile && socials.github?.html_url && (
                             <a href={socials.github.html_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary">
                                 <Github className="h-6 w-6" />
                             </a>
                         )}
-                        {profile.showDiscordOnProfile && socials.discord && (
+                        {profile.showDiscordOnProfile && socials.discord?.username && (
                              <span className="text-muted-foreground flex items-center gap-1" title={`${socials.discord.username}#${socials.discord.discriminator}`}>
                                 <MessageSquare className="h-6 w-6" />
                             </span>

@@ -3,14 +3,15 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardFooter, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { generateProjectIdeasAction, generateProjectScaffoldAction, generateDocumentContentAction } from './actions';
-import type { GenerateProjectIdeasOutput, GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-ideas';
+import type { GenerateProjectIdeasOutput } from '@/ai/flows/generate-project-ideas';
+import type { GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import type { GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
 import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';

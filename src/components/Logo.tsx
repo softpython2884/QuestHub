@@ -12,7 +12,7 @@ export function Logo({ className, iconSize = 24, textSize = 'text-xl' }: LogoPro
   return (
     <Link href="/" className={`flex items-center gap-2 ${className}`}>
       <Atom size={iconSize} className="text-primary" />
-      <span className={`font-bold ${textSize} text-foreground`}>FlowUp</span>
+      <span className={`font-bold ${textSize}`}>FlowUp</span>
     </Link>
   );
 }
