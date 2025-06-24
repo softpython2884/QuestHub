@@ -20,7 +20,7 @@ export default function HomePage() {
   }, [user, isLoading, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-screen items-center justify-center bg-transparent">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
     </div>
   );
