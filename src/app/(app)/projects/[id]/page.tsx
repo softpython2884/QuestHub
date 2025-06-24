@@ -1322,7 +1322,7 @@ function ProjectDetailPageContent() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-36 mb-4" /> 
-        <Card className="shadow-lg">
+        <Card>
           <CardHeader>
             <Skeleton className="h-8 w-1/2" /> 
             <Skeleton className="h-5 w-3/4 mt-2" /> 
@@ -1368,7 +1368,7 @@ function ProjectDetailPageContent() {
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
-      <Card className={cn("shadow-lg", project.isUrgent && "border-2 border-destructive ring-2 ring-destructive/50")}>
+      <Card className={cn(project.isUrgent && "border-2 border-destructive ring-2 ring-destructive/50")}>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
             <div>
@@ -2246,7 +2246,7 @@ function ProjectDetailPageContent() {
                     )}
                     {!isLoadingGithubAuth && userGithubOAuthToken && project.githubRepoUrl && (
                         <div className="space-y-6">
-                        <Card className="bg-green-50 dark:bg-green-900/30 border-green-500 shadow-md">
+                        <Card className="bg-green-50 dark:bg-green-900/30 border-green-500">
                             <CardHeader>
                                 <div className="flex items-center gap-2">
                                     <CheckCircle className="h-6 w-6 text-green-600" />

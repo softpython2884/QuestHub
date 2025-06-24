@@ -54,9 +54,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen bg-background">
         <AppSidebar />
-        <SidebarInset> {/* This is now a div */}
+        <SidebarInset>
           <AppHeader />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"> {/* This is the main content area */}
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 animate-fade-in">
             {children}
           </main>
           <Chatbot />
