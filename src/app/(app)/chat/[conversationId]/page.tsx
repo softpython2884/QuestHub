@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useRef, useOptimistic, startTransition } from 'react';
@@ -149,10 +150,7 @@ export default function ConversationPage() {
                                         remarkPlugins={[remarkGfm]} 
                                         className="prose prose-sm dark:prose-invert max-w-none"
                                         components={{
-                                            a: ({node, ...props}) => {
-                                                const isSender = message.authorUuid === user?.uuid;
-                                                return <a {...props} className={cn(isSender ? "underline hover:opacity-80" : "text-primary hover:underline")} />
-                                            }
+                                            a: ({node, ...props}) => <a {...props} className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer" />
                                         }}
                                     >
                                         {message.content}
