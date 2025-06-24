@@ -307,6 +307,7 @@ export interface Message {
     authorAvatar?: string;
     content: string;
     createdAt: string;
+    pending?: boolean;
 }
 
 export type ConversationType = 'dm' | 'project';
