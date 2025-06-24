@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useState, useRef, useOptimistic, startTransition } from 'react';
+import { useEffect, useState, useRef, startTransition } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -21,11 +22,7 @@ export default function ConversationPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [messages, setMessages] = useState<Message[]>([]);
-    const [optimisticMessages, addOptimisticMessage] = useOptimistic<Message[], Message>(
-        messages,
-        (state, newMessage) => [...state, newMessage]
-    );
-
+    
     const [isLoading, setIsLoading] = useState(true);
     const [input, setInput] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -59,21 +56,19 @@ export default function ConversationPage() {
                 console.error('Polling error:', freshMessages.error);
                 return;
             }
-            setMessages(currentMessages => {
-                if (JSON.stringify(currentMessages) !== JSON.stringify(freshMessages)) {
-                    return freshMessages;
-                }
-                return currentMessages;
-            });
+            // Only update if there are new messages we don't have locally
+            if (freshMessages.length > messages.length) {
+                setMessages(freshMessages);
+            }
         }, 3000);
 
         return () => clearInterval(poll);
-    }, [conversationId, user]);
+    }, [conversationId, user, messages.length]); // depend on messages.length to reset interval with new state
 
 
     useEffect(() => {
         scrollToBottom();
-    }, [optimisticMessages]);
+    }, [messages]);
 
     const getInitials = (name?: string) => {
         if (!name) return '??';
@@ -99,29 +94,34 @@ export default function ConversationPage() {
             createdAt: new Date().toISOString(),
             pending: true,
         };
-        startTransition(() => {
-            addOptimisticMessage(optimisticMessage);
-        });
 
-        const result = await sendMessageAction(conversationId, currentInput);
+        startTransition(() => {
+            setMessages(prev => [...prev, optimisticMessage]);
+        });
         
-        if ('error' in result) {
-            toast({ variant: 'destructive', title: 'Error', description: result.error });
-             getMessagesAction(conversationId).then(freshMessages => {
-                if (!('error' in freshMessages)) {
-                    setMessages(freshMessages);
-                }
-            });
-            setInput(currentInput);
-        } else {
-            // Force a refresh immediately to replace optimistic state with real data from server
-            getMessagesAction(conversationId).then(freshMessages => {
-                if (!('error' in freshMessages)) {
-                    setMessages(freshMessages);
-                }
-            });
+        try {
+            const result = await sendMessageAction(conversationId, currentInput.trim());
+            
+            if ('error' in result) {
+                toast({ variant: 'destructive', title: 'Error', description: result.error });
+                // Revert: remove optimistic message
+                setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
+                setInput(currentInput);
+            } else {
+                // Success: replace optimistic message with the real one
+                setMessages(prev => 
+                    prev.map(m => 
+                        m.uuid === optimisticMessage.uuid ? result : m
+                    )
+                );
+            }
+        } catch (error) {
+             toast({ variant: 'destructive', title: 'Error', description: 'Failed to send message. Please check your connection.' });
+             setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
+             setInput(currentInput);
+        } finally {
+             setIsSending(false);
         }
-        setTimeout(() => setIsSending(false), 1000); // 1s cooldown to prevent spam
     };
 
     if (isLoading) {
@@ -132,7 +132,7 @@ export default function ConversationPage() {
         <div className="flex flex-col h-full">
             <ScrollArea className="flex-grow">
                 <div className="p-4 space-y-4">
-                    {optimisticMessages.map(message => (
+                    {messages.map(message => (
                          <div key={message.uuid} className={cn('flex items-start gap-3', message.authorUuid === user?.uuid ? 'justify-end' : 'justify-start', message.pending && 'opacity-60')}>
                             {message.authorUuid !== user?.uuid && (
                                 <Avatar className="h-8 w-8">
@@ -147,7 +147,7 @@ export default function ConversationPage() {
                                         remarkPlugins={[remarkGfm]} 
                                         className="prose prose-sm dark:prose-invert max-w-none"
                                         components={{
-                                            a: ({node, ...props}) => <a {...props} className="underline hover:opacity-80" target="_blank" rel="noopener noreferrer" />
+                                            a: ({node, ...props}) => <a {...props} className="underline text-inherit hover:opacity-80" target="_blank" rel="noopener noreferrer" />
                                         }}
                                     >
                                         {message.content}
