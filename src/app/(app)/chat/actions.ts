@@ -40,8 +40,8 @@ export async function sendMessageAction(conversationUuid: string, content: strin
 
     try {
         const newMessage = await createMessage(conversationUuid, userUuid, content.trim());
-        revalidatePath(`/chat/${conversationUuid}`);
-        revalidatePath('/chat'); // Revalidate the layout to update last message
+        // Revalidate the chat layout to update the last message in the sidebar
+        revalidatePath('/chat');
         return newMessage;
     } catch (e: any) {
         return { error: e.message || "Failed to send message." };

@@ -76,13 +76,16 @@ export default function ConversationPage() {
         setInput('');
 
         const result = await sendMessageAction(conversationId, currentInput);
+        
         if ('error' in result) {
             toast({ variant: 'destructive', title: 'Error', description: result.error });
-            // Revert optimistic update
-            setMessages(prev => prev.filter(m => m.uuid !== optimisticMessage.uuid));
             setInput(currentInput);
+        } else {
+            // The optimistic update is automatically replaced by the real state update.
+            // We ensure the real state `messages` gets the confirmed message.
+            // The revalidation in the action will handle updating other parts like the sidebar.
+            setMessages(prev => [...prev, result]);
         }
-        // No need to manually update state on success, revalidation will handle it.
     };
 
     if (isLoading) {
