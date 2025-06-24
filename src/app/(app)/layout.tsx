@@ -35,11 +35,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (isLoading) {
     return (
       <div className="flex min-h-screen animate-pulse">
-        <div className="w-16 md:w-64 bg-muted/50"></div>
-        <div className="flex-1 flex flex-col">
-          <div className="h-16 bg-muted/50 border-b"></div>
-          <div className="flex-1 p-6 bg-muted/30">
-            <div className="h-full w-full bg-muted/50 rounded-lg"></div>
+        <div className="w-16 md:w-64 bg-sidebar"></div>
+        <div className="flex-1 flex flex-col bg-transparent">
+          <div className="h-16 bg-card/50 border-b"></div>
+          <div className="flex-1 p-6">
+            <div className="h-full w-full bg-card/50 rounded-lg"></div>
           </div>
         </div>
       </div>
@@ -52,7 +52,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex min-h-screen bg-transparent">
         <AppSidebar />
         <SidebarInset>
           <AppHeader />

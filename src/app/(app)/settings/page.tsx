@@ -5,9 +5,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Palette, Shield, Code2, MessageSquare, Sun, Moon, Laptop, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database } from "lucide-react";
+import { Bell, Shield, Code2, MessageSquare, Info, GitBranch, KeyRound, Copy, Check, Send, Github, HardDrive, Database } from "lucide-react";
 import Link from 'next/link';
-import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect, useTransition, useActionState } from "react";
 import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
@@ -23,7 +22,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 
 
 export default function SettingsPage() {
-  const { setTheme } = useTheme();
   const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -167,24 +165,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary"/> Appearance</CardTitle>
-            <CardDescription>Customize the look and feel.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="space-y-2">
-                <label className="text-sm font-medium">Theme</label>
-                <div className="grid grid-cols-3 gap-2">
-                    <Button variant="outline" onClick={() => setTheme('light')}><Sun className="mr-2"/>Light</Button>
-                    <Button variant="outline" onClick={() => setTheme('dark')}><Moon className="mr-2"/>Dark</Button>
-                    <Button variant="outline" onClick={() => setTheme('system')}><Laptop className="mr-2"/>System</Button>
-                </div>
-            </div>
-             <p className="text-sm text-muted-foreground text-center pt-4">More themes coming soon!</p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><Shield className="mr-2 h-5 w-5 text-primary"/> Security</CardTitle>
