@@ -33,7 +33,11 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  const { client_id, redirect_uri, response_type, state, scope } = searchParams;
+  const client_id = searchParams?.client_id;
+  const redirect_uri = searchParams?.redirect_uri;
+  const response_type = searchParams?.response_type;
+  const state = searchParams?.state;
+  const scope = searchParams?.scope;
 
   if (!client_id || !redirect_uri || !response_type || !state) {
     return (

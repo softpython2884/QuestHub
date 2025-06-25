@@ -28,20 +28,21 @@ const getJwtSecretOrThrow = (): string => {
 };
 
 export async function auth(): Promise<Session | null> {
-  const jwtSecret = getJwtSecretOrThrow(); 
-  const tokenCookie = cookies().get(AUTH_COOKIE_NAME);
+  const cookieStore = cookies();
+  const tokenCookie = cookieStore.get(AUTH_COOKIE_NAME);
 
   if (!tokenCookie || !tokenCookie.value) {
     return null;
   }
 
   try {
+    const jwtSecret = getJwtSecretOrThrow();
     const decoded = jwt.verify(tokenCookie.value, jwtSecret) as DecodedToken;
     const userFromDb = await dbGetUserByUuid(decoded.uuid);
     
     if (!userFromDb) {
       console.warn(`[authEdge.auth] User ${decoded.uuid} from JWT not found in DB. Invalidating session.`);
-      cookies().delete(AUTH_COOKIE_NAME);
+      cookieStore.delete(AUTH_COOKIE_NAME);
       return null;
     }
     
@@ -52,7 +53,7 @@ export async function auth(): Promise<Session | null> {
 
   } catch (error: any) {
     console.warn('[authEdge.auth] JWT verification failed:', error.message ? error.message : error);
-    cookies().delete(AUTH_COOKIE_NAME);
+    cookieStore.delete(AUTH_COOKIE_NAME);
     return null;
   }
 }
