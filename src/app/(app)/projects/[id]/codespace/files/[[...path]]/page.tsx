@@ -697,7 +697,7 @@ function FileExplorerContent() {
                     {fileData.type === 'image' && fileData.encoding === 'base64' && (
                         <div className="p-4 border rounded-md bg-muted/30 flex justify-center items-center max-h-[70vh]">
                             <NextImage
-                                src={`data:image/${getFileExtension(fileData.name)};base64,${fileData.content}`}
+                                src={`data:image/${getFileExtension(fileData.name)};base64,${fileData.content.trimEnd()}`}
                                 alt={fileData.name}
                                 width={0}
                                 height={0}
@@ -865,7 +865,8 @@ function FileExplorerContent() {
                     <DialogFooter>
                         <DialogClose asChild><Button type="button" variant="ghost" disabled={isAiEditingFile}>Cancel</Button></DialogClose>
                         <Button type="submit" disabled={isAiEditingFile || !aiEditFileForm.formState.isValid}>
-                            {isAiEditingFile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Apply AI Edit
+                            {isAiEditingFile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Apply AI Edit
                         </Button>
                     </DialogFooter>
                   </form>

@@ -4,6 +4,7 @@
 
 
 
+
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -49,6 +50,7 @@ import {
   setProjectVanityId as dbSetProjectVanityId,
 } from '@/lib/db';
 import { z } from 'zod';
+import { cookies } from 'next/headers';
 import { auth } from '@/lib/authEdge';
 import { Octokit } from 'octokit';
 import { Buffer } from 'buffer';
@@ -1672,6 +1674,9 @@ export async function getRepoContentsAction(projectUuid: string, path: string = 
     console.error(`[getRepoContentsAction] Error fetching content for ${owner}/${repo}/${path}:`, error.status, error.message, error.response?.data);
     let userMessage = "Failed to fetch repository contents.";
     if (error.status === 404) {
+        if (error.response?.data?.message?.includes("This repository is empty")) {
+            return []; // An empty repo is a valid state, not an error.
+        }
         userMessage = `Path '${path}' not found in repository '${project.githubRepoName}'.`;
     } else if (error.status === 403) { 
         userMessage = `Access denied to repository '${project.githubRepoName}'. Check your GitHub token permissions (requires 'repo' scope) or the repository's existence and your access rights.`;
@@ -2195,7 +2200,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
