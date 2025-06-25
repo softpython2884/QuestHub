@@ -6,9 +6,10 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Atom, LayoutDashboard, FolderKanban, Sparkles, MessageSquare, CheckSquare, ListChecks, Bot, User } from 'lucide-react';
+import { Atom, LayoutDashboard, FolderKanban, Sparkles, MessageSquare, CheckSquare, ListChecks, Bot, User, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
+import Link from 'next/link';
 
 const AnimationStep = ({
   step,
@@ -193,6 +194,14 @@ client.run('YOUR_TOKEN_HERE')`}</code></pre>
             <p className="text-muted-foreground mt-2 mb-6">Sign up for FlowUp today.</p>
             <Button size="lg" className="text-lg" onClick={() => window.location.href = '/signup'}>
                 Get Started
+            </Button>
+        </AnimationStep>
+      </div>
+
+       <div className="fixed bottom-8 right-8 z-10">
+        <AnimationStep step={6} currentStep={step}>
+            <Button asChild size="lg">
+                <Link href="/present2">Next <ArrowRight className="ml-2 h-5 w-5"/></Link>
             </Button>
         </AnimationStep>
       </div>

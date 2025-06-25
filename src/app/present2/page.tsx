@@ -1,12 +1,14 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { FolderKanban, CheckSquare, ListChecks, Users } from 'lucide-react';
+import { FolderKanban, CheckSquare, ListChecks, Users, ArrowLeft, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Logo } from '@/components/Logo';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 const AnimationStep = ({ step, currentStep, children, className }: { step: number; currentStep: number; children: React.ReactNode; className?: string; }) => (
   <div className={cn('transition-all duration-700 ease-in-out', currentStep >= step ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5', className)}>
@@ -87,6 +89,18 @@ export default function PresentationPage2() {
               </div>
             </CardContent>
           </Card>
+        </AnimationStep>
+      </div>
+      <div className="fixed bottom-8 right-8 z-10 flex gap-4">
+        <AnimationStep step={5} currentStep={step}>
+            <Button asChild size="lg" variant="outline">
+                <Link href="/present"><ArrowLeft className="mr-2 h-5 w-5"/> Previous</Link>
+            </Button>
+        </AnimationStep>
+        <AnimationStep step={5} currentStep={step}>
+            <Button asChild size="lg">
+                <Link href="/present3">Next <ArrowRight className="ml-2 h-5 w-5"/></Link>
+            </Button>
         </AnimationStep>
       </div>
     </div>

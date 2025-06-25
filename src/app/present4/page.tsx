@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,8 +6,9 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Compass, Star, Search, User, Github } from 'lucide-react';
+import { Compass, Star, Search, User, Github, ArrowLeft, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 
 const AnimationStep = ({ step, currentStep, children, className, delay = 0 }: { step: number; currentStep: number; children: React.ReactNode; className?: string; delay?: number }) => (
@@ -73,6 +75,19 @@ export default function PresentationPage4() {
                     </AnimationStep>
                 ))}
             </div>
+        </AnimationStep>
+      </div>
+
+      <div className="fixed bottom-8 right-8 z-10 flex gap-4">
+        <AnimationStep step={3} currentStep={step} delay={projects.length * 100}>
+            <Button asChild size="lg" variant="outline">
+                <Link href="/present3"><ArrowLeft className="mr-2 h-5 w-5"/> Previous</Link>
+            </Button>
+        </AnimationStep>
+        <AnimationStep step={3} currentStep={step} delay={projects.length * 100}>
+            <Button asChild size="lg">
+                <Link href="/present5">Next <ArrowRight className="ml-2 h-5 w-5"/></Link>
+            </Button>
         </AnimationStep>
       </div>
     </div>

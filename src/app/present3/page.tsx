@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,10 +6,11 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Shield, Users, GitBranch, KeyRound, Database } from 'lucide-react';
+import { Shield, Users, GitBranch, KeyRound, Database, ArrowLeft, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { Input } from '@/components/ui/input';
+import Link from 'next/link';
 
 
 const AnimationStep = ({ step, currentStep, children, className }: { step: number; currentStep: number; children: React.ReactNode; className?: string; }) => (
@@ -96,6 +98,19 @@ export default function PresentationPage3() {
                 </Card>
             </AnimationStep>
         </div>
+      </div>
+
+       <div className="fixed bottom-8 right-8 z-10 flex gap-4">
+        <AnimationStep step={4} currentStep={step}>
+            <Button asChild size="lg" variant="outline">
+                <Link href="/present2"><ArrowLeft className="mr-2 h-5 w-5"/> Previous</Link>
+            </Button>
+        </AnimationStep>
+        <AnimationStep step={4} currentStep={step}>
+            <Button asChild size="lg">
+                <Link href="/present4">Next <ArrowRight className="ml-2 h-5 w-5"/></Link>
+            </Button>
+        </AnimationStep>
       </div>
     </div>
   );

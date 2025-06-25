@@ -9,9 +9,10 @@ import { useEffect, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getSignupPageData, type SignupPageData } from './actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Play } from 'lucide-react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 
 export default function SignupPage() {
@@ -75,6 +76,11 @@ export default function SignupPage() {
       </CardHeader>
       <CardContent>
         <SignupForm prefilledEmail={pageData?.email} invitationToken={pageData?.token} />
+         <div className="!mt-6 text-center">
+            <Button variant="link" asChild className="text-muted-foreground">
+                <Link href="/present"><Play className="mr-2 h-4 w-4" /> Watch Presentation</Link>
+            </Button>
+        </div>
       </CardContent>
     </Card>
   );

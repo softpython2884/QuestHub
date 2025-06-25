@@ -7,6 +7,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Play } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const { user, isLoading } = useAuth();
@@ -43,6 +46,11 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent>
         <LoginForm />
+         <div className="!mt-6 text-center">
+            <Button variant="link" asChild className="text-muted-foreground">
+                <Link href="/present"><Play className="mr-2 h-4 w-4" /> Watch Presentation</Link>
+            </Button>
+        </div>
       </CardContent>
     </Card>
   );

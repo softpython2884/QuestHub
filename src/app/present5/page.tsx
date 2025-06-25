@@ -1,12 +1,14 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, GitCommit, ListChecks, User, Github } from 'lucide-react';
+import { CheckCircle, GitCommit, ListChecks, User, Github, ArrowLeft, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, Pie, PieChart, Cell } from 'recharts';
+import Link from 'next/link';
 
 const AnimationStep = ({ step, currentStep, children, className, delay = 0 }: { step: number; currentStep: number; children: React.ReactNode; className?: string; delay?: number }) => (
   <div className={cn('transition-all duration-700 ease-in-out', currentStep >= step ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5', className)} style={{ transitionDelay: `${delay}ms`}}>
@@ -113,6 +115,19 @@ export default function PresentationPage5() {
             </AnimationStep>
           </div>
         </div>
+      </div>
+
+       <div className="fixed bottom-8 right-8 z-10 flex gap-4">
+        <AnimationStep step={4} currentStep={step}>
+            <Button asChild size="lg" variant="outline">
+                <Link href="/present4"><ArrowLeft className="mr-2 h-5 w-5"/> Previous</Link>
+            </Button>
+        </AnimationStep>
+        <AnimationStep step={4} currentStep={step}>
+            <Button asChild size="lg">
+                <Link href="/present">Start Over <RefreshCw className="ml-2 h-5 w-5"/></Link>
+            </Button>
+        </AnimationStep>
       </div>
     </div>
   );
