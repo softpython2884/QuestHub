@@ -3,6 +3,7 @@
 
 
 
+
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -2194,7 +2195,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
