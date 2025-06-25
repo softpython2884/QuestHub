@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -92,7 +91,16 @@ export function Chatbot() {
                     </Avatar>
                    )}
                   <div className={cn('max-w-[80%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm dark:prose-invert max-w-none break-words">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      className={cn(
+                        'prose prose-sm max-w-none break-words',
+                        message.role === 'model' && 'dark:prose-invert'
+                      )}
+                      components={{
+                        a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.role === 'user' ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
+                      }}
+                    >
                       {message.content}
                     </ReactMarkdown>
                   </div>
