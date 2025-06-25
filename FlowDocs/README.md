@@ -34,6 +34,9 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
 - **Étape 7 : Découverte & Équipe (`07-Discover-and-Team.md`)**
   - Fonctionnalités sociales de l'application.
 
-- **Étape 8 : Déploiement & Configuration (`08-Deployment.md`)**
+- **Étape 8 : Feature Focus - Chat (`08-Chat.md`)**
+  - Fonctionnement de la messagerie instantanée.
+
+- **Étape 9 : Déploiement & Configuration (`09-Deployment.md`)**
   - Variables d'environnement nécessaires.
   - Instructions pour le build et le déploiement.
