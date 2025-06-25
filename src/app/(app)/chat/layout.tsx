@@ -1,8 +1,8 @@
 
 import { getConversationsAction } from './actions';
-import { ChatSidebar } from './_components/ChatSidebar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
+import { ChatLayoutClient } from './_components/ChatLayoutClient';
 
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
   const conversationsResult = await getConversationsAction();
@@ -20,11 +20,8 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.24))]">
-        <ChatSidebar initialConversations={conversationsResult} />
-        <div className="flex-1 overflow-y-auto">
-            {children}
-        </div>
-    </div>
+    <ChatLayoutClient conversations={conversationsResult}>
+        {children}
+    </ChatLayoutClient>
   );
 }

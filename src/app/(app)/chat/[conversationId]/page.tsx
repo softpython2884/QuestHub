@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Send, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { Loader2, Send, MoreHorizontal, Edit, Trash2, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,7 @@ import remarkGfm from 'remark-gfm';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
 
 export default function ConversationPage() {
@@ -151,6 +152,16 @@ export default function ConversationPage() {
     
     return (
         <div className="flex flex-col h-full">
+            {/* Header for mobile view */}
+            <div className="p-2 border-b flex items-center gap-2 md:hidden sticky top-0 bg-background z-10">
+                <Button asChild variant="ghost" size="icon">
+                    <Link href="/chat">
+                        <ArrowLeft className="h-5 w-5" />
+                    </Link>
+                </Button>
+                <h2 className="font-semibold text-base truncate">Chat</h2>
+            </div>
+
             <ScrollArea className="flex-grow">
                 <div className="p-4 space-y-4">
                     {messages.map(message => (
@@ -196,7 +207,7 @@ export default function ConversationPage() {
                                             remarkPlugins={[remarkGfm]} 
                                             className={cn(
                                                 'prose prose-sm max-w-none',
-                                                message.authorUuid === user?.uuid ? '' : 'dark:prose-invert'
+                                                message.authorUuid === user?.uuid ? 'prose-primary-foreground' : 'dark:prose-invert'
                                             )}
                                             components={{
                                                 a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.authorUuid === user?.uuid ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />

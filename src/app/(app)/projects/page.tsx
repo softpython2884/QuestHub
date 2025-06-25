@@ -11,7 +11,8 @@ import type { Project, DuplicateProjectFormState } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
-import { fetchProjectsAction, importProjectsFromGithubAction } from "./actions";
+import { fetchProjectsAction, getLinkableGithubReposAction, createProjectFromRepoAction } from "./actions";
+import type { LinkableGithubRepo } from "./actions";
 import { duplicateProjectAction } from "./[id]/actions";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 export default function ProjectsPage() {
@@ -33,6 +35,10 @@ export default function ProjectsPage() {
   const [duplicateFormState, duplicateFormAction, isDuplicating] = useActionState(duplicateProjectAction, { message: "", error: ""});
   
   const [isImporting, startImportTransition] = useTransition();
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [linkableRepos, setLinkableRepos] = useState<LinkableGithubRepo[]>([]);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(false);
+  const [repoToImport, setRepoToImport] = useState<LinkableGithubRepo | null>(null);
 
   const loadProjects = useCallback(async () => {
     if (user && !authLoading) {
@@ -57,25 +63,31 @@ export default function ProjectsPage() {
     loadProjects();
   }, [loadProjects]);
   
-  const handleImportFromGithub = () => {
-    startImportTransition(async () => {
-      const result = await importProjectsFromGithubAction();
-      if (result.success) {
-        toast({
-          title: "Import Complete",
-          description: `${result.importedCount} new project(s) were imported from GitHub.`
-        });
-        if (result.importedCount && result.importedCount > 0) {
-            loadProjects(); // Refresh the list
-        }
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Import Failed",
-          description: result.error,
-        });
-      }
-    });
+  const handleOpenImportDialog = async () => {
+    setIsImportDialogOpen(true);
+    setIsLoadingRepos(true);
+    const result = await getLinkableGithubReposAction();
+    if (result.repos) {
+        setLinkableRepos(result.repos);
+    } else {
+        toast({ variant: 'destructive', title: "Error", description: result.error || "Could not fetch repositories." });
+    }
+    setIsLoadingRepos(false);
+  };
+
+  const handleImportRepo = (repo: LinkableGithubRepo) => {
+      startImportTransition(async () => {
+          setRepoToImport(repo);
+          const result = await createProjectFromRepoAction(repo);
+          if (result.project) {
+              toast({ title: "Project Created", description: `Project "${result.project.name}" has been created and linked.`});
+              setIsImportDialogOpen(false);
+              loadProjects(); // refresh project list
+          } else {
+              toast({ variant: 'destructive', title: "Import Failed", description: result.error });
+          }
+          setRepoToImport(null);
+      });
   };
 
   useEffect(() => {
@@ -137,7 +149,7 @@ export default function ProjectsPage() {
           <p className="text-muted-foreground">Manage all your team's projects from one place.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleImportFromGithub} disabled={isImporting}>
+          <Button variant="outline" onClick={handleOpenImportDialog} disabled={isImporting}>
             {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-4 w-4" />}
             Import from GitHub
           </Button>
@@ -295,6 +307,45 @@ export default function ProjectsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+                <DialogTitle>Import from GitHub</DialogTitle>
+                <DialogDescription>
+                    Select an existing GitHub repository to create a new FlowUp project.
+                </DialogDescription>
+            </DialogHeader>
+            {isLoadingRepos ? (
+                <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            ) : linkableRepos.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                    <p>No unlinked repositories found, or you need to connect your GitHub account.</p>
+                </div>
+            ) : (
+                <ScrollArea className="h-96">
+                    <div className="space-y-2 pr-4">
+                        {linkableRepos.map(repo => (
+                            <Card key={repo.fullName} className="p-3">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="font-semibold">{repo.fullName}</p>
+                                        <p className="text-sm text-muted-foreground truncate">{repo.description || "No description"}</p>
+                                    </div>
+                                    <Button size="sm" onClick={() => handleImportRepo(repo)} disabled={isImporting && repoToImport?.fullName === repo.fullName}>
+                                        {isImporting && repoToImport?.fullName === repo.fullName ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                        Import
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </ScrollArea>
+            )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
