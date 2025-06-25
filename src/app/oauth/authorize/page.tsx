@@ -4,8 +4,8 @@ import { getAuthorizePageData } from './actions';
 import { AuthorizeView } from './_components/AuthorizeView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShieldAlert } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface AuthorizePageProps {
@@ -18,8 +18,24 @@ interface AuthorizePageProps {
   };
 }
 
-function OAuthAuthorizePage({ searchParams }: AuthorizePageProps) {
-  if (!searchParams.client_id || !searchParams.redirect_uri || !searchParams.response_type || !searchParams.state) {
+function AuthorizePageFallback() {
+    return (
+        <Card className="shadow-xl">
+            <CardHeader>
+                <CardTitle>Authorizing...</CardTitle>
+                <CardDescription>Please wait while we verify the application request.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center items-center py-16">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </CardContent>
+        </Card>
+    );
+}
+
+async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
+  const { client_id, redirect_uri, response_type, state, scope } = searchParams;
+
+  if (!client_id || !redirect_uri || !response_type || !state) {
     return (
       <Card className="shadow-xl">
         <CardHeader>
@@ -43,16 +59,7 @@ function OAuthAuthorizePage({ searchParams }: AuthorizePageProps) {
     );
   }
 
-  return (
-    <Suspense fallback={<div>Loading authorization request...</div>}>
-      <AuthorizeContent searchParams={searchParams} />
-    </Suspense>
-  );
-}
-
-async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  const { client_id, redirect_uri, response_type, state, scope } = searchParams;
-  const result = await getAuthorizePageData(client_id!, redirect_uri!, response_type!, state!, scope);
+  const result = await getAuthorizePageData(client_id, redirect_uri, response_type, state, scope);
 
   if (result.error) {
     return (
@@ -79,4 +86,10 @@ async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
   return <AuthorizeView data={result.data!} />;
 }
 
-export default OAuthAuthorizePage;
+export default function OAuthAuthorizePage({ searchParams }: AuthorizePageProps) {
+  return (
+    <Suspense fallback={<AuthorizePageFallback />}>
+      <AuthorizeContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
