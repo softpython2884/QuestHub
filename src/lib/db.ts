@@ -324,6 +324,38 @@ export async function getDbConnection() {
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS authorization_codes (
+        code TEXT PRIMARY KEY,
+        clientId TEXT NOT NULL,
+        userUuid TEXT NOT NULL,
+        redirectUri TEXT NOT NULL,
+        scope TEXT,
+        expiresAt TEXT NOT NULL,
+        FOREIGN KEY (clientId) REFERENCES oauth_apps(clientId) ON DELETE CASCADE,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+        token TEXT PRIMARY KEY,
+        userUuid TEXT NOT NULL,
+        clientId TEXT NOT NULL,
+        scope TEXT,
+        expiresAt TEXT NOT NULL,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (clientId) REFERENCES oauth_apps(clientId) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+        token TEXT PRIMARY KEY,
+        userUuid TEXT NOT NULL,
+        clientId TEXT NOT NULL,
+        scope TEXT,
+        expiresAt TEXT NOT NULL,
+        isRevoked BOOLEAN DEFAULT FALSE,
+        FOREIGN KEY (userUuid) REFERENCES users(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (clientId) REFERENCES oauth_apps(clientId) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE NOT NULL,
@@ -2038,6 +2070,20 @@ export async function getOAuthAppsForUser(userUuid: string): Promise<OAuthApp[]>
     }));
 }
 
+export async function getOAuthAppByClientId(clientId: string, includeSecret: boolean = false): Promise<(OAuthApp & { clientSecretHashed?: string }) | null> {
+    const connection = await getDbConnection();
+    const cols = 'uuid, name, description, ownerUuid, clientId, redirectUris, website, logoUrl, createdAt, updatedAt' + (includeSecret ? ', clientSecretHashed' : '');
+    const row = await connection.get<any>(
+        `SELECT ${cols} FROM oauth_apps WHERE clientId = ?`,
+        clientId
+    );
+    if (!row) return null;
+    return {
+        ...row,
+        redirectUris: JSON.parse(row.redirectUris || '[]'),
+    };
+}
+
 export async function deleteOAuthApp(appUuid: string, userUuid: string): Promise<boolean> {
     const connection = await getDbConnection();
     const result = await connection.run(
@@ -2047,6 +2093,44 @@ export async function deleteOAuthApp(appUuid: string, userUuid: string): Promise
     );
     return result.changes ? result.changes > 0 : false;
 }
+
+export async function createAuthorizationCode(code: string, clientId: string, userUuid: string, redirectUri: string, scope: string): Promise<void> {
+    const connection = await getDbConnection();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+    await connection.run(
+        'INSERT INTO authorization_codes (code, clientId, userUuid, redirectUri, scope, expiresAt) VALUES (?, ?, ?, ?, ?, ?)',
+        code, clientId, userUuid, redirectUri, scope, expiresAt
+    );
+}
+
+export async function getAuthorizationCode(code: string): Promise<{ code: string; clientId: string; userUuid: string; redirectUri: string; scope: string; expiresAt: string } | null> {
+    const connection = await getDbConnection();
+    return connection.get('SELECT * FROM authorization_codes WHERE code = ?', code);
+}
+
+export async function deleteAuthorizationCode(code: string): Promise<void> {
+    const connection = await getDbConnection();
+    await connection.run('DELETE FROM authorization_codes WHERE code = ?', code);
+}
+
+export async function createRefreshToken(userUuid: string, clientId: string, scope: string): Promise<{ token: string }> {
+    const connection = await getDbConnection();
+    const token = uuidv4().replace(/-/g, '');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+    await connection.run(
+        'INSERT INTO oauth_refresh_tokens (token, userUuid, clientId, scope, expiresAt) VALUES (?, ?, ?, ?, ?)',
+        token, userUuid, clientId, scope, expiresAt
+    );
+    return { token };
+}
+
+export async function getRefreshToken(token: string): Promise<{ token: string; userUuid: string; clientId: string; scope: string; isRevoked: boolean; expiresAt: string } | null> {
+    const connection = await getDbConnection();
+    const row = await connection.get<any>('SELECT * FROM oauth_refresh_tokens WHERE token = ?', token);
+    if (!row) return null;
+    return { ...row, isRevoked: !!row.isRevoked };
+}
+
 
 // Dashboard Functions
 export async function getTasksForUserProjects(userUuid: string): Promise<Array<Task & { projectName: string }>> {
