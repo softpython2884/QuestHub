@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { generateProjectIdeasAction, generateProjectScaffoldAction, generateDocumentContentAction } from './actions';
-import type { GenerateProjectIdeasOutput, GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-ideas';
+import {
+  generateProjectIdeasAction,
+  generateProjectScaffoldAction,
+  generateDocumentContentAction,
+  addScaffoldToProjectAction,
+} from './actions';
+import { fetchProjectsAction } from '../projects/actions';
+import type { Project } from '@/types';
+import type { GenerateProjectIdeasOutput } from '@/ai/flows/generate-project-ideas';
+import type { GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import type { GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
 import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/hooks/useAuth';
 
 type AIGeneratorTool = 'ideas' | 'scaffold' | 'docs';
 
 export default function StudioPage() {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [isPending, startTransition] = useTransition();
     
     // State for each tool
@@ -30,6 +41,23 @@ export default function StudioPage() {
     const [ideaResult, setIdeaResult] = useState<GenerateProjectIdeasOutput | null>(null);
     const [scaffoldResult, setScaffoldResult] = useState<GenerateProjectScaffoldOutput | null>(null);
     const [docResult, setDocResult] = useState<GenerateDocumentContentOutput | null>(null);
+
+    // State for adding scaffold to project
+    const [isAddToProjectDialogOpen, setIsAddToProjectDialogOpen] = useState(false);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+    const [selectedProjectUuid, setSelectedProjectUuid] = useState<string | null>(null);
+    const [isAddingToProject, startAddingToProjectTransition] = useTransition();
+
+    useEffect(() => {
+        if (user) {
+            setIsLoadingProjects(true);
+            fetchProjectsAction(user.uuid)
+                .then(setProjects)
+                .catch(err => toast({ variant: 'destructive', title: 'Error', description: 'Could not load your projects.' }))
+                .finally(() => setIsLoadingProjects(false));
+        }
+    }, [user, toast]);
 
     const handleGenerate = (tool: AIGeneratorTool) => {
         if (!prompt.trim()) {
@@ -59,6 +87,39 @@ export default function StudioPage() {
             }
         });
     };
+    
+    const handleAddToProject = () => {
+        if (!selectedProjectUuid || !scaffoldResult) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please select a project.' });
+            return;
+        }
+
+        startAddingToProjectTransition(async () => {
+            const result = await addScaffoldToProjectAction(selectedProjectUuid, scaffoldResult.files);
+            if (result.errorCount > 0) {
+                toast({
+                    variant: 'destructive',
+                    duration: 10000,
+                    title: 'Error Adding Files',
+                    description: (
+                        <div>
+                            <p>{result.successCount} files added, {result.errorCount} failed.</p>
+                            <ul className="list-disc pl-5 mt-2">
+                                {result.errors.slice(0, 3).map((e, i) => <li key={i} className="text-xs">{e}</li>)}
+                            </ul>
+                        </div>
+                    )
+                });
+            } else {
+                toast({
+                    title: 'Success!',
+                    description: `${result.successCount} files were added to your project.`
+                });
+                setIsAddToProjectDialogOpen(false);
+                setSelectedProjectUuid(null);
+            }
+        });
+    }
 
     const openDialog = (tool: AIGeneratorTool) => {
         setPrompt('');
@@ -105,6 +166,12 @@ export default function StudioPage() {
                             </AccordionItem>
                         ))}
                     </Accordion>
+                    <div className="pt-4 border-t">
+                        <Button onClick={() => setIsAddToProjectDialogOpen(true)} disabled={isLoadingProjects}>
+                            <FolderGit2 className="mr-2 h-4 w-4" /> Add to Project
+                        </Button>
+                         {isLoadingProjects && <p className="text-xs text-muted-foreground mt-1">Loading projects...</p>}
+                    </div>
                 </div>
             );
         }
@@ -216,6 +283,44 @@ export default function StudioPage() {
                         <DialogClose asChild><Button type="button" variant="ghost" disabled={isPending}>Close</Button></DialogClose>
                         <Button type="button" onClick={() => handleGenerate(activeDialog!)} disabled={isPending || !prompt}>
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Generate
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+             <Dialog open={isAddToProjectDialogOpen} onOpenChange={setIsAddToProjectDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Scaffold to Project</DialogTitle>
+                        <DialogDescription>Select a project to add the {scaffoldResult?.files.length || 0} generated files to its GitHub repository.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <Label htmlFor="project-select">Target Project</Label>
+                        <Select
+                            value={selectedProjectUuid || ""}
+                            onValueChange={setSelectedProjectUuid}
+                            disabled={isLoadingProjects || isAddingToProject}
+                        >
+                            <SelectTrigger id="project-select">
+                                <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select a project..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {projects.filter(p => p.githubRepoName).map(project => (
+                                    <SelectItem key={project.uuid} value={project.uuid}>
+                                        {project.name}
+                                    </SelectItem>
+                                ))}
+                                {projects.filter(p => !p.githubRepoName).length > 0 && (
+                                    <p className="p-2 text-xs text-muted-foreground">Some projects are not shown because they are not linked to GitHub.</p>
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost" disabled={isAddingToProject}>Cancel</Button></DialogClose>
+                        <Button onClick={handleAddToProject} disabled={isAddingToProject || !selectedProjectUuid}>
+                            {isAddingToProject && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Add Files to Project
                         </Button>
                     </DialogFooter>
                 </DialogContent>

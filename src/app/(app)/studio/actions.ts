@@ -5,6 +5,8 @@ import { generateProjectIdeas, type GenerateProjectIdeasOutput } from '@/ai/flow
 import { generateProjectScaffold, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import { generateDocumentContent, type GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
 import { z } from 'zod';
+import { createGithubFileAction } from '@/app/(app)/projects/[id]/actions';
+import { revalidatePath } from 'next/cache';
 
 const PromptSchema = z.object({
   prompt: z.string().min(10, 'Prompt must be at least 10 characters long.'),
@@ -53,4 +55,35 @@ export async function generateDocumentContentAction(
   } catch (e: any) {
     return { error: e.message || 'Failed to generate document content.' };
   }
+}
+
+export async function addScaffoldToProjectAction(
+  projectUuid: string,
+  files: { filePath: string; content: string }[]
+): Promise<{ successCount: number; errorCount: number; errors: string[] }> {
+  let successCount = 0;
+  let errorCount = 0;
+  const errors: string[] = [];
+
+  for (const file of files) {
+    const result = await createGithubFileAction(
+      projectUuid,
+      file.filePath,
+      file.content,
+      `AI Scaffold: ${file.filePath}`
+    );
+
+    if (result.success) {
+      successCount++;
+    } else {
+      errorCount++;
+      errors.push(`Failed to create '${file.filePath}': ${result.error}`);
+    }
+  }
+
+  if (successCount > 0) {
+    revalidatePath(`/projects/${projectUuid}`);
+  }
+
+  return { successCount, errorCount, errors };
 }
