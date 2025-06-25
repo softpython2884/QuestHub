@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -39,13 +38,13 @@ const bottomNavItems = [
     { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
-       <Sidebar collapsible="icon">
+       <Sidebar collapsible="icon" className={className}>
         <SidebarHeader className="p-4 justify-center">
            <div className="h-8 w-32 bg-muted rounded animate-pulse" />
         </SidebarHeader>
@@ -84,7 +83,7 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className={className}>
       <SidebarHeader className="p-4 justify-center">
         <Logo iconSize={28} textSize="text-xl" />
       </SidebarHeader>
