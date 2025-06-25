@@ -31,6 +31,9 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
   - Présentation de Genkit.
   - Structure des `flows` et comment interagir avec l'IA.
 
-- **Étape 7 : Déploiement & Configuration (`07-Deployment.md`)**
+- **Étape 7 : Découverte & Équipe (`07-Discover-and-Team.md`)**
+  - Fonctionnalités sociales de l'application.
+
+- **Étape 8 : Déploiement & Configuration (`08-Deployment.md`)**
   - Variables d'environnement nécessaires.
   - Instructions pour le build et le déploiement.
