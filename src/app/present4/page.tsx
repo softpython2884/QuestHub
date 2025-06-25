@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -66,7 +65,7 @@ export default function PresentationPage4() {
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <Star className="text-yellow-400" size={16}/>
-                                        <span>{p.stars.toLocaleString()}</span>
+                                        <span>{p.stars.toLocaleString('en-US')}</span>
                                     </div>
                                </div>
                                 <Button variant="outline" className="w-full mt-4"><Github className="mr-2 h-4 w-4"/> View on GitHub</Button>
