@@ -1,3 +1,4 @@
+
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -99,45 +100,45 @@ export default {
         'fade-in': 'fade-in 0.5s ease-in-out',
       },
       typography: ({ theme }: { theme: any }) => ({
-        DEFAULT: { // Light theme prose
+        DEFAULT: { // Light theme prose (dark text)
           css: {
-            '--tw-prose-body': theme('colors.foreground / 1'),
-            '--tw-prose-headings': theme('colors.foreground / 1'),
-            '--tw-prose-lead': theme('colors.muted.foreground / 1'),
-            '--tw-prose-links': theme('colors.primary.DEFAULT / 1'),
-            '--tw-prose-bold': theme('colors.foreground / 1'),
-            '--tw-prose-counters': theme('colors.muted.foreground / 1'),
-            '--tw-prose-bullets': theme('colors.muted.foreground / 1'),
-            '--tw-prose-hr': theme('colors.border / 1'),
-            '--tw-prose-quotes': theme('colors.foreground / 1'),
-            '--tw-prose-quote-borders': theme('colors.primary.DEFAULT / 1'),
-            '--tw-prose-captions': theme('colors.muted.foreground / 1'),
-            '--tw-prose-code': theme('colors.foreground / 1'), // Code text color
-            '--tw-prose-pre-code': theme('colors.foreground / 1'), // Code block text color
-            '--tw-prose-pre-bg': theme('colors.muted.DEFAULT / 0.5'), // Code block background (light gray)
-            '--tw-prose-th-borders': theme('colors.border / 1'),
-            '--tw-prose-td-borders': theme('colors.border / 1'),
+            '--tw-prose-body': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-headings': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-lead': 'hsl(215.4 16.3% 46.9%)',
+            '--tw-prose-links': 'hsl(221.2 83.2% 53.3%)',
+            '--tw-prose-bold': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-counters': 'hsl(215.4 16.3% 46.9%)',
+            '--tw-prose-bullets': 'hsl(215.4 16.3% 46.9%)',
+            '--tw-prose-hr': 'hsl(215 27.9% 90%)',
+            '--tw-prose-quotes': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-quote-borders': 'hsl(215 27.9% 90%)',
+            '--tw-prose-captions': 'hsl(215.4 16.3% 46.9%)',
+            '--tw-prose-code': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-pre-code': 'hsl(224 71.4% 4.1%)',
+            '--tw-prose-pre-bg': 'hsl(215 27.9% 95.3%)',
+            '--tw-prose-th-borders': 'hsl(215 27.9% 90%)',
+            '--tw-prose-td-borders': 'hsl(215 27.9% 90%)',
              // Ensure list items in prose have some space
-            'ul > li::before': { backgroundColor: theme('colors.muted.foreground / 1') },
-            'ol > li::before': { color: theme('colors.muted.foreground / 1') },
+            'ul > li::before': { backgroundColor: 'hsl(215.4 16.3% 46.9%)' },
+            'ol > li::before': { color: 'hsl(215.4 16.3% 46.9%)' },
             'li': { marginTop: theme('spacing.1'), marginBottom: theme('spacing.1') },
              // Style for task list items
             '.task-list-item': { display: 'flex', alignItems: 'center' },
             '.task-list-item-checkbox': { marginRight: theme('spacing.2') },
           },
         },
-        invert: { // Dark theme prose
+        invert: { // Dark theme prose (light text)
           css: {
-            '--tw-prose-body': theme('colors.foreground / 1'), 
-            '--tw-prose-headings': theme('colors.foreground / 1'),
-            '--tw-prose-lead': theme('colors.muted.foreground / 1'),
-            '--tw-prose-links': theme('colors.primary.DEFAULT / 1'),
-            '--tw-prose-bold': theme('colors.foreground / 1'),
-            '--tw-prose-code': theme('colors.foreground / 1'), // Code text color for dark
-            '--tw-prose-pre-code': theme('colors.foreground / 1'), // Code block text color for dark
-            '--tw-prose-pre-bg': theme('colors.secondary.DEFAULT / 0.7'), // Code block background for dark (slightly darker gray)
-            'ul > li::before': { backgroundColor: theme('colors.muted.foreground / 1') },
-            'ol > li::before': { color: theme('colors.muted.foreground / 1') },
+            '--tw-prose-body': 'hsl(210 20% 98%)',
+            '--tw-prose-headings': 'hsl(210 20% 98%)',
+            '--tw-prose-lead': 'hsl(217.9 10.6% 64.9%)',
+            '--tw-prose-links': 'hsl(210 20% 98%)',
+            '--tw-prose-bold': 'hsl(210 20% 98%)',
+            '--tw-prose-code': 'hsl(210 20% 98%)',
+            '--tw-prose-pre-code': 'hsl(210 20% 98%)',
+            '--tw-prose-pre-bg': 'hsl(215 27.9% 16.9% / 0.7)',
+            'ul > li::before': { backgroundColor: 'hsl(217.9 10.6% 64.9%)' },
+            'ol > li::before': { color: 'hsl(217.9 10.6% 64.9%)' },
             'li': { marginTop: theme('spacing.1'), marginBottom: theme('spacing.1') },
           },
         },

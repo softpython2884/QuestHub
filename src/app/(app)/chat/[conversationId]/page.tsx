@@ -180,9 +180,7 @@ export default function ConversationPage() {
                                 </Avatar>
                             )}
 
-                            <div className="max-w-[75%] space-y-1">
-                                {message.authorUuid !== user?.uuid && <p className="text-xs text-muted-foreground ml-2">{message.authorName}</p>}
-                                <div className={cn('rounded-lg px-3 py-2 text-sm break-words', message.authorUuid === user?.uuid ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                            <div className={cn('rounded-lg px-3 py-2 text-sm break-words', message.authorUuid === user?.uuid ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
                                     {message.isDeleted ? (
                                         <p className="italic text-muted-foreground">This message has been deleted.</p>
                                     ) : editingMessage?.uuid === message.uuid ? (
@@ -196,7 +194,10 @@ export default function ConversationPage() {
                                     ) : (
                                         <ReactMarkdown 
                                             remarkPlugins={[remarkGfm]} 
-                                            className="prose prose-sm dark:prose-invert max-w-none"
+                                            className={cn(
+                                                'prose prose-sm max-w-none',
+                                                message.authorUuid === user?.uuid ? '' : 'dark:prose-invert'
+                                            )}
                                             components={{
                                                 a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.authorUuid === user?.uuid ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
                                             }}
