@@ -23,9 +23,9 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
   - Utilisation de ShadCN UI et Tailwind CSS.
   - Structure des composants et principes de styling.
 
-- **Étape 5 : Fonctionnalités Clés (`05-Core-Features.md`)**
-  - Description détaillée de chaque fonctionnalité majeure (Projets, Tâches, Chat, etc.).
-  - Logique métier et utilisation des "Server Actions".
+- **Étape 5 : Feature Focus - Projets (`05-Projects.md`)**
+  - Documentation complète de la fonctionnalité "Projets".
+  - *D'autres documents dédiés aux fonctionnalités suivront (Tâches, Chat, etc.).*
 
 - **Étape 6 : Intégration de l'IA avec Genkit (`06-AI-Integration.md`)**
   - Présentation de Genkit.
