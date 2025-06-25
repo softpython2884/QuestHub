@@ -29,7 +29,8 @@ const getJwtSecretOrThrow = (): string => {
 
 export async function auth(): Promise<Session | null> {
   const jwtSecret = getJwtSecretOrThrow(); 
-  const tokenCookie = cookies().get(AUTH_COOKIE_NAME);
+  const cookieStore = cookies();
+  const tokenCookie = cookieStore.get(AUTH_COOKIE_NAME);
 
   if (!tokenCookie || !tokenCookie.value) {
     return null;
