@@ -11,7 +11,7 @@ import type { Project, DuplicateProjectFormState } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
-import { fetchProjectsAction, getLinkableGithubReposAction, createProjectFromRepoAction } from "./actions";
+import { fetchProjectsAction, getLinkableGithubReposAction, createProjectFromRepoAction, importFlowUpProjectsAction } from "./actions";
 import type { LinkableGithubRepo } from "./actions";
 import { duplicateProjectAction } from "./[id]/actions";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ export default function ProjectsPage() {
   const [duplicateFormState, duplicateFormAction, isDuplicating] = useActionState(duplicateProjectAction, { message: "", error: ""});
   
   const [isImporting, startImportTransition] = useTransition();
+  const [isBulkImporting, startBulkImportTransition] = useTransition();
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [linkableRepos, setLinkableRepos] = useState<LinkableGithubRepo[]>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
@@ -89,6 +90,20 @@ export default function ProjectsPage() {
           setRepoToImport(null);
       });
   };
+  
+  const handleBulkImport = () => {
+    startBulkImportTransition(async () => {
+      const result = await importFlowUpProjectsAction();
+      if (result.error) {
+        toast({ variant: 'destructive', title: "Bulk Import Error", description: result.error });
+      } else {
+        toast({ title: "Bulk Import Complete", description: `Successfully imported ${result.successCount} projects. ${result.errorCount > 0 ? `${result.errorCount} failed.` : ''}` });
+      }
+      setIsImportDialogOpen(false);
+      loadProjects();
+    });
+  };
+
 
   useEffect(() => {
     if (!isDuplicating && duplicateFormState) {
@@ -329,12 +344,12 @@ export default function ProjectsPage() {
                     <div className="space-y-2 pr-4">
                         {linkableRepos.map(repo => (
                             <Card key={repo.fullName} className="p-3">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="font-semibold">{repo.fullName}</p>
+                                <div className="flex justify-between items-center gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-semibold truncate">{repo.fullName}</p>
                                         <p className="text-sm text-muted-foreground truncate">{repo.description || "No description"}</p>
                                     </div>
-                                    <Button size="sm" onClick={() => handleImportRepo(repo)} disabled={isImporting && repoToImport?.fullName === repo.fullName}>
+                                    <Button size="sm" onClick={() => handleImportRepo(repo)} disabled={isImporting && repoToImport?.fullName === repo.fullName} className="flex-shrink-0">
                                         {isImporting && repoToImport?.fullName === repo.fullName ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                                         Import
                                     </Button>
@@ -344,6 +359,17 @@ export default function ProjectsPage() {
                     </div>
                 </ScrollArea>
             )}
+             <DialogFooter className="pt-4 border-t mt-4">
+                <Button 
+                    variant="secondary" 
+                    className="w-full" 
+                    onClick={handleBulkImport} 
+                    disabled={isLoadingRepos || isImporting || isBulkImporting || linkableRepos.length === 0}
+                >
+                    {isBulkImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Github className="mr-2 h-4 w-4" />}
+                    Import all repositories containing "FlowUp"
+                </Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

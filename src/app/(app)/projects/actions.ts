@@ -107,3 +107,50 @@ export async function createProjectFromRepoAction(repo: LinkableGithubRepo): Pro
         return { error: error.message || "An unexpected error occurred." };
     }
 }
+
+export async function importFlowUpProjectsAction(): Promise<{
+  success: boolean;
+  successCount: number;
+  errorCount: number;
+  error?: string;
+}> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    return { success: false, successCount: 0, errorCount: 0, error: "Authentication required." };
+  }
+
+  try {
+    const reposResult = await getLinkableGithubReposAction();
+    if (reposResult.error || !reposResult.repos) {
+      return { success: false, successCount: 0, errorCount: 0, error: reposResult.error || "Could not fetch repositories." };
+    }
+    
+    const flowupRepos = reposResult.repos.filter(repo => 
+      repo.name.toLowerCase().includes('flowup')
+    );
+
+    if (flowupRepos.length === 0) {
+      return { success: true, successCount: 0, errorCount: 0, error: "No new 'FlowUp' repositories found to import." };
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const repo of flowupRepos) {
+      const result = await createProjectFromRepoAction(repo);
+      if (result.project) {
+        successCount++;
+      } else {
+        errorCount++;
+        console.error(`Failed to import repo ${repo.fullName}:`, result.error);
+      }
+    }
+    
+    revalidatePath('/projects');
+    return { success: true, successCount, errorCount };
+
+  } catch (error: any) {
+    console.error("Error during bulk import:", error);
+    return { success: false, successCount: 0, errorCount: 0, error: error.message || "An unexpected error occurred during bulk import." };
+  }
+}
