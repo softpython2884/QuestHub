@@ -33,37 +33,8 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  const client_id = searchParams?.client_id;
-  const redirect_uri = searchParams?.redirect_uri;
-  const response_type = searchParams?.response_type;
-  const state = searchParams?.state;
-  const scope = searchParams?.scope;
-
-  if (!client_id || !redirect_uri || !response_type || !state) {
-    return (
-      <Card className="shadow-xl">
-        <CardHeader>
-          <CardTitle className="flex items-center text-destructive">
-            <ShieldAlert className="mr-2 h-5 w-5" />
-            Authorization Error
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertTitle>Missing Required Parameters</AlertTitle>
-            <AlertDescription>
-              The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided.
-            </AlertDescription>
-          </Alert>
-          <Button asChild variant="link" className="mt-4">
-             <Link href="/dashboard">Go to Dashboard</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const result = await getAuthorizePageData(client_id, redirect_uri, response_type, state, scope);
+  // Pass the entire searchParams object to the server action
+  const result = await getAuthorizePageData(searchParams);
 
   if (result.error) {
     return (

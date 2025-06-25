@@ -18,12 +18,19 @@ interface AuthorizePageData {
 }
 
 export async function getAuthorizePageData(
-  clientId: string,
-  redirectUri: string,
-  responseType: string,
-  state: string,
-  scope?: string
+  searchParams: { [key: string]: string | string[] | undefined }
 ): Promise<{ data?: AuthorizePageData; error?: string }> {
+  
+  const clientId = searchParams?.client_id as string;
+  const redirectUri = searchParams?.redirect_uri as string;
+  const responseType = searchParams?.response_type as string;
+  const state = searchParams?.state as string;
+  const scope = searchParams?.scope as string;
+
+  if (!clientId || !redirectUri || !responseType || !state) {
+    return { error: "The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." };
+  }
+
   const session = await auth();
   if (!session?.user) {
     const callbackUrl = new URLSearchParams({
@@ -49,7 +56,6 @@ export async function getAuthorizePageData(
     return { error: "Invalid 'redirect_uri'. The provided URL is not registered for this application." };
   }
   
-  // Basic scope validation (can be expanded)
   const requestedScopes = scope ? scope.split(' ') : [];
 
   return {

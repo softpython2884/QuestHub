@@ -28,14 +28,14 @@ const getJwtSecretOrThrow = (): string => {
 };
 
 export async function auth(): Promise<Session | null> {
-  const cookieStore = cookies();
-  const tokenCookie = cookieStore.get(AUTH_COOKIE_NAME);
-
-  if (!tokenCookie || !tokenCookie.value) {
-    return null;
-  }
-
   try {
+    const cookieStore = cookies();
+    const tokenCookie = cookieStore.get(AUTH_COOKIE_NAME);
+
+    if (!tokenCookie || !tokenCookie.value) {
+      return null;
+    }
+
     const jwtSecret = getJwtSecretOrThrow();
     const decoded = jwt.verify(tokenCookie.value, jwtSecret) as DecodedToken;
     const userFromDb = await dbGetUserByUuid(decoded.uuid);
@@ -52,8 +52,12 @@ export async function auth(): Promise<Session | null> {
     };
 
   } catch (error: any) {
-    console.warn('[authEdge.auth] JWT verification failed:', error.message ? error.message : error);
-    cookieStore.delete(AUTH_COOKIE_NAME);
+    console.warn('[authEdge.auth] JWT verification failed:', error.message);
+    try {
+        cookies().delete(AUTH_COOKIE_NAME);
+    } catch (deleteError) {
+        console.error('[authEdge.auth] Failed to delete invalid auth cookie during error handling:', deleteError);
+    }
     return null;
   }
 }
