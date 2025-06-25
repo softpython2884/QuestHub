@@ -191,36 +191,38 @@ export default function ConversationPage() {
                                 </Avatar>
                             )}
 
-                            <div className={cn('rounded-lg px-3 py-2 text-sm break-words', message.authorUuid === user?.uuid ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                                    {message.isDeleted ? (
-                                        <p className="italic text-muted-foreground">This message has been deleted.</p>
-                                    ) : editingMessage?.uuid === message.uuid ? (
-                                        <div className="space-y-2">
-                                            <Textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} rows={3} className="bg-background text-foreground"/>
-                                            <div className="flex gap-2">
-                                                <Button size="sm" variant="secondary" onClick={handleCancelEdit}>Cancel</Button>
-                                                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+                            <div className="flex flex-col items-start">
+                                <div className={cn('rounded-lg px-3 py-2 text-sm break-words', message.authorUuid === user?.uuid ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                                        {message.isDeleted ? (
+                                            <p className="italic text-muted-foreground">This message has been deleted.</p>
+                                        ) : editingMessage?.uuid === message.uuid ? (
+                                            <div className="space-y-2">
+                                                <Textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} rows={3} className="bg-background text-foreground"/>
+                                                <div className="flex gap-2">
+                                                    <Button size="sm" variant="secondary" onClick={handleCancelEdit}>Cancel</Button>
+                                                    <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <ReactMarkdown 
-                                            remarkPlugins={[remarkGfm]} 
-                                            className={cn(
-                                                'prose prose-sm max-w-none',
-                                                message.authorUuid === user?.uuid ? 'prose-primary-foreground' : 'dark:prose-invert'
-                                            )}
-                                            components={{
-                                                a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.authorUuid === user?.uuid ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
-                                            }}
-                                        >
-                                            {message.content}
-                                        </ReactMarkdown>
+                                        ) : (
+                                            <ReactMarkdown 
+                                                remarkPlugins={[remarkGfm]} 
+                                                className={cn(
+                                                    'prose prose-sm max-w-none',
+                                                    message.authorUuid === user?.uuid ? 'prose-primary-foreground' : 'dark:prose-invert'
+                                                )}
+                                                components={{
+                                                    a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.authorUuid === user?.uuid ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
+                                                }}
+                                            >
+                                                {message.content}
+                                            </ReactMarkdown>
+                                        )}
+                                    </div>
+                                    {message.isEdited && !message.isDeleted && (
+                                        <span className="text-xs text-muted-foreground mt-1 px-1">(edited)</span>
                                     )}
-                                </div>
-                                 {message.isEdited && !message.isDeleted && (
-                                    <span className="text-xs text-muted-foreground ml-2">(edited)</span>
-                                 )}
                             </div>
+
                             {message.authorUuid === user?.uuid && user && (
                                 <Avatar className="h-8 w-8">
                                     <AvatarImage src={user.avatar} alt={user.name} />
