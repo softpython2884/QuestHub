@@ -74,7 +74,7 @@ export function Chatbot() {
   return (
     <>
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[425px] md:max-w-lg h-[70vh] flex flex-col">
+        <DialogContent className="sm:max-w-[425px] md:max-w-lg h-[70vh] flex flex-col pointer-events-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Bot className="text-primary"/>Flowy Assistant</DialogTitle>
             <DialogDescription>
@@ -134,7 +134,7 @@ export function Chatbot() {
         </DialogContent>
       </Dialog>
       <Button
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg pointer-events-auto"
         size="icon"
         onClick={() => setIsOpen(true)}
       >
