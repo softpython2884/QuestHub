@@ -25,7 +25,6 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
 
 - **Étape 5 : Feature Focus - Projets (`05-Projects.md`)**
   - Documentation complète de la fonctionnalité "Projets".
-  - *D'autres documents dédiés aux fonctionnalités suivront (Tâches, Chat, etc.).*
 
 - **Étape 6 : Intégration de l'IA avec Genkit (`06-AI-Integration.md`)**
   - Présentation de Genkit.
@@ -37,6 +36,9 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
 - **Étape 8 : Feature Focus - Chat (`08-Chat.md`)**
   - Fonctionnement de la messagerie instantanée.
 
-- **Étape 9 : Déploiement & Configuration (`09-Deployment.md`)**
+- **Étape 9 : Fonctionnalités Communautaires (`09-Community-Features.md`)**
+  - Fonctionnement des Annonces, Documents, Suggestions et du Coffre-Fort.
+
+- **Étape 10 : Déploiement & Configuration (`10-Deployment.md`)**
   - Variables d'environnement nécessaires.
   - Instructions pour le build et le déploiement.
