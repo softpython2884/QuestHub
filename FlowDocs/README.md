@@ -39,6 +39,9 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
 - **Étape 9 : Fonctionnalités Communautaires (`09-Community-Features.md`)**
   - Fonctionnement des Annonces, Documents, Suggestions et du Coffre-Fort.
 
-- **Étape 10 : Déploiement & Configuration (`10-Deployment.md`)**
+- **Étape 10 : Applications OAuth (`10-OAuth-Apps.md`)**
+  - Explique comment les développeurs tiers peuvent créer des applications s'intégrant à FlowUp.
+
+- **Étape 11 : Déploiement & Configuration (`11-Deployment.md`)**
   - Variables d'environnement nécessaires.
   - Instructions pour le build et le déploiement.
