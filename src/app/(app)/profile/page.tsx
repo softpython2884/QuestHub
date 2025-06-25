@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -121,6 +122,12 @@ export default function ProfilePage() {
       });
     }
   }, [user, form]);
+  
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -198,7 +205,7 @@ export default function ProfilePage() {
   }, [disconnectDiscordState, isDisconnectDiscordPending, toast]);
 
 
-  if (authLoading) {
+  if (authLoading || !user) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-1/3" />
@@ -227,12 +234,6 @@ export default function ProfilePage() {
         </Card>
       </div>
     );
-  }
-
-  if (!user) {
-    // Should be redirected by useAuth hook or AppLayout, but as a fallback:
-    router.push('/login');
-    return <p>Redirecting to login...</p>;
   }
 
   const getInitials = (name: string) => {
