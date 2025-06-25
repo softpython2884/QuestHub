@@ -1,89 +1,91 @@
-# Étape 5 : Feature Focus - Les Projets
+# Étape 5 : Fonctionnalité Clé - Le Projet
 
-Ce document est une plongée technique complète dans l'entité centrale de FlowUp : le **Projet**. C'est le conteneur principal qui regroupe les utilisateurs, les tâches, la documentation et le code.
+## 1. Objectif de la page Projet
 
-## 1. Modèle de Données (`projects` table)
+La page **Projet** est le cœur de l'application FlowUp. Elle centralise toutes les ressources, les discussions et les actions liées à un objectif spécifique. L'objectif est de fournir un espace de travail unique et intégré où une équipe peut :
+-   Organiser et suivre les tâches.
+-   Accéder et modifier le code source.
+-   Rédiger et consulter la documentation.
+-   Communiquer via des annonces.
+-   Gérer les membres de l'équipe et leurs permissions.
 
-La table `projects` dans la base de données SQLite est le cœur de cette fonctionnalité.
+## 2. Modèle de Données (`projects` table)
 
-### 1.1. Colonnes et Descriptions
+L'entité `Project` est stockée dans la table `projects` et contient les informations principales.
 
--   `uuid` (TEXT, PK): Identifiant unique universel du projet.
--   `name` (TEXT): Nom du projet (ex: "Refonte du site web").
--   `description` (TEXT): Description détaillée, supporte le format Markdown.
--   `ownerUuid` (TEXT, FK -> users.uuid): UUID de l'utilisateur propriétaire.
--   `isPrivate` (BOOLEAN): `1` pour privé (accessible uniquement aux membres), `0` pour public (visible dans la section "Découvrir").
--   `readmeContent` (TEXT): Contenu Markdown du fichier README du projet.
--   `isUrgent` (BOOLEAN): `1` si le projet est marqué comme urgent, `0` sinon.
--   `storageBackend` (TEXT): Définit où les fichiers du projet sont stockés. Actuellement `'github'` ou `'local'`.
--   `githubRepoUrl` (TEXT): URL complète du dépôt GitHub lié (ex: `https://github.com/user/repo`).
--   `githubRepoName` (TEXT): Nom complet du dépôt (ex: `user/repo`).
--   `discordWebhookUrl` (TEXT): URL du webhook Discord pour les notifications.
--   `createdAt`, `updatedAt` (TEXT): Timestamps de création et de dernière mise à jour.
+-   `uuid`: Identifiant unique du projet.
+-   `name`, `description`: Nom et description (supporte le Markdown).
+-   `ownerUuid`: `uuid` de l'utilisateur propriétaire.
+-   `isPrivate`: Booléen (`1` pour privé, `0` pour public). Les projets publics sont visibles dans la section "Découvrir".
+-   `readmeContent`: Contenu Markdown du README, affiché dans l'onglet principal.
+-   `storageBackend`: Définit où le code est stocké (`github` ou `local`).
+-   `githubRepoUrl`, `githubRepoName`: URL et nom du dépôt GitHub lié.
+-   `discordWebhookUrl`: URL pour les notifications.
 
-### 1.2. Relations avec les Autres Tables
+**Relations clés :** Un `projectUuid` lie le projet aux `tasks`, `project_members`, `project_documents`, et `project_announcements`.
 
-Le `projectUuid` est une clé étrangère essentielle dans de nombreuses autres tables :
+## 3. Fonctionnalités Détaillées (par onglet)
 
--   **`project_members`**: Table de liaison qui associe les `users` aux `projects` et définit leur rôle (`owner`, `co-owner`, `editor`, `viewer`).
--   **`tasks`**: Chaque tâche appartient à un seul projet via `projectUuid`.
--   **`project_documents`**: Chaque document est lié à un projet.
--   **`project_announcements`**: Chaque annonce est spécifique à un projet.
--   **`project_tags`**: Les tags (étiquettes) sont créés au sein d'un projet.
+L'interface de la page projet est organisée en onglets pour une navigation claire.
 
-## 2. Logique Backend (Server Actions)
+### Onglet "Tasks" (Tâches)
+-   **Objectif**: Gérer le flux de travail du projet.
+-   **Fonctionnalités**:
+    -   **Tableau Kanban**: Visualisation des tâches par statut (`To Do`, `In Progress`, `Done`).
+    -   **Création de tâches**: Les membres autorisés (`owner`, `co-owner`, `editor`) peuvent créer des tâches en spécifiant un titre, une description, un statut, un assigné et des tags.
+    -   **Mise à jour**: Les membres peuvent changer le statut d'une tâche. Les éditeurs et propriétaires peuvent modifier tous les détails.
+    -   **Suppression**: Seuls les éditeurs et propriétaires peuvent supprimer des tâches.
+    -   **Assignation**: Attribuer une tâche à un membre du projet.
 
-Le fichier `src/app/(app)/projects/[id]/actions.ts` centralise la majorité de la logique métier liée aux projets. Ces actions sont exécutées côté serveur pour des raisons de sécurité et de performance.
+### Onglet "README"
+-   **Objectif**: Fournir une page d'accueil et un aperçu complet du projet.
+-   **Fonctionnalités**:
+    -   **Visualisation**: Affiche le contenu du `readmeContent` en Markdown.
+    -   **Édition en direct**: Les membres autorisés peuvent modifier le README directement depuis l'interface.
+    -   **Synchronisation GitHub**: Si le projet est lié à GitHub, la sauvegarde du README met également à jour le fichier `README.md` dans le dépôt.
 
-### 2.1. Gestion du Projet et des Permissions
+### Onglet "Documents"
+-   **Objectif**: Centraliser la documentation spécifique au projet (notes de réunion, spécifications techniques, etc.).
+-   **Fonctionnalités**:
+    -   Créer, lire, mettre à jour et supprimer des documents au format Markdown.
+    -   Accessible uniquement aux membres du projet.
 
--   **`fetchProjectAction(uuid)`**: Récupère les détails complets d'un projet.
--   **`updateProjectAction(...)`**: Met à jour le nom et la description. Vérifie si l'utilisateur connecté est `owner` ou `co-owner` avant d'autoriser la modification.
--   **`toggleProjectVisibilityAction(...)`**: Change la visibilité (public/privé). Si un dépôt GitHub est lié, cette action tente également de changer la visibilité du dépôt via l'API GitHub. Seul le `owner` peut effectuer cette action.
--   **`toggleProjectUrgencyAction(...)`**: Marque ou démarque un projet comme urgent.
+### Onglet "Announcements" (Annonces)
+-   **Objectif**: Communiquer des informations importantes à toute l'équipe du projet.
+-   **Fonctionnalités**:
+    -   Les `owner` et `co-owner` peuvent publier des annonces.
+    -   Les annonces sont affichées par ordre chronologique.
+    -   Possibilité de supprimer ses propres annonces (ou toutes les annonces pour les propriétaires).
 
-### 2.2. Gestion des Membres
+### Onglet "CodeSpace"
+-   **Objectif**: Interagir avec le code source du projet sans quitter FlowUp.
+-   **Fonctionnalités**:
+    -   **Liaison à GitHub**: Un propriétaire peut lier le projet à un nouveau dépôt GitHub, qui sera créé automatiquement.
+    -   **Explorateur de fichiers**: Naviguer dans l'arborescence du dépôt GitHub.
+    -   **Visualisation de fichiers**: Ouvrir et lire le contenu des fichiers (texte, code, Markdown, images).
+    -   **Édition de fichiers**: Modifier le contenu des fichiers texte et le sauvegarder (ce qui crée un commit sur GitHub).
+    -   **Opérations sur les fichiers**: Créer, supprimer des fichiers et des dossiers.
+    -   **Génération par IA**: Utiliser l'IA pour générer une arborescence de fichiers ("scaffold") ou pour modifier un fichier existant à partir d'un prompt.
 
--   **`inviteUserToProjectAction(...)`**: Ajoute un utilisateur existant à un projet avec un rôle spécifique. Si le projet est privé et lié à GitHub, une tentative est faite pour inviter l'utilisateur comme collaborateur sur le dépôt.
--   **`removeUserFromProjectAction(...)`**: Retire un membre du projet. Le propriétaire ne peut pas être retiré.
+### Onglet "Team & Settings" (Équipe & Paramètres)
+-   **Objectif**: Gérer les accès, les intégrations et les options du projet.
+-   **Fonctionnalités**:
+    -   **Gestion des membres**: Inviter de nouveaux utilisateurs par e-mail, changer leur rôle (`co-owner`, `editor`, `viewer`), et les retirer du projet.
+    -   **Permissions**: Les rôles déterminent les actions possibles (ex: un `viewer` peut voir mais pas modifier).
+    -   **Intégrations**: Configurer le webhook Discord pour recevoir des notifications sur les événements du projet (nouvelle tâche, nouveau membre, etc.).
+    -   **Zone de danger**:
+        -   Changer la visibilité du projet (public/privé).
+        -   Supprimer définitivement le projet (action réservée au propriétaire).
 
-### 2.3. Logique Spécifique aux Fonctionnalités du Projet
+## 4. Logique Backend (Server Actions)
 
-Le fichier `actions.ts` contient également les actions pour les sous-fonctionnalités :
+Le fichier `src/app/(app)/projects/[id]/actions.ts` est le cerveau de la fonctionnalité. Il contient des fonctions sécurisées, exécutées côté serveur, pour toutes les opérations critiques :
 
--   **Tâches** : `createTaskAction`, `updateTaskAction`, `deleteTaskAction`. La logique de permission est fine : un `viewer` ne peut rien modifier, un `editor` peut tout faire sauf supprimer/créer, etc.
--   **Documents** : `createDocumentAction`, `updateDocumentAction`, `deleteDocumentAction`.
--   **Annonces** : `createProjectAnnouncementAction`, `deleteProjectAnnouncementAction`.
--   **README** : `saveProjectReadmeAction` sauvegarde le contenu dans la base de données et le pousse vers le dépôt GitHub si lié.
+-   `fetchProjectAction`: Récupère les données d'un projet.
+-   `updateProjectAction`: Met à jour les informations de base.
+-   `inviteUserToProjectAction`: Gère l'ajout de membres et les invitations GitHub.
+-   `createTaskAction`, `updateTaskAction`, `deleteTaskAction`: Gèrent le cycle de vie des tâches avec vérification des permissions.
+-   `saveProjectReadmeAction`: Sauvegarde le README et le pousse sur GitHub.
+-   `getRepoContentsAction`, `saveFileContentAction`: Gèrent les interactions avec l'API GitHub pour le CodeSpace.
 
-## 3. Intégration avec GitHub
-
-L'intégration GitHub est une fonctionnalité clé du "CodeSpace".
-
--   **Liaison**: L'action `linkProjectToGithubAction` permet de créer un nouveau dépôt sur GitHub pour l'utilisateur authentifié et de le lier au projet FlowUp en stockant `githubRepoUrl` et `githubRepoName`.
--   **Gestion des Fichiers (CodeSpace)**: Une suite d'actions permet d'interagir avec le dépôt :
-    -   `getRepoContentsAction`: Lister les fichiers/dossiers.
-    -   `getFileContentAction`: Lire le contenu d'un fichier.
-    -   `saveFileContentAction`: Sauvegarder les modifications d'un fichier (crée un commit).
-    -   `createGithubFileAction`, `createGithubFolderAction`, `deleteGithubFileAction`: Gèrent le cycle de vie des fichiers.
--   **Authentification**: La logique est gérée via une application GitHub OAuth. Le token de l'utilisateur est stocké dans la table `user_github_oauth_tokens` et utilisé par Octokit pour toutes les interactions API.
-
-## 4. Interface Frontend
-
-La page principale d'un projet (`src/app/(app)/projects/[id]/page.tsx`) est le centre névralgique de l'expérience utilisateur.
-
-### 4.1. Structure de la Page
-
--   **Layout à Onglets (`Tabs`)**: L'interface utilise le composant `Tabs` de ShadCN pour organiser les différentes facettes d'un projet :
-    -   **Tasks**: Un tableau Kanban affichant les tâches par statut.
-    -   **README**: Affiche le `readmeContent` et permet son édition en direct.
-    -   **Documents**: Liste les documents Markdown du projet.
-    -   **Announcements**: Affiche les annonces.
-    -   **CodeSpace**: L'explorateur de fichiers pour interagir avec le dépôt GitHub.
-    -   **Team & Settings**: Gère les membres, les intégrations (Discord) et les paramètres de danger (suppression du projet).
-
-### 4.2. Gestion de l'État et des Données
-
--   **Chargement Initial**: `useEffect` est utilisé pour appeler les `Server Actions` (`fetchProjectAction`, `fetchTasksAction`, etc.) au chargement de la page pour récupérer toutes les données nécessaires.
--   **Actions et Formulaires**: Les formulaires (pour inviter un membre, créer une tâche, etc.) utilisent `react-hook-form` pour la validation et le hook `useActionState` pour gérer l'état de soumission des `Server Actions`. Cela permet de créer des interfaces réactives qui affichent des messages de succès/erreur sans recharger la page.
--   **Permissions Frontend**: Le rôle de l'utilisateur (`currentUserRole`) est stocké dans un état et utilisé pour afficher ou masquer conditionnellement les boutons et fonctionnalités (ex: le bouton "Edit" n'est visible que pour les `owner`/`co-owner`).
+Cette approche garantit que les règles de gestion (ex: "seul un owner peut supprimer le projet") sont toujours respectées, car la logique est sur le serveur et non sur le client.
