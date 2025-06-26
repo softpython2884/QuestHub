@@ -10,15 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { createFlowAppAction } from '../actions';
-import { ArrowLeft, Bot, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bot, Loader2, KeyRound, Copy, Check } from 'lucide-react';
 import type { FlowAppScope } from '@/types';
 import { ALL_SCOPES } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Label } from '@/components/ui/label';
 
 const flowAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
@@ -38,7 +38,7 @@ const groupedScopes = ALL_SCOPES.reduce((acc, scope) => {
     return acc;
 }, {} as Record<string, typeof ALL_SCOPES>);
 
-const ScopeSelector = ({ form, isSubmitting }: { form: ReturnType<typeof useForm<FlowAppFormValues>>, isSubmitting: boolean }) => {
+const ScopeSelector = ({ form }: { form: ReturnType<typeof useForm<FlowAppFormValues>> }) => {
     return (
         <FormField
           control={form.control}
@@ -49,74 +49,62 @@ const ScopeSelector = ({ form, isSubmitting }: { form: ReturnType<typeof useForm
                 <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
                 <FormDescription>Select what this application will be allowed to do.</FormDescription>
               </div>
-              <Accordion type="multiple" className="w-full max-h-64 overflow-y-auto pr-3 rounded-md border p-2">
+              <div className="w-full max-h-80 overflow-y-auto pr-3 rounded-md border p-4 space-y-6">
                 {Object.entries(groupedScopes).map(([category, scopesInCategory]) => {
                   const categoryScopeIds = scopesInCategory.map(s => s.id);
                   const selectedScopes = field.value || [];
                   const allInCategorySelected = categoryScopeIds.every(id => selectedScopes.includes(id));
-                  
+
                   const handleCategoryChange = (checked: boolean) => {
-                    let currentScopes = form.getValues('scopes') || [];
-                    let newScopes;
+                    let currentScopes = field.value || [];
                     if (checked) {
-                      newScopes = [...new Set([...currentScopes, ...categoryScopeIds])];
+                      field.onChange([...new Set([...currentScopes, ...categoryScopeIds])]);
                     } else {
-                      newScopes = currentScopes.filter((s: string) => !categoryScopeIds.includes(s));
+                      field.onChange(currentScopes.filter((s: string) => !categoryScopeIds.includes(s)));
                     }
-                    form.setValue('scopes', newScopes, { shouldDirty: true, shouldValidate: true });
                   };
 
                   return (
-                    <AccordionItem value={category} key={category} className="border-b-0">
-                       <div className="flex items-center hover:bg-accent/50 rounded-md transition-colors pr-4">
-                          <div className="p-2 flex-shrink-0">
+                    <div key={category} className="space-y-4">
+                      <div className="flex items-center space-x-3 border-b pb-2">
+                        <Checkbox
+                          id={`category-${category}`}
+                          checked={allInCategorySelected}
+                          onCheckedChange={(checked) => handleCategoryChange(Boolean(checked))}
+                          aria-label={`Select all ${category} scopes`}
+                        />
+                        <Label htmlFor={`category-${category}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {category}
+                        </Label>
+                      </div>
+                      <div className="pl-6 space-y-4">
+                        {scopesInCategory.map((item) => {
+                          const isChecked = selectedScopes.includes(item.id);
+                          return (
+                            <div key={item.id} className="flex flex-row items-start space-x-3 space-y-0">
                               <Checkbox
-                                  checked={allInCategorySelected}
-                                  onCheckedChange={handleCategoryChange}
-                                  aria-label={`Select all ${category} scopes`}
+                                id={item.id}
+                                checked={isChecked}
+                                onCheckedChange={(checked) => {
+                                  const currentVal = field.value || [];
+                                  const newVal = checked
+                                    ? [...currentVal, item.id]
+                                    : currentVal.filter((value: string) => value !== item.id);
+                                  field.onChange(newVal);
+                                }}
                               />
-                          </div>
-                          <AccordionTrigger className="py-2 px-0 flex-1 text-left no-underline hover:no-underline">
-                               <span className="font-medium text-sm">{category}</span>
-                          </AccordionTrigger>
-                       </div>
-                      <AccordionContent className="pt-2 pl-8 space-y-4">
-                        {scopesInCategory.map((item) => (
-                           <Controller
-                              key={item.id}
-                              name="scopes"
-                              control={form.control}
-                              render={({ field: controllerField }) => {
-                                const isChecked = (controllerField.value || []).includes(item.id);
-                                return (
-                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                      <FormControl>
-                                      <Checkbox
-                                          checked={isChecked}
-                                          onCheckedChange={(checked) => {
-                                              const currentVal = controllerField.value || [];
-                                              const newVal = checked
-                                              ? [...currentVal, item.id]
-                                              : currentVal.filter((value: string) => value !== item.id);
-                                              controllerField.onChange(newVal);
-                                          }}
-                                          disabled={isSubmitting}
-                                      />
-                                      </FormControl>
-                                      <div className="flex flex-col">
-                                          <FormLabel className="font-normal text-sm">{item.id}</FormLabel>
-                                          <FormDescription className="!mt-0.5 text-xs">{item.description}</FormDescription>
-                                      </div>
-                                  </FormItem>
-                                );
-                              }}
-                            />
-                        ))}
-                      </AccordionContent>
-                    </AccordionItem>
+                              <div className="flex flex-col">
+                                <Label htmlFor={item.id} className="font-normal text-sm cursor-pointer">{item.id}</Label>
+                                <FormDescription className="!mt-0.5 text-xs">{item.description}</FormDescription>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
-              </Accordion>
+              </div>
               <FormMessage />
             </FormItem>
           )}
@@ -189,7 +177,7 @@ export default function NewFlowAppPage() {
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            <ScopeSelector form={flowAppForm} isSubmitting={isCreatingFlowApp} />
+                            <ScopeSelector form={flowAppForm} />
                             <div className="flex justify-end gap-2">
                                 <Button type="button" variant="ghost" disabled={isCreatingFlowApp} asChild>
                                     <Link href="/settings/developer">Cancel</Link>
