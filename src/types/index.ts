@@ -282,11 +282,37 @@ export interface UpdateOAuthAppFormState {
   updatedApp?: OAuthApp;
 }
 
-export type FlowAppScope = 'profile:read' | 'projects:read';
+export type FlowAppScope =
+  | 'profile:read'
+  | 'projects:read'
+  | 'projects:write'
+  | 'tasks:read'
+  | 'tasks:write'
+  | 'members:read'
+  | 'members:write'
+  | 'documents:read'
+  | 'documents:write'
+  | 'announcements:read'
+  | 'announcements:write'
+  | 'codespace:read'
+  | 'codespace:write'
+  | 'announcements:global:read';
 
 export const ALL_SCOPES: { id: FlowAppScope; description: string }[] = [
-    { id: 'profile:read', description: 'Read your public profile information (name, email, avatar).' },
-    { id: 'projects:read', description: 'Read the list of projects you are a member of.' },
+    { id: 'profile:read', description: "Read user profile information (name, email, avatar, etc.)." },
+    { id: 'projects:read', description: "Read project lists and details." },
+    { id: 'projects:write', description: "Create, update, and delete projects." },
+    { id: 'tasks:read', description: "Read tasks within projects." },
+    { id: 'tasks:write', description: "Create, update, and delete tasks within projects." },
+    { id: 'members:read', description: "Read member lists for projects." },
+    { id: 'members:write', description: "Invite and remove members from projects." },
+    { id: 'documents:read', description: "Read project documents." },
+    { id: 'documents:write', description: "Create, update, and delete project documents." },
+    { id: 'announcements:read', description: "Read project announcements." },
+    { id: 'announcements:write', description: "Create and delete project announcements." },
+    { id: 'codespace:read', description: "Read files and directories from a project's CodeSpace." },
+    { id: 'codespace:write', description: "Create, update, and delete files in a project's CodeSpace." },
+    { id: 'announcements:global:read', description: "Read global, platform-wide announcements." },
 ];
 
 

@@ -2,15 +2,13 @@
 
 ## 1. Objectif
 
-L'API **FlowApps** est conçue pour permettre des intégrations, des scripts et des automations personnalisés. Contrairement aux applications OAuth qui agissent au nom d'autres utilisateurs, les FlowApps utilisent des **jetons d'accès personnels** (Personal Access Tokens) générés par un développeur pour son propre usage ou pour des services backend.
-
-Chaque token est lié au compte du développeur qui l'a créé.
+L'API **FlowApps** est conçue pour permettre des intégrations, des scripts et des automations personnalisés en utilisant des **jetons d'accès personnels** (Personal Access Tokens). Chaque jeton est lié au compte du développeur qui l'a créé et possède des permissions spécifiques (scopes) qui définissent ce qu'il peut faire.
 
 ## 2. Création d'une FlowApp
 
 1.  Rendez-vous dans vos `Settings > Developer Settings`.
 2.  Cliquez sur "Create New FlowApp".
-3.  Donnez un nom et une description à votre application.
+3.  Donnez un nom, une description, et **sélectionnez les permissions (scopes)** requises pour votre application.
 4.  Après la création, un **token** vous sera fourni (ex: `fpat_...`). **C'est la seule et unique fois que ce token sera affiché. Copiez-le et conservez-le en lieu sûr.**
 
 ## 3. Authentification
@@ -29,7 +27,6 @@ L'API FlowApps utilise un point d'entrée unique pour toutes les actions.
 -   **URL**: `https://flowup.nationquest.fr/api/v1/flow`
 
 Le corps de la requête doit être un objet JSON contenant deux propriétés :
-
 -   `action` (string): Le nom de l'action à exécuter.
 -   `payload` (object): Un objet contenant les paramètres nécessaires pour cette action.
 
@@ -37,80 +34,97 @@ Le corps de la requête doit être un objet JSON contenant deux propriétés :
 
 Pour des raisons de sécurité, lorsqu'une FlowApp tente d'accéder aux données d'un utilisateur pour la première fois, un **consentement explicite** est requis.
 
-1.  Lors du premier appel API pour un `userUuid` donné, l'API répondra avec un statut `403 Forbidden` et le message suivant :
-    ```json
-    {
-      "status": "consent_pending",
-      "message": "User must grant permission for the app 'AppName' to perform this action. The user can do this from their settings page."
-    }
-    ```
-2.  L'utilisateur doit alors se rendre dans ses `Settings` sur FlowUp, où une nouvelle demande d'autorisation apparaîtra dans la section "FlowApp Permissions".
+1.  Lors du premier appel API pour un `userUuid` donné, l'API répondra avec un statut `403 Forbidden` et un message demandant le consentement.
+2.  L'utilisateur doit alors se rendre dans ses `Settings > My User ID & API Access`, où une nouvelle demande d'autorisation apparaîtra.
 3.  L'utilisateur peut **Autoriser** ou **Refuser** l'accès.
-4.  Une fois autorisé, les appels API suivants pour cet utilisateur réussiront. S'il refuse, l'API retournera une erreur `403 Forbidden` avec le message "Access denied by user.".
+4.  Une fois autorisé, les appels API suivants pour cet utilisateur réussiront.
 
 ## 6. Actions Disponibles (v1)
 
-### Action: `getUserDetails`
+### Catégorie : Profil (`profile:read`)
 
+#### Action: `getUserDetails`
 Récupère les informations publiques d'un utilisateur.
-
 -   **Action**: `"getUserDetails"`
 -   **Payload**:
     -   `userUuid` (string, requis): L'UUID de l'utilisateur à récupérer.
+-   **Exemple de Réponse**:
+    ```json
+    { "uuid": "...", "name": "Alex Durand", "avatar": "...", "email": "alex@example.com", "bio": "...", "websiteUrl": "..." }
+    ```
 
-**Exemple de Requête :**
-```json
-{
-  "action": "getUserDetails",
-  "payload": {
-    "userUuid": "uuid-de-l-utilisateur"
-  }
-}
-```
+### Catégorie : Projets (`projects:read`, `projects:write`)
 
-**Exemple de Réponse :**
-```json
-{
-  "uuid": "...",
-  "name": "Alex Durand",
-  "avatar": "https://...",
-  "email": "alex@example.com",
-  "bio": "Senior Software Engineer",
-  "websiteUrl": "https://alex-durand.dev"
-}
-```
-
-### Action: `listUserProjects`
-
+#### Action: `listUserProjects`
 Liste tous les projets dont un utilisateur est membre.
-
--   **Action**: `"listUserProjects"`
+-   **Scope**: `projects:read`
 -   **Payload**:
     -   `userUuid` (string, requis): L'UUID de l'utilisateur.
 
-**Exemple de Requête :**
-```json
-{
-  "action": "listUserProjects",
-  "payload": {
-    "userUuid": "uuid-de-l-utilisateur"
-  }
-}
-```
+#### Action: `getProjectDetails`
+Récupère les détails d'un projet spécifique.
+-   **Scope**: `projects:read`
+-   **Payload**:
+    -   `userUuid` (string, requis): UUID de l'utilisateur effectuant la demande.
+    -   `projectUuid` (string, requis): UUID du projet.
 
-**Exemple de Réponse :**
-```json
-[
-  {
-    "uuid": "...",
-    "name": "QuantumLeap AI",
-    "description": "...",
-    "ownerUuid": "...",
-    "isPrivate": true,
-    // ... autres champs du projet
-  }
-]
-```
+#### Action: `createProject`
+Crée un nouveau projet pour l'utilisateur.
+-   **Scope**: `projects:write`
+-   **Payload**:
+    -   `userUuid` (string, requis): UUID du futur propriétaire.
+    -   `name` (string, requis): Nom du projet.
+    -   `description` (string, optionnel): Description du projet.
+
+#### Action: `updateProject`
+Met à jour les détails d'un projet.
+-   **Scope**: `projects:write`
+-   **Payload**:
+    -   `userUuid` (string, requis): UUID de l'utilisateur (doit être owner/co-owner).
+    -   `projectUuid` (string, requis): UUID du projet.
+    -   `name` (string, optionnel): Nouveau nom.
+    -   `description` (string, optionnel): Nouvelle description.
+    -   `isPrivate` (boolean, optionnel): `true` pour privé, `false` pour public.
+
+### Catégorie : Tâches (`tasks:read`, `tasks:write`)
+
+#### Action: `listTasks`
+Liste les tâches d'un projet.
+-   **Scope**: `tasks:read`
+-   **Payload**:
+    -   `userUuid` (string, requis)
+    -   `projectUuid` (string, requis)
+
+#### Action: `createTask`
+Crée une nouvelle tâche dans un projet.
+-   **Scope**: `tasks:write`
+-   **Payload**:
+    -   `userUuid` (string, requis)
+    -   `projectUuid` (string, requis)
+    -   `title` (string, requis)
+    -   `description` (string, optionnel)
+    -   `status` (string, optionnel): "To Do", "In Progress", etc.
+
+### Catégorie : Membres (`members:read`, `members:write`)
+
+#### Action: `listMembers`
+Liste les membres d'un projet.
+-   **Scope**: `members:read`
+-   **Payload**:
+    -   `userUuid` (string, requis)
+    -   `projectUuid` (string, requis)
+
+#### Action: `addMember`
+Ajoute un membre à un projet.
+-   **Scope**: `members:write`
+-   **Payload**:
+    -   `userUuid` (string, requis)
+    -   `projectUuid` (string, requis)
+    -   `emailToInvite` (string, requis): Email du membre à ajouter.
+    -   `role` (string, requis): "editor" ou "viewer".
+
+### Et bien plus...
+Cette documentation couvre les actions principales. L'API inclut également des actions pour gérer les documents de projet, les annonces, le CodeSpace et les annonces globales. Assurez-vous de demander les scopes appropriés (`documents:read/write`, `announcements:read/write`, `codespace:read/write`, `announcements:global:read`) pour utiliser ces fonctionnalités.
 
 ## 7. Exemple complet avec `cURL`
 
