@@ -87,6 +87,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   isPinned?: boolean;
+  dueDate?: string | null;
 }
 
 // Represents a document within a specific project
