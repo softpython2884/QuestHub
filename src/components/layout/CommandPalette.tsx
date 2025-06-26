@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/command';
 import { searchGlobalAction, type SearchResult } from '@/app/(app)/actions/search';
 import { FolderKanban, Settings, User } from 'lucide-react';
-import { useDebounce } from '@/hooks/use-debounce'; // Assuming you have a debounce hook
+import { useDebounce } from '@/hooks/use-debounce';
 
 export function CommandPalette() {
   const router = useRouter();
@@ -80,18 +80,4 @@ export function CommandPalette() {
       </CommandList>
     </CommandDialog>
   );
-}
-
-// A simple debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-  return debouncedValue;
 }
