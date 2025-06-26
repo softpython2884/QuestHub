@@ -1417,11 +1417,29 @@ export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   return { ...taskData, tags, assigneeName: assigneeName || undefined, isPinned: !!taskData.isPinned };
 }
 
+export async function getTaskByTitleInProject(projectUuid: string, title: string): Promise<Task | null> {
+  const connection = await getDbConnection();
+  const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>(
+    'SELECT * FROM tasks WHERE projectUuid = ? AND title = ?',
+    projectUuid,
+    title
+  );
+  if (!taskData) return null;
+  
+  const tags = await getTagsForTask(taskData.uuid);
+  let assigneeName: string | null = null;
+  if (taskData.assigneeUuid) {
+    const assignee = await getUserByUuid(taskData.assigneeUuid);
+    assigneeName = assignee?.name || null;
+  }
+  return { ...taskData, tags, assigneeName: assigneeName || undefined, isPinned: !!taskData.isPinned };
+}
+
 
 export async function getTasksForProject(projectUuid: string): Promise<Task[]> {
   const connection = await getDbConnection();
   const taskRows = await connection.all<Array<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>>(
-    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
+    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned, dueDate
      FROM tasks
      WHERE projectUuid = ?
      ORDER BY isPinned DESC, updatedAt DESC`,
@@ -1451,6 +1469,7 @@ export async function updateTask(
     assigneeUuid?: string | null;
     tagsString?: string;
     isPinned?: boolean;
+    dueDate?: string | null;
   }
 ): Promise<Task | null> {
   const connection = await getDbConnection();
@@ -1468,6 +1487,7 @@ export async function updateTask(
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
   if (data.assigneeUuid !== undefined) { updates.push('assigneeUuid = ?'); values.push(data.assigneeUuid); }
   if (data.isPinned !== undefined) { updates.push('isPinned = ?'); values.push(data.isPinned ? 1 : 0); }
+  if (data.dueDate !== undefined) { updates.push('dueDate = ?'); values.push(data.dueDate); }
 
   if (updates.length === 0 && data.tagsString === undefined) return currentTask;
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow, HardDrive, Sparkles } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow, HardDrive, Sparkles, CalendarIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken, DuplicateProjectFormState } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -87,6 +87,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePageContext } from '@/contexts/PageContext';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -113,6 +115,7 @@ const taskFormSchema = z.object({
   assigneeUuid: z.string().optional(),
   tagsString: z.string().optional().describe("Comma-separated tag names"),
   todoListMarkdown: z.string().optional().default(''),
+  dueDate: z.date().optional().nullable(),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
@@ -163,11 +166,13 @@ const convertMarkdownToSubtaskInput = (markdown?: string): string => {
   if (!markdown) return '';
   return markdown.split('\n').map(line => {
     const trimmedLine = line.trim();
-    const matchChecked = trimmedLine.match(/^\s*\*\s*\[x\]\s*(.*)/i);
+    // Handles "- [x] Task"
+    const matchChecked = trimmedLine.match(/^\s*-\s*\[x\]\s*(.*)/i);
     if (matchChecked && matchChecked[1] !== undefined) {
       return `** ${matchChecked[1].trim()}`;
     }
-    const matchUnchecked = trimmedLine.match(/^\s*\*\s*\[ \]\s*(.*)/i);
+    // Handles "- [ ] Task"
+    const matchUnchecked = trimmedLine.match(/^\s*-\s*\[ \]\s*(.*)/i);
     if (matchUnchecked && matchUnchecked[1] !== undefined) {
       return `* ${matchUnchecked[1].trim()}`;
     }
@@ -180,11 +185,11 @@ const convertSubtaskInputToMarkdown = (input: string): string => {
   return input.split('\n').map(line => {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith('** ')) {
-      return `* [x] ${trimmedLine.substring(3).trim()}`;
+      return `- [x] ${trimmedLine.substring(3).trim()}`;
     } else if (trimmedLine.startsWith('* ')) {
-      return `* [ ] ${trimmedLine.substring(2).trim()}`;
+      return `- [ ] ${trimmedLine.substring(2).trim()}`;
     } else if (trimmedLine.length > 0) {
-      return `* [ ] ${trimmedLine}`;
+      return `- [ ] ${trimmedLine}`;
     }
     return '';
   }).filter(line => line.trim().length > 0).join('\n');
@@ -335,7 +340,7 @@ function ProjectDetailPageContent() {
 
   const taskForm = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' },
+    defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '', dueDate: null },
   });
 
   const generateTasksForm = useForm<GenerateTasksFormValues>({
@@ -560,7 +565,7 @@ function ProjectDetailPageContent() {
       if (createTaskState.message && !createTaskState.error) {
         toast({ title: "Success", description: createTaskState.message });
         setIsCreateTaskDialogOpen(false);
-        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });
+        taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '', dueDate: null });
         loadTasks();
       }
       if (createTaskState.error) {
@@ -614,8 +619,9 @@ function ProjectDetailPageContent() {
         description: taskToEdit.description || '',
         status: taskToEdit.status,
         assigneeUuid: taskToEdit.assigneeUuid || UNASSIGNED_VALUE,
-        tagsString: taskToEdit.tags.map(t => t.name).join(', ') || '',
+        tagsString: taskToEdit.tags?.map(t => t.name).join(', ') || '',
         todoListMarkdown: taskToEdit.todoListMarkdown || '',
+        dueDate: taskToEdit.dueDate ? new Date(taskToEdit.dueDate) : null,
       });
     }
   }, [isEditTaskDialogOpen, taskToEdit, taskForm]);
@@ -893,6 +899,7 @@ function ProjectDetailPageContent() {
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
     formData.append('todoListMarkdown', values.todoListMarkdown || '');
+    if (values.dueDate) formData.append('dueDate', values.dueDate.toISOString());
 
     startTransition(() => {
       createTaskFormAction(formData);
@@ -923,6 +930,8 @@ function ProjectDetailPageContent() {
     formData.append('status', values.status);
     formData.append('assigneeUuid', finalAssigneeUuid || '');
     if (values.tagsString) formData.append('tagsString', values.tagsString);
+    if (values.dueDate) formData.append('dueDate', values.dueDate.toISOString());
+    else if (taskToEdit.dueDate) formData.append('dueDate', ''); // Clear date
 
     startTransition(() => {
       updateTaskFormAction(formData);
@@ -997,6 +1006,7 @@ function ProjectDetailPageContent() {
         assigneeUuid: task.assigneeUuid || UNASSIGNED_VALUE,
         tagsString: task.tags.map(t => t.name).join(', ') || '',
         todoListMarkdown: task.todoListMarkdown || '',
+        dueDate: task.dueDate ? new Date(task.dueDate) : null,
       });
     setIsEditTaskDialogOpen(true);
   };
@@ -1567,7 +1577,7 @@ function ProjectDetailPageContent() {
                 </Dialog>
                 <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
                   <DialogTrigger asChild>
-                      <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' })}>
+                      <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '', dueDate: null })}>
                           <PlusCircle className="mr-2 h-4 w-4"/> Add Task
                       </Button>
                   </DialogTrigger>
@@ -1580,7 +1590,48 @@ function ProjectDetailPageContent() {
                           <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
                               <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                               <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                              <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                              <div className="grid grid-cols-2 gap-4">
+                                <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                                <FormField
+                                  control={taskForm.control}
+                                  name="dueDate"
+                                  render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                      <FormLabel>Due Date (Optional)</FormLabel>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <FormControl>
+                                            <Button
+                                              variant={"outline"}
+                                              className={cn(
+                                                "pl-3 text-left font-normal",
+                                                !field.value && "text-muted-foreground"
+                                              )}
+                                            >
+                                              {field.value ? (
+                                                format(field.value, "PPP")
+                                              ) : (
+                                                <span>Pick a date</span>
+                                              )}
+                                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                          </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                          <Calendar
+                                            mode="single"
+                                            selected={field.value || undefined}
+                                            onSelect={field.onChange}
+                                            disabled={(date) => date < new Date("1900-01-01")}
+                                            initialFocus
+                                          />
+                                        </PopoverContent>
+                                      </Popover>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
                               <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                               <Controller
                                   control={taskForm.control}
@@ -1702,9 +1753,17 @@ function ProjectDetailPageContent() {
                                         </p>
                                     )}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
-                                </p>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <p className="text-xs text-muted-foreground">
+                                    Assigned to: {task.assigneeName || (task.assigneeUuid ? 'Unknown User' : 'Everyone')}
+                                    </p>
+                                    {task.dueDate && (
+                                        <Badge variant="outline" className="text-xs flex items-center gap-1">
+                                            <CalendarIcon className="h-3 w-3" />
+                                            {format(new Date(task.dueDate), "PP")}
+                                        </Badge>
+                                    )}
+                                </div>
                                 <div className="mt-2 flex flex-wrap gap-1">
                                     {task.tags.map(tag => (
                                         <Badge key={tag.uuid} variant="secondary" style={{ backgroundColor: tag.color !== '#6B7280' ? tag.color : undefined }} className={cn('text-xs',tag.color === '#6B7280' ? 'bg-muted hover:bg-muted/80 text-muted-foreground' : 'text-white')}>{tag.name}</Badge>
@@ -1776,7 +1835,7 @@ function ProjectDetailPageContent() {
               )}
             </CardContent>
             </Card>
-            <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
+            <Dialog open={isEditTaskDialogOpen} onOpenChange={(isOpen) => { setIsEditTaskDialogOpen(isOpen); if (!isOpen) { setTaskToEdit(null); setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '', dueDate: null });} }}>
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
                         <DialogTitle>Edit Task: {taskToEdit?.title}</DialogTitle>
@@ -1787,7 +1846,48 @@ function ProjectDetailPageContent() {
                             <form onSubmit={taskForm.handleSubmit(handleEditTaskSubmit)} className="space-y-4">
                                 <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
                                 <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                                <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                                 <div className="grid grid-cols-2 gap-4">
+                                    <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                                    <FormField
+                                      control={taskForm.control}
+                                      name="dueDate"
+                                      render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                          <FormLabel>Due Date (Optional)</FormLabel>
+                                          <Popover>
+                                            <PopoverTrigger asChild>
+                                              <FormControl>
+                                                <Button
+                                                  variant={"outline"}
+                                                  className={cn(
+                                                    "pl-3 text-left font-normal",
+                                                    !field.value && "text-muted-foreground"
+                                                  )}
+                                                >
+                                                  {field.value ? (
+                                                    format(field.value, "PPP")
+                                                  ) : (
+                                                    <span>Pick a date</span>
+                                                  )}
+                                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                              </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                              <Calendar
+                                                mode="single"
+                                                selected={field.value || undefined}
+                                                onSelect={field.onChange}
+                                                disabled={(date) => date < new Date("1900-01-01")}
+                                                initialFocus
+                                              />
+                                            </PopoverContent>
+                                          </Popover>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                </div>
                                 <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
                                 <Controller
                                     control={taskForm.control}

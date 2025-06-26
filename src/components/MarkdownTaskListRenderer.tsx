@@ -31,10 +31,10 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
     const currentLine = newLines[lineIndex];
     let updatedLine = currentLine;
 
-    if (currentLine.match(/^(\s*)\*\s*\[x\]\s*/i)) { // Checked to unchecked
-      updatedLine = currentLine.replace(/^(\s*)\*\s*\[x\]\s*/i, '$1* [ ] ');
-    } else if (currentLine.match(/^(\s*)\*\s*\[ \]\s*/i)) { // Unchecked to checked
-      updatedLine = currentLine.replace(/^(\s*)\*\s*\[ \]\s*/i, '$1* [x] ');
+    if (currentLine.match(/^(\s*)-\s*\[x\]\s*/i)) { // Checked to unchecked
+      updatedLine = currentLine.replace(/^(\s*)-\s*\[x\]\s*/i, '$1- [ ] ');
+    } else if (currentLine.match(/^(\s*)-\s*\[ \]\s*/i)) { // Unchecked to checked
+      updatedLine = currentLine.replace(/^(\s*)-\s*\[ \]\s*/i, '$1- [x] ');
     } else {
       return; // Not a task list item
     }
@@ -50,8 +50,8 @@ export const MarkdownTaskListRenderer: React.FC<MarkdownTaskListRendererProps> =
   return (
     <div className="space-y-1 whitespace-pre-wrap break-words">
       {lines.map((line, index) => {
-        const matchChecked = line.match(/^(\s*)\*\s*\[x\]\s*(.*)/i);
-        const matchUnchecked = line.match(/^(\s*)\*\s*\[ \]\s*(.*)/i);
+        const matchChecked = line.match(/^(\s*)-\s*\[x\]\s*(.*)/i);
+        const matchUnchecked = line.match(/^(\s*)-\s*\[ \]\s*(.*)/i);
 
         if (matchChecked) {
           const indent = matchChecked[1];

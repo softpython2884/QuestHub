@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState, useRef, startTransition } from 'react';
@@ -32,14 +33,16 @@ export default function ConversationPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [input, setInput] = useState('');
     const [isSending, setIsSending] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
     
     const [editingMessage, setEditingMessage] = useState<Message | null>(null);
     const [editedContent, setEditedContent] = useState('');
     const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (scrollAreaRef.current) {
+          scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
     };
 
     useEffect(() => {
@@ -162,7 +165,7 @@ export default function ConversationPage() {
                 <h2 className="font-semibold text-base truncate">Chat</h2>
             </div>
 
-            <ScrollArea className="flex-grow">
+            <ScrollArea className="flex-grow" ref={scrollAreaRef as React.RefObject<HTMLDivElement>}>
                 <div className="p-4 space-y-4">
                     {messages.map(message => (
                         <div key={message.uuid} className={cn('group flex items-start gap-3', message.authorUuid === user?.uuid ? 'justify-end' : 'justify-start', message.pending && 'opacity-60')}>
@@ -231,7 +234,6 @@ export default function ConversationPage() {
                             )}
                         </div>
                     ))}
-                    <div ref={messagesEndRef} />
                 </div>
             </ScrollArea>
              <div className="p-4 border-t bg-background">

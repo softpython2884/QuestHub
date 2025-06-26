@@ -13,7 +13,7 @@ import * as genkit from 'genkit';
 import { z } from 'genkit';
 import type { ChatMessage } from '@/types';
 import { getCurrentUserUuid, auth } from '@/lib/authEdge';
-import { getProjectsForUser, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole } from '@/lib/db';
+import { getProjectsForUser, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole, getTaskByTitleInProject, updateTask as dbUpdateTask } from '@/lib/db';
 import { summarizeDocumentation } from './summarize-project-documentation';
 
 // Schemas for context, input, and output
@@ -86,6 +86,47 @@ const createTaskInProjectTool = ai.defineTool(
   }
 );
 
+const updateTaskInProjectTool = ai.defineTool(
+    {
+        name: 'updateTaskInProject',
+        description: 'Updates an existing task in a project, for example to add sub-tasks. You MUST provide the full, final markdown content for the sub-tasks.',
+        inputSchema: z.object({
+            projectUuid: z.string().uuid().describe("The UUID of the project where the task exists."),
+            taskTitle: z.string().describe("The exact title of the task to update."),
+            newSubTasksMarkdown: z.string().describe("A markdown checklist of sub-tasks, like `- [ ] Sub-task 1`. This will be appended to any existing sub-tasks."),
+        }),
+        outputSchema: z.object({
+            success: z.boolean(),
+            updatedTaskTitle: z.string(),
+        }),
+    },
+    async ({ projectUuid, taskTitle, newSubTasksMarkdown }) => {
+        const session = await auth();
+        if (!session?.user) throw new Error("User not authenticated.");
+
+        const userRole = await getProjectMemberRole(projectUuid, session.user.uuid);
+        if (!userRole || !['owner', 'co-owner', 'editor'].includes(userRole)) {
+            throw new Error(`You do not have permission to update tasks in this project.`);
+        }
+
+        const taskToUpdate = await getTaskByTitleInProject(projectUuid, taskTitle);
+        if (!taskToUpdate) {
+            throw new Error(`Task with title "${taskTitle}" not found in this project.`);
+        }
+        
+        const existingSubtasks = taskToUpdate.todoListMarkdown || '';
+        const combinedSubtasks = (existingSubtasks ? `${existingSubtasks}\n` : '') + newSubTasksMarkdown;
+
+        const updatedTask = await dbUpdateTask(taskToUpdate.uuid, { todoListMarkdown: combinedSubtasks });
+        if (!updatedTask) {
+             throw new Error(`Failed to update task "${taskTitle}".`);
+        }
+
+        return { success: true, updatedTaskTitle: updatedTask.title };
+    }
+);
+
+
 const createProjectAnnouncementTool = ai.defineTool(
   {
     name: 'createProjectAnnouncement',
@@ -127,108 +168,101 @@ const summarizeCurrentFileTool = ai.defineTool(
 );
 
 // +++ Main Assistant Flow +++
-export async function workspaceAssistant(input: WorkspaceAssistantInput): Promise<WorkspaceAssistantOutput> {
-  return workspaceAssistantFlow(input);
-}
 
-const workspaceAssistantFlow = ai.defineFlow(
-  {
-    name: 'workspaceAssistantFlow',
-    inputSchema: WorkspaceAssistantInputSchema,
-    outputSchema: WorkspaceAssistantOutputSchema,
-  },
-  async (input) => {
-    if (input.history.length === 0) {
-      return { response: "Hello! I'm Flowy. How can I help you with your workspace today? You can ask me to list your projects, create tasks, and more." };
-    }
+export async function workspaceAssistant(
+  input: WorkspaceAssistantInput
+): Promise<WorkspaceAssistantOutput> {
+  const flow = ai.defineFlow(
+    {
+      name: 'workspaceAssistantFlow',
+      inputSchema: WorkspaceAssistantInputSchema,
+      outputSchema: WorkspaceAssistantOutputSchema,
+    },
+    async (flowInput) => {
+      if (flowInput.history.length === 0) {
+        return { response: "Hello! I'm Flowy. How can I help you with your workspace today? You can ask me to list your projects, create tasks, and more." };
+      }
 
-    const context = input.context;
-    let contextDescription = "The user is currently not on a specific page that provides context.";
-    let toolsToUse = [listUserProjectsTool, createProjectAnnouncementTool, createTaskInProjectTool];
-    const latestMessage = input.history[input.history.length - 1].content;
-    let promptWithContext = latestMessage;
+      const context = flowInput.context;
+      let contextDescription = "The user is currently not on a specific page that provides context.";
+      let toolsToUse: any[] = [listUserProjectsTool, createProjectAnnouncementTool, createTaskInProjectTool, updateTaskInProjectTool];
+      const latestMessage = flowInput.history[flowInput.history.length - 1].content;
+      let promptWithContext = latestMessage;
 
-    if (context) {
-        contextDescription = `The user is currently on the page: '${context.pathname}'.`;
-        if (context.projectName) {
-            contextDescription += ` They are inside the project named "${context.projectName}" (UUID: ${context.projectUuid}).`;
-        }
-        if (context.filePath) {
-            contextDescription += ` They are viewing the file at path: "${context.filePath}".`;
-            // Add summarize tool and its context to the prompt if we are in a file
-            toolsToUse.push(summarizeCurrentFileTool as any);
-            promptWithContext = `Considering the file content below, respond to the user's request:
+      if (context) {
+          contextDescription = `The user is currently on the page: '${context.pathname}'.`;
+          if (context.projectName) {
+              contextDescription += ` They are inside the project named "${context.projectName}" (UUID: ${context.projectUuid}).`;
+          }
+          if (context.filePath) {
+              contextDescription += ` They are viewing the file at path: "${context.filePath}".`;
+              toolsToUse.push(summarizeCurrentFileTool);
+              promptWithContext = `Considering the file content below, respond to the user's request:
 --- FILE CONTENT ---
 ${context.fileContent}
 --------------------
 User Request: ${latestMessage}`;
-        }
-    }
-    
-    // Add logic to find projectUuid if projectName is in the prompt but not in context.
-    const user = await auth();
-    if (user?.user?.uuid) {
-      const userProjects = await getProjectsForUser(user.user.uuid);
-      // This is a simplified logic, a more robust solution would be to let the LLM pick the project
-      // and we just provide the list as a tool or context.
-      const mentionedProject = userProjects.find(p => latestMessage.toLowerCase().includes(p.name.toLowerCase()));
-      if (mentionedProject && !context?.projectUuid) {
-        // Enhance context if we found a project mention
-        contextDescription += ` The user mentioned the project "${mentionedProject.name}" (UUID: ${mentionedProject.uuid}).`;
+          }
       }
-    }
 
+      const user = await auth();
+      if (user?.user?.uuid) {
+        const userProjects = await getProjectsForUser(user.user.uuid);
+        const mentionedProject = userProjects.find(p => latestMessage.toLowerCase().includes(p.name.toLowerCase()));
+        if (mentionedProject && !context?.projectUuid) {
+          contextDescription += ` The user mentioned the project "${mentionedProject.name}" (UUID: ${mentionedProject.uuid}).`;
+        }
+      }
 
-  const systemPrompt = `You are Flowy, an intelligent and friendly AI assistant integrated into the FlowUp project management platform. Your purpose is to help users manage their work efficiently.
+      const systemPrompt = `You are Flowy, an intelligent and friendly AI assistant integrated into the FlowUp project management platform. Your purpose is to help users manage their work efficiently.
 
 **Your Capabilities (Tools):**
 You have access to a set of tools to perform actions on behalf of the user. You should decide to use a tool when the user's request matches a tool's capability. Your available tools are:
 - \`listUserProjects\`: To list all projects the current user is a member of.
 - \`createTaskInProject\`: To create a new task in a specified project. Requires a projectUuid.
+- \`updateTaskInProject\`: To update a task, for example by adding sub-tasks. Requires a projectUuid and the task's title. You MUST append to existing sub-tasks if any, not replace them.
 - \`createProjectAnnouncement\`: To create an announcement in a project. Requires a projectUuid.
 - \`summarizeCurrentFile\`: To summarize the content of the file the user is currently viewing. Requires fileContent.
 
-**Context Awareness & Permissions:**
-- You are provided with the user's current context. Use this to inform your actions. For example, if the user says "create a task for this project" and the context includes a project UUID, you should use it.
-- If context is missing for an action (e.g., creating a task without a project context), you MUST ask the user for the missing information. Do not guess.
-- Actions are protected by user permissions. If a tool call fails, it's likely due to a permission error. Inform the user clearly and politely.
-
-**Interaction Style:**
-- Be concise and helpful. Use markdown for formatting when it improves readability.
-- If you need to ask for a project to perform an action, you can list the user's projects to help them choose.
-- After a tool is used successfully, confirm the successful outcome to the user. For example: "I've created the task for you."
+**Interaction Style & Rules:**
+- **Language**: You MUST detect the language of the user's last message and respond in the same language.
+- **Context Awareness**: Use the provided context to inform your actions. If the user says "create a task for this project" and the context includes a project UUID, you should use it.
+- **Clarification**: If context is missing for an action (e.g., creating a task without a project context), you MUST ask the user for the missing information. Do not guess.
+- **Permissions**: Actions are protected by user permissions. If a tool call fails, it's likely due to a permission error. Inform the user clearly and politely.
+- **Confirmation**: After a tool is used successfully, confirm the successful outcome to the user. For example: "I've created the task for you." or "OK, I've added those sub-tasks."
 
 **Current User Context:**
 ${contextDescription}
 `;
 
-  try {
-    const { text } = await ai.generate({
-      model: 'googleai/gemini-2.0-flash',
-      prompt: promptWithContext,
-      system: systemPrompt,
-      history: input.history.slice(0, -1) as ChatMessage[],
-      tools: toolsToUse as any,
-    });
+      try {
+        const { text } = await ai.generate({
+          model: 'googleai/gemini-2.0-flash',
+          prompt: promptWithContext,
+          system: systemPrompt,
+          history: flowInput.history.slice(0, -1) as ChatMessage[],
+          tools: toolsToUse,
+        });
 
-    return { response: text };
-  } catch (error: any) {
-    console.error("[WorkspaceAssistant] Error during AI generation or tool execution:", error);
-    let errorMessage = "I encountered an issue and couldn't complete your request.";
-    if (error.message) {
-        if (error.message.includes("User not authenticated")) {
-            errorMessage = "It seems you're not authenticated. Please log in.";
-        } else if (error.message.includes("not found or you are not a member")) {
-            errorMessage = `I couldn't find the project you mentioned, or you might not be a member of it.`;
-        } else if (error.message.includes("permission")) {
-            errorMessage = `It looks like you don't have the required permissions for that action. ${error.message}`;
-        } else {
-             errorMessage = `An error occurred: ${error.message}`;
+        return { response: text };
+      } catch (error: any) {
+        console.error("[WorkspaceAssistant] Error during AI generation or tool execution:", error);
+        let errorMessage = "I encountered an issue and couldn't complete your request.";
+        if (error.message) {
+            if (error.message.includes("User not authenticated")) {
+                errorMessage = "It seems you're not authenticated. Please log in.";
+            } else if (error.message.includes("not found or you are not a member")) {
+                errorMessage = `I couldn't find the project you mentioned, or you might not be a member of it.`;
+            } else if (error.message.includes("permission")) {
+                errorMessage = `It looks like you don't have the required permissions for that action. ${error.message}`;
+            } else {
+                errorMessage = `An error occurred: ${error.message}`;
+            }
         }
+        return { response: errorMessage };
+      }
     }
-    return { response: errorMessage };
-  }
-  }
-);
+  );
 
-    
+  return flow(input);
+}

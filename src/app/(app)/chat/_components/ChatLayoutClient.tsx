@@ -3,6 +3,7 @@ import { useParams } from 'next/navigation';
 import { ChatSidebar } from './ChatSidebar';
 import type { Conversation } from '@/types';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function ChatLayoutClient({
   children,
@@ -22,7 +23,7 @@ export function ChatLayoutClient({
       </div>
 
       {/* Main Content - hidden on mobile when no chat is open */}
-      <div className={cn('h-full overflow-y-auto', !hasConversationId && 'hidden md:block')}>
+      <div className={cn('flex flex-col h-full', !hasConversationId && 'hidden md:block')}>
         {children}
       </div>
     </div>
