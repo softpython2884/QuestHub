@@ -14,7 +14,7 @@ import type { ChatMessage } from '@/types';
 import { getCurrentUserUuid, auth } from '@/lib/authEdge';
 import { getProjectsForUser, getProjectByUuid, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole } from '@/lib/db';
 import { summarizeDocumentation } from './summarize-project-documentation';
-import { run } from 'genkit';
+import { run } from 'genkit/flow';
 
 // Schemas for context, input, and output
 const WorkspaceContextSchema = z.object({

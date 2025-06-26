@@ -2,77 +2,10 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { getOAuthAppByClientId, createAuthorizationCode } from '@/lib/db';
+import { createAuthorizationCode } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { z } from 'zod';
-import type { OAuthApp, User } from '@/types';
 import crypto from 'crypto';
-
-interface Session {
-  user?: Omit<User, 'hashedPassword'>; 
-}
-
-interface AuthorizePageData {
-  app: Pick<OAuthApp, 'name' | 'description' | 'website' | 'logoUrl'>;
-  user: { name: string; avatar?: string };
-  scopes: string[];
-  redirectUri: string;
-  clientId: string;
-  state: string;
-}
-
-export async function getAuthorizePageData(
-  searchParams: { [key: string]: string | string[] | undefined },
-  session: Session | null
-): Promise<{ data?: AuthorizePageData; error?: string }> {
-  
-  const clientId = searchParams?.client_id as string;
-  const redirectUri = searchParams?.redirect_uri as string;
-  const responseType = searchParams?.response_type as string;
-  const state = searchParams?.state as string;
-  const scope = searchParams?.scope as string;
-
-  if (!clientId || !redirectUri || !responseType || !state) {
-    return { error: "The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." };
-  }
-  
-  if (!session?.user) {
-    const callbackUrl = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: responseType,
-      state: state,
-      scope: scope || '',
-    });
-    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl.toString()}`);
-  }
-  
-  if (responseType !== 'code') {
-    return { error: "Invalid 'response_type'. Only 'code' is supported." };
-  }
-
-  const app = await getOAuthAppByClientId(clientId);
-  if (!app) {
-    return { error: `Invalid 'client_id'. No application found with ID: ${clientId}` };
-  }
-
-  if (!app.redirectUris.includes(redirectUri)) {
-    return { error: "Invalid 'redirect_uri'. The provided URL is not registered for this application." };
-  }
-  
-  const requestedScopes = scope ? scope.split(' ') : [];
-
-  return {
-    data: {
-      app,
-      user: { name: session.user.name, avatar: session.user.avatar },
-      scopes: requestedScopes,
-      redirectUri,
-      clientId,
-      state,
-    },
-  };
-}
 
 const HandleAuthorizationSchema = z.object({
   decision: z.enum(['accept', 'deny']),

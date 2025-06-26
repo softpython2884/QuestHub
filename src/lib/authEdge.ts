@@ -1,6 +1,4 @@
 
-'use server';
-
 import type { User } from '@/types';
 import { getUserByUuid as dbGetUserByUuid } from './db';
 import { cookies } from 'next/headers';
@@ -8,7 +6,7 @@ import jwt from 'jsonwebtoken';
 
 const AUTH_COOKIE_NAME = 'flowup_auth_token'; 
 
-interface Session {
+export interface Session {
   user?: Omit<User, 'hashedPassword'>; 
 }
 
