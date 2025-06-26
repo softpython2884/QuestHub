@@ -146,7 +146,7 @@ export default function DiscoverPage() {
                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {users.map(u => (
                             <Card key={u.uuid} className="hover:shadow-md transition-shadow">
-                                <CardContent className="p-4 flex items-center justify-between">
+                                <CardContent className="p-4 flex items-center justify-between gap-4">
                                     <Link href={`/profile/${u.uuid}`} className="flex items-center gap-3 group">
                                         <Avatar className="h-12 w-12">
                                             <AvatarImage src={u.avatar} alt={u.name} />
@@ -210,3 +210,5 @@ export default function DiscoverPage() {
         </div>
     );
 }
+
+    

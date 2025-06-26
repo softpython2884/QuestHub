@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart as PieChartIcon, Info } from 'lucide-react';
+import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart as PieChartIcon, Info, Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Badge } from '@/components/ui/badge';
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -261,6 +262,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <div className="grid gap-6 md:grid-cols-2">
        <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" />Team Announcements</CardTitle>
@@ -295,6 +297,31 @@ export default function DashboardPage() {
           </Button>
         </CardContent>
       </Card>
+       <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center"><Keyboard className="mr-2 h-5 w-5 text-primary"/>Keyboard Shortcuts</CardTitle>
+            <CardDescription>Navigate FlowUp faster with these shortcuts.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+            <div className="flex justify-between items-center text-sm p-2 bg-muted/50 rounded-md">
+            <span>Open Command Palette</span>
+            <div className="flex items-center gap-1">
+                <Badge variant="outline" className="font-mono text-xs">⌘</Badge>
+                <Badge variant="outline" className="font-mono text-xs">K</Badge>
+            </div>
+            </div>
+            <div className="flex justify-between items-center text-sm p-2 bg-muted/50 rounded-md">
+            <span>Toggle Sidebar</span>
+            <div className="flex items-center gap-1">
+                <Badge variant="outline" className="font-mono text-xs">⌘</Badge>
+                <Badge variant="outline" className="font-mono text-xs">B</Badge>
+            </div>
+            </div>
+        </CardContent>
+      </Card>
+    </div>
     </div>
   );
 }
+
+    

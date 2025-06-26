@@ -893,7 +893,7 @@ export async function deleteUserDiscordToken(userUuid: string): Promise<boolean>
 }
 
 
-export async function createProject(name: string, description: string | undefined, ownerUuid: string): Promise<Project> {
+export async function createProject(name: string, description: string | undefined, ownerUuid: string, readmeContent?: string): Promise<Project> {
   const connection = await getDbConnection();
   const projectUuid = uuidv4();
   const now = new Date().toISOString();
@@ -903,7 +903,7 @@ export async function createProject(name: string, description: string | undefine
   try {
     const result = await connection.run(
       'INSERT INTO projects (uuid, name, description, ownerUuid, createdAt, updatedAt, isPrivate, readmeContent, isUrgent, storageBackend) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      projectUuid, name, description, ownerUuid, now, now, true, DEFAULT_PROJECT_README_CONTENT, false, storageBackend
+      projectUuid, name, description, ownerUuid, now, now, true, readmeContent || DEFAULT_PROJECT_README_CONTENT, false, storageBackend
     );
 
     if (!result.lastID) {
@@ -1083,39 +1083,27 @@ export async function updateProjectDiscordSettings(
   projectUuid: string,
   webhookUrl: string | null,
   enabled: boolean,
-  notifyTasks?: boolean,
-  notifyMembers?: boolean,
-  notifyAnnouncements?: boolean,
-  notifyDocuments?: boolean,
-  notifySettings?: boolean
+  notifyTasks: boolean,
+  notifyMembers: boolean,
+  notifyAnnouncements: boolean,
+  notifyDocuments: boolean,
+  notifySettings: boolean
 ): Promise<Project | null> {
     const connection = await getDbConnection();
     const now = new Date().toISOString();
     
-    let setClauses = 'discordWebhookUrl = ?, discordNotificationsEnabled = ?, updatedAt = ?';
-    let params: (string | number | boolean | null | undefined)[] = [webhookUrl, enabled ? 1 : 0, now];
-
-    if (notifyTasks !== undefined) {
-        setClauses += ', discordNotifyTasks = ?';
-        params.push(notifyTasks ? 1 : 0);
-    }
-    if (notifyMembers !== undefined) {
-        setClauses += ', discordNotifyMembers = ?';
-        params.push(notifyMembers ? 1 : 0);
-    }
-    if (notifyAnnouncements !== undefined) {
-        setClauses += ', discordNotifyAnnouncements = ?';
-        params.push(notifyAnnouncements ? 1 : 0);
-    }
-    if (notifyDocuments !== undefined) {
-        setClauses += ', discordNotifyDocuments = ?';
-        params.push(notifyDocuments ? 1 : 0);
-    }
-    if (notifySettings !== undefined) {
-        setClauses += ', discordNotifySettings = ?';
-        params.push(notifySettings ? 1 : 0);
-    }
-    params.push(projectUuid);
+    let setClauses = 'discordWebhookUrl = ?, discordNotificationsEnabled = ?, discordNotifyTasks = ?, discordNotifyMembers = ?, discordNotifyAnnouncements = ?, discordNotifyDocuments = ?, discordNotifySettings = ?, updatedAt = ?';
+    let params: (string | number | boolean | null | undefined)[] = [
+      webhookUrl, 
+      enabled ? 1 : 0, 
+      notifyTasks ? 1 : 0, 
+      notifyMembers ? 1 : 0,
+      notifyAnnouncements ? 1 : 0,
+      notifyDocuments ? 1 : 0,
+      notifySettings ? 1 : 0,
+      now, 
+      projectUuid
+    ];
 
     const result = await connection.run(
         `UPDATE projects SET ${setClauses} WHERE uuid = ?`,
@@ -2580,3 +2568,5 @@ export async function getOrCreateProjectConversation(projectUuid: string): Promi
 
     return conversationUuid;
 }
+
+    

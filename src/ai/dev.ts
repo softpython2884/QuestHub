@@ -7,6 +7,9 @@ import '@/ai/flows/summarize-project-documentation.ts';
 // import '@/ai/flows/flag-api-key-risks.ts'; // Removed
 import '@/ai/flows/generate-document-content.ts';
 import '@/ai/flows/generate-project-scaffold.ts'; 
-import '@/ai/flows/edit-file-content-ai.ts'; // Added new flow
+import '@/ai/flows/edit-file-content-ai.ts';
 import '@/ai/flows/workspace-assistant.ts';
+import '@/ai/flows/generate-tasks.ts';
+import '@/ai/flows/generate-project-kickstart.ts';
 
+    
