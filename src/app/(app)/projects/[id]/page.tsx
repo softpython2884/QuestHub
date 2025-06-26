@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -85,6 +86,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { usePageContext } from '@/contexts/PageContext';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -194,6 +196,7 @@ function ProjectDetailPageContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const projectUuid = params.id as string;
+  const { setPageContext } = usePageContext();
 
   const { user, isLoading: authLoading, refreshUser } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
@@ -460,6 +463,7 @@ function ProjectDetailPageContent() {
                 const projectData = await fetchProjectAction(projectUuid);
 
                 if (projectData) {
+                    setPageContext({ project: projectData });
                     const userRoleForProject = await loadProjectMembersAndRole(projectData.ownerUuid);
 
                     if (projectData.isPrivate && !userRoleForProject) {
@@ -498,12 +502,14 @@ function ProjectDetailPageContent() {
                 } else {
                     setAccessDenied(true);
                     setProject(null);
+                    setPageContext({});
                     toast({variant: "destructive", title: "Project Not Found", description: "The project could not be loaded or you don't have access."});
                 }
             } catch (err) {
                 console.error("[ProjectDetail] performLoadProjectData: Error fetching project on client:", err);
                 setProject(null);
                 setAccessDenied(true);
+                setPageContext({});
                 toast({variant: "destructive", title: "Error", description: "Could not load project details."})
             } finally {
                 setIsLoadingData(false);
@@ -513,7 +519,11 @@ function ProjectDetailPageContent() {
         }
     };
       performLoadProjectData();
-  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubOAuth, discordSettingsForm]);
+
+      return () => {
+        setPageContext({}); // Cleanup context on unmount
+      };
+  }, [projectUuid, user, authLoading, router, toast, editProjectForm, loadProjectMembersAndRole, loadTasks, loadProjectTagsData, loadProjectDocuments, loadProjectAnnouncements, loadUserGithubOAuth, discordSettingsForm, setPageContext]);
 
 
   useEffect(() => {
@@ -1866,7 +1876,9 @@ function ProjectDetailPageContent() {
                     </DialogDescription>
                 </DialogHeader>
                 <Textarea
-                    placeholder="* Sub-task 1&#x0a;** Sub-task 2 (completed)&#x0a;Another sub-task"
+                    placeholder="* Sub-task 1
+** Sub-task 2 (completed)
+Another sub-task"
                     value={subtaskInput}
                     onChange={(e) => setSubtaskInput(e.target.value)}
                     rows={8}

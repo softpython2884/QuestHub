@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -18,8 +19,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { workspaceAssistant } from '@/ai/flows/workspace-assistant';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, Project } from '@/types';
 import { cn } from '@/lib/utils';
+import { usePageContext } from '@/contexts/PageContext';
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -28,6 +30,7 @@ export function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const pageContext = usePageContext();
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -56,7 +59,16 @@ export function Chatbot() {
 
     try {
       const newHistory = [...messages, userMessage];
-      const result = await workspaceAssistant({ history: newHistory });
+      
+      const context = {
+        pathname: window.location.pathname,
+        projectUuid: pageContext.project?.uuid,
+        projectName: pageContext.project?.name,
+        filePath: pageContext.file?.path,
+        fileContent: pageContext.file?.content,
+      };
+      
+      const result = await workspaceAssistant({ history: newHistory, context });
       
       const aiMessage: ChatMessage = { role: 'model', content: result.response };
       setMessages((prev) => [...prev, aiMessage]);

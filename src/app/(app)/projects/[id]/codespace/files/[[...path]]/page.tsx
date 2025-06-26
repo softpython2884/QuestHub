@@ -44,6 +44,7 @@ import { useActionState, startTransition } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
+import { usePageContext } from '@/contexts/PageContext';
 
 
 const TEXT_EXTENSIONS = ['.txt', '.log', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.php', '.rb', '.go', '.sh', '.gitignore', '.env', '.config', '.cfg', '.ini', '.sql', '.r', '.swift', '.kt', '.kts', '.rs', '.toml', '.lua', '.pl', '.dart', '.ex', '.exs', '.erl', '.hrl', '.vue', '.svelte', '.tf', '.tfvars', '.hcl', '.gradle', '.diff', '.patch', '.csv', '.tsv', '.ps1', '.psm1', '.fish', '.zsh', '.bash'];
@@ -82,6 +83,7 @@ function FileExplorerContent() {
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
+  const { setPageContext } = usePageContext();
 
   const projectUuid = params.id as string;
 
@@ -137,6 +139,7 @@ function FileExplorerContent() {
     setError(null);
     setFileData(null);
     setIsViewingFile(false);
+    setPageContext({ project }); // Set project context, clear file context
 
     try {
       const extension = pathToLoad.includes('.') ? getFileExtension(pathToLoad.split('/').pop()!) : null;
@@ -151,7 +154,7 @@ function FileExplorerContent() {
           else if (extension === 'html') fileDisplayType = 'html';
           else if (TEXT_EXTENSIONS.includes(`.${extension}`) || fetchedFileData.encoding === 'utf-8' || !fetchedFileData.encoding) fileDisplayType = 'text';
 
-          setFileData({
+          const newFileData = {
             name: pathToLoad.split('/').pop()!,
             path: pathToLoad,
             content: fetchedFileData.content,
@@ -159,9 +162,13 @@ function FileExplorerContent() {
             downloadUrl: fetchedFileData.download_url,
             encoding: fetchedFileData.encoding,
             sha: fetchedFileData.sha,
-          });
-          setEditingContent(fetchedFileData.content);
+          };
+
+          setFileData(newFileData);
+          setEditingContent(newFileData.content);
           setIsViewingFile(true);
+          setPageContext({ project, file: { path: newFileData.path, content: newFileData.content, sha: newFileData.sha } });
+
         } else {
           setError(fetchedFileData.error || "Failed to load file content.");
           setIsViewingFile(false);
@@ -184,7 +191,7 @@ function FileExplorerContent() {
     } finally {
       setIsLoadingPathContent(false);
     }
-  }, [projectUuid, project, authLoading, isLoadingProject, toast]);
+  }, [projectUuid, project, authLoading, isLoadingProject, toast, setPageContext]);
 
 
   useEffect(() => {
@@ -204,6 +211,7 @@ function FileExplorerContent() {
           setError("Project not found or you don't have access.");
           setProject(null);
           setAccessDenied(true);
+          setPageContext({});
           return;
         }
 
@@ -211,10 +219,12 @@ function FileExplorerContent() {
         if (fetchedProject.isPrivate && !roleResult.role) {
           setError("You do not have permission to view this private project's CodeSpace.");
           setAccessDenied(true);
+          setPageContext({});
           return;
         }
         setUserRole(roleResult.role);
         setProject(fetchedProject);
+        setPageContext({ project: fetchedProject });
 
         if (!fetchedProject.githubRepoName) {
           setError("Project is not linked to a GitHub repository.");
@@ -224,6 +234,7 @@ function FileExplorerContent() {
         setError("Failed to load project details or permissions.");
         setProject(null);
         setAccessDenied(true);
+        setPageContext({});
       } finally {
         setIsLoadingProject(false);
       }
@@ -231,7 +242,10 @@ function FileExplorerContent() {
     
     loadData();
 
-  }, [projectUuid, user, authLoading, router]);
+    // Cleanup context on unmount
+    return () => setPageContext({});
+
+  }, [projectUuid, user, authLoading, router, setPageContext]);
 
 
   useEffect(() => {
@@ -251,7 +265,9 @@ function FileExplorerContent() {
     setIsSavingFile(false);
     if (result.success && result.newSha) {
       toast({ title: "File Saved", description: `${fileData.name} has been updated.` });
-      setFileData(prev => prev ? { ...prev, content: editingContent, sha: result.newSha! } : null);
+      const newFileData = { ...fileData, content: editingContent, sha: result.newSha! };
+      setFileData(newFileData);
+      setPageContext({ project, file: { path: newFileData.path, content: newFileData.content, sha: newFileData.sha } });
       setIsEditModalOpen(false);
     } else {
       toast({ variant: "destructive", title: "Save Error", description: result.error || "Failed to save file." });
