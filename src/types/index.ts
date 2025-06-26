@@ -175,7 +175,7 @@ export interface Project {
   discordNotifyAnnouncements?: boolean;
   discordNotifyDocuments?: boolean;
   discordNotifySettings?: boolean;
-  starCount?: number;
+  starCount?: boolean;
   isStarred?: boolean;
   memberCount?: number;
 }

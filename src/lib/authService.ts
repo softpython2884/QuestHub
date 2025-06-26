@@ -4,44 +4,40 @@
 import type { User, UserRole } from '@/types';
 import * as bcrypt from 'bcryptjs';
 import { createUser as dbCreateUser, getUserByEmail as dbGetUserByEmail, updateUserProfile as dbUpdateUserProfile, getUserByUuid as dbGetUserByUuid, getAppSetting, getInvitationByToken, markInvitationAsUsed } from './db';
-import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import { auth } from '@/lib/authEdge';
+import jwt from 'jsonwebtoken';
 
-
-const AUTH_COOKIE_NAME = 'flowup_auth_token'; 
+const AUTH_COOKIE_NAME = 'flowup_auth_token';
 
 const getJwtSecretOrThrow = (): string => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    console.error("CRITICAL: JWT_SECRET is not defined. Authentication will fail.");
     throw new Error('JWT_SECRET is not configured on the server.');
   }
   return secret;
 };
 
 export const createSessionForUser = async (user: Omit<User, 'hashedPassword'>) => {
-  const JWT_SECRET = getJwtSecretOrThrow();
-  const tokenPayload = {
-    uuid: user.uuid,
-  };
-  const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
+  const jwtSecret = getJwtSecretOrThrow();
+  const token = jwt.sign({ uuid: user.uuid }, jwtSecret, {
+    expiresIn: '7d', // 7-day session
+  });
 
   try {
     cookies().set(AUTH_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', 
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
       sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days in seconds
     });
-    console.log(`[authService.createSessionForUser] Session created for user UUID: ${user.uuid}.`);
+    console.log(`[authService.createSessionForUser] Session cookie set for user UUID: ${user.uuid}.`);
   } catch (error) {
-     console.error("[authService.createSessionForUser] Error setting cookie:", error);
-     throw new Error("Could not create user session.");
+    console.error(`[authService.createSessionForUser] Failed to set cookie for user ${user.uuid}:`, error);
+    throw new Error("Could not set session cookie.");
   }
 };
-
 
 export const login = async (email: string, password?: string): Promise<User | null> => {
   console.log('[authService.login] Attempting login for email:', email);
@@ -131,7 +127,7 @@ export const signup = async (
 export const logout = async (): Promise<void> => {
   console.log('[authService.logout] Logging out user.');
   try {
-    cookies().delete(AUTH_COOKIE_NAME);
+    cookies().delete('flowup_auth_token');
     console.log('[authService.logout] Auth cookie deleted.');
   } catch (error) {
     console.error("[authService.logout] Error deleting cookie:", error);
@@ -169,12 +165,15 @@ export const updateUserProfile = async (data: {
 
 export const getCurrentUserSession = async (): Promise<User | null> => {
   console.log('[authService.getCurrentUserSession] Attempting to get current user session from cookie.');
-  const session = await auth(); 
-  
-  if (session?.user?.uuid) {
-    console.log('[authService.getCurrentUserSession] Session found via auth() for user UUID:', session.user.uuid);
-    return session.user;
+  try {
+    const session = await auth(); 
+    if (session?.user?.uuid) {
+      console.log('[authService.getCurrentUserSession] Session found via auth() for user UUID:', session.user.uuid);
+      return session.user;
+    }
+  } catch (error) {
+    console.error("[authService.getCurrentUserSession] Error getting session:", error);
   }
-  console.log('[authService.getCurrentUserSession] No active session found via auth().');
+  console.log('[authService.getCurrentUserSession] No active session found.');
   return null;
 };

@@ -8,13 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getPublicProfileAction } from '../actions';
+import { getPublicProfileAction, togglePinProjectAction } from '../actions';
 import type { User, Project } from '@/types';
-import { Loader2, ArrowLeft, Building, Mail, Globe, Github, MessageSquare, Pin } from 'lucide-react';
+import { Loader2, ArrowLeft, Building, Mail, Globe, Github, MessageSquare, Pin, PinOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Badge } from '@/components/ui/badge';
 import { fetchDiscordUserDetailsAction, fetchGithubUserDetailsAction } from '../../projects/[id]/actions';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
 
 interface ProfileData extends User {
     projects: Project[];
@@ -30,38 +33,48 @@ export default function PublicProfilePage() {
     const { user: currentUser } = useAuth();
     const params = useParams();
     const router = useRouter();
+    const { toast } = useToast();
     const userUuid = params.uuid as string;
 
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [socials, setSocials] = useState<SocialDetails>({ github: null, discord: null });
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        if (userUuid) {
+    const loadProfileData = async () => {
+         if (userUuid) {
             setIsLoading(true);
-            getPublicProfileAction(userUuid)
-                .then(async (data) => {
-                    if (data) {
-                        setProfile(data);
-                        
-                        let socialDetails: SocialDetails = { github: null, discord: null };
-                        if (data.showGithubOnProfile) {
-                            const github = await fetchGithubUserDetailsAction(userUuid);
-                            socialDetails.github = github ? { login: github.login, html_url: github.html_url } : null;
-                        }
-                        if (data.showDiscordOnProfile) {
-                            const discord = await fetchDiscordUserDetailsAction(userUuid);
-                            socialDetails.discord = discord ? { username: discord.username, discriminator: discord.discriminator } : null;
-                        }
-                        setSocials(socialDetails);
-
-                    } else {
-                        // Handle user not found
-                        router.push('/discover');
+            try {
+                const data = await getPublicProfileAction(userUuid);
+                if (data) {
+                    setProfile(data);
+                    
+                    let socialDetails: SocialDetails = { github: null, discord: null };
+                    if (data.showGithubOnProfile) {
+                        const github = await fetchGithubUserDetailsAction(userUuid);
+                        socialDetails.github = github ? { login: github.login, html_url: github.html_url } : null;
                     }
-                })
-                .finally(() => setIsLoading(false));
+                    if (data.showDiscordOnProfile) {
+                        const discord = await fetchDiscordUserDetailsAction(userUuid);
+                        socialDetails.discord = discord ? { username: discord.username, discriminator: discord.discriminator } : null;
+                    }
+                    setSocials(socialDetails);
+
+                } else {
+                    toast({variant: 'destructive', title: 'Not Found', description: "This user profile does not exist."})
+                    router.push('/discover');
+                }
+            } catch (err) {
+                 toast({variant: 'destructive', title: 'Error', description: "Failed to load user profile."})
+                 router.push('/discover');
+            }
+            finally {
+                setIsLoading(false);
+            }
         }
+    };
+
+    useEffect(() => {
+        loadProfileData();
     }, [userUuid, router]);
 
     const getInitials = (name?: string) => {
@@ -73,6 +86,16 @@ export default function PublicProfilePage() {
         }
         return initials;
     };
+    
+    const handleTogglePin = async (projectUuid: string) => {
+        const result = await togglePinProjectAction(projectUuid);
+        if (result.success) {
+            toast({ title: 'Success', description: `Project ${result.pinned ? 'pinned' : 'unpinned'}.` });
+            loadProfileData(); // Reload to reflect changes
+        } else {
+            toast({ variant: 'destructive', title: 'Error', description: result.error });
+        }
+    }
 
     if (isLoading) {
         return (
@@ -113,7 +136,7 @@ export default function PublicProfilePage() {
             </div>
             
             <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-                <div className="flex-shrink-0 flex flex-col items-center">
+                <div className="flex-shrink-0 flex flex-col items-center w-full md:w-1/4">
                     <Avatar className="h-32 w-32 mb-4 ring-2 ring-primary ring-offset-4 ring-offset-background">
                         <AvatarImage src={profile.avatar} alt={profile.name} />
                         <AvatarFallback className="text-5xl">{getInitials(profile.name)}</AvatarFallback>
@@ -137,18 +160,17 @@ export default function PublicProfilePage() {
                             </a>
                         )}
                     </div>
-                </div>
-
-                <div className="w-full">
-                    {profile.bio && (
-                        <Card>
-                            <CardHeader><CardTitle>Bio</CardTitle></CardHeader>
-                            <CardContent><p className="text-muted-foreground italic">"{profile.bio}"</p></CardContent>
+                     {profile.bio && (
+                        <Card className="mt-6 w-full bg-muted/50">
+                            <CardHeader className="p-4"><CardTitle className="text-base">Bio</CardTitle></CardHeader>
+                            <CardContent className="p-4 pt-0 text-sm text-muted-foreground">"{profile.bio}"</CardContent>
                         </Card>
                     )}
+                </div>
 
+                <div className="w-full md:w-3/4">
                     {profile.pinnedProjects.length > 0 && (
-                        <div className="mt-6">
+                        <div className="mb-6">
                             <h2 className="text-xl font-semibold mb-3 flex items-center"><Pin className="mr-2 h-5 w-5 text-primary"/>Pinned Projects</h2>
                              <div className="grid md:grid-cols-2 gap-4">
                                 {profile.pinnedProjects.map(project => (
@@ -163,16 +185,30 @@ export default function PublicProfilePage() {
                         </div>
                     )}
                     
-                    <div className="mt-6">
+                    <div>
                         <h2 className="text-xl font-semibold mb-3">Public Projects ({profile.projects.length})</h2>
                         {profile.projects.length > 0 ? (
                             <div className="grid md:grid-cols-2 gap-4">
                                 {profile.projects.map(project => (
-                                    <Card key={project.uuid} className="hover:shadow-lg transition-shadow">
+                                    <Card key={project.uuid} className="hover:shadow-lg transition-shadow relative group">
                                         <CardHeader>
                                             <CardTitle className="text-lg"><Link href={`/projects/${project.uuid}`}>{project.name}</Link></CardTitle>
                                             <CardDescription className="line-clamp-2 h-10">{project.description}</CardDescription>
                                         </CardHeader>
+                                         {currentUser?.uuid === profile.uuid && (
+                                            <Button 
+                                                variant="outline" 
+                                                size="icon" 
+                                                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100"
+                                                title={profile.pinnedProjects.some(p => p.uuid === project.uuid) ? "Unpin Project" : "Pin Project"}
+                                                onClick={() => handleTogglePin(project.uuid)}
+                                            >
+                                                {profile.pinnedProjects.some(p => p.uuid === project.uuid) ? 
+                                                    <PinOff className="h-4 w-4 text-primary" /> : 
+                                                    <Pin className="h-4 w-4" />
+                                                }
+                                            </Button>
+                                        )}
                                     </Card>
                                 ))}
                             </div>

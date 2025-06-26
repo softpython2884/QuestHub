@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 'use server';
 
 import type { Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, Document as ProjectDocumentType, Announcement as ProjectAnnouncement, UserGithubOAuthToken, GithubRepoContentItem, User, DuplicateProjectFormState, UserDiscordOAuthToken } from '@/types';
@@ -23,8 +17,7 @@ import {
   deleteTask as dbDeleteTask,
   getProjectTags as dbGetProjectTags,
   updateProjectReadme as dbUpdateProjectReadme,
-  updateProjectUrgency as dbUpdateProjectUrgency,
-  updateProjectVisibility as dbUpdateProjectVisibility,
+  updateProjectUrgency as dbUpdateProjectVisibility,
   toggleTaskPinStatus as dbToggleTaskPinStatus,
   createProjectTag as dbCreateProjectTag,
   deleteProjectTag as dbDeleteProjectTag,
@@ -1669,6 +1662,10 @@ export async function getRepoContentsAction(projectUuid: string, path: string = 
     if (Array.isArray(data)) {
       return data as GithubRepoContentItem[];
     }
+    // Handle the case where the repo is empty
+    if ('message' in data && (data as any).message === "This repository is empty.") {
+        return [];
+    }
     return [data as GithubRepoContentItem];
   } catch (error: any) {
     console.error(`[getRepoContentsAction] Error fetching content for ${owner}/${repo}/${path}:`, error.status, error.message, error.response?.data);
@@ -1727,16 +1724,7 @@ export async function getFileContentAction(
         }
         
         let content: string;
-        // The `content` from GitHub API is always base64 encoded.
-        // We decode it to a UTF-8 string only if the API response indicates the original file was text.
-        // Otherwise, we pass the base64 string through for binary files like images.
-        // @ts-ignore
-        if (data.encoding === 'utf-8') {
-            content = Buffer.from(data.content, 'base64').toString('utf8');
-        } else {
-            // Assumes 'base64' encoding for binary files. Keep the base64 string.
-            content = data.content;
-        }
+        content = Buffer.from(data.content, 'base64').toString('utf8');
         
         // @ts-ignore
         return { content, sha: data.sha, name: data.name, path: data.path, html_url: data.html_url, download_url: data.download_url, encoding: data.encoding, size: data.size };
@@ -2200,7 +2188,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks ?? true, discordNotifyMembers ?? true, discordNotifyAnnouncements ?? true, discordNotifyDocuments ?? true, discordNotifySettings ?? true);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };

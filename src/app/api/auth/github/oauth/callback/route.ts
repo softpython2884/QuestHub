@@ -2,21 +2,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { Octokit } from 'octokit';
 import { storeUserGithubOAuthToken, getUserByEmail, createUser } from '@/lib/db';
+import { createSessionForUser } from '@/lib/authService';
 import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import { auth } from '@/lib/authEdge';
 import type { User } from '@/types';
 import { sendDiscordDirectMessage } from '@/lib/discord';
-
-const AUTH_COOKIE_NAME = 'flowup_auth_token';
-
-const getJwtSecretOrThrow = (): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET is not configured on the server.');
-  }
-  return secret;
-};
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -34,7 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(errorUrl);
   }
 
-  const storedStateCookie = request.cookies.get('github_oauth_state');
+  const storedStateCookie = cookies().get('github_oauth_state');
   
   let storedStateData;
   if(storedStateCookie) {
@@ -60,6 +50,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(errorUrl);
   }
 
+  // Clear the state cookie once used
+  cookies().set('github_oauth_state', '', { maxAge: -1 });
+
   if (!code) {
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
@@ -69,9 +62,6 @@ export async function GET(request: NextRequest) {
     errorUrl.searchParams.set('message', encodeURIComponent(errorDescription || error || 'Unknown GitHub error'));
     return NextResponse.redirect(errorUrl);
   }
-
-  const response = new NextResponse();
-  response.cookies.delete('github_oauth_state');
 
   try {
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
@@ -121,9 +111,7 @@ export async function GET(request: NextRequest) {
       const redirectUrl = new URL(redirectTo, NEXT_PUBLIC_APP_URL);
       redirectUrl.searchParams.set('oauth_status', 'success');
 
-      response.headers.set('Location', redirectUrl.toString());
-      response.status = 307; // Use temporary redirect
-      return response;
+      return NextResponse.redirect(redirectUrl);
 
     } else {
       // --- LOGIN/SIGNUP FLOW ---
@@ -156,18 +144,7 @@ export async function GET(request: NextRequest) {
 
       const { hashedPassword, ...userToReturn } = appUser;
       
-      // Inlining session creation
-      const JWT_SECRET = getJwtSecretOrThrow();
-      const jwtPayload = { uuid: userToReturn.uuid };
-      const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
-
-      response.cookies.set(AUTH_COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        sameSite: 'lax',
-      });
+      await createSessionForUser(userToReturn);
 
       await storeUserGithubOAuthToken(
         userToReturn.uuid,
@@ -180,9 +157,7 @@ export async function GET(request: NextRequest) {
       
       console.log(`[GitHub OAuth Callback] Successfully logged in/signed up user ${userToReturn.email}. Redirecting to dashboard.`);
       
-      response.headers.set('Location', new URL('/dashboard', NEXT_PUBLIC_APP_URL).toString());
-      response.status = 307;
-      return response;
+      return NextResponse.redirect(new URL('/dashboard', NEXT_PUBLIC_APP_URL));
     }
 
   } catch (error: any) {
@@ -192,8 +167,6 @@ export async function GET(request: NextRequest) {
     redirectUrl.searchParams.set('error', 'oauth_callback_error');
     redirectUrl.searchParams.set('message', encodeURIComponent(error.message || 'Unknown error'));
     
-    response.headers.set('Location', redirectUrl.toString());
-    response.status = 307;
-    return response;
+    return NextResponse.redirect(redirectUrl);
   }
 }

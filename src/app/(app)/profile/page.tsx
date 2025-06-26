@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -70,8 +69,8 @@ export default function ProfilePage() {
   
   const [avatarSource, setAvatarSource] = useState<AvatarSource>('flowup');
 
-  const [disconnectGithubState, disconnectGithubFormAction, isDisconnectGithubPending] = useActionState(disconnectGithubAction, { success: false });
-  const [disconnectDiscordState, disconnectDiscordFormAction, isDisconnectDiscordPending] = useActionState(disconnectDiscordAction, { success: false });
+  const [disconnectGithubState, disconnectGithubFormAction, isDisconnectGithubPending] = useActionState(disconnectGithubAction, { success: false, error: undefined, message: undefined });
+  const [disconnectDiscordState, disconnectDiscordFormAction, isDisconnectDiscordPending] = useActionState(disconnectDiscordAction, { success: false, error: undefined, message: undefined });
 
 
   const form = useForm<ProfileFormValues>({
@@ -480,10 +479,12 @@ export default function ProfilePage() {
               {isLoadingGithub ? (
                  <Skeleton className="h-9 w-24" />
               ) : githubToken ? (
-                <Button variant="outline" onClick={handleDisconnectGitHub} disabled={isDisconnectGithubPending}>
-                  {isDisconnectGithubPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
-                  Disconnect
-                </Button>
+                <form action={disconnectGithubFormAction}>
+                  <Button variant="outline" type="submit" disabled={isDisconnectGithubPending}>
+                    {isDisconnectGithubPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
+                    Disconnect
+                  </Button>
+                </form>
               ) : (
                 <Button onClick={handleConnectGitHub}>
                   <Github className="mr-2 h-4 w-4" /> Connect
@@ -519,10 +520,12 @@ export default function ProfilePage() {
                {isLoadingDiscord ? (
                  <Skeleton className="h-9 w-24" />
               ) : discordUserDetails ? (
-                <Button variant="outline" onClick={handleDisconnectDiscord} disabled={isDisconnectDiscordPending}>
-                  {isDisconnectDiscordPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
-                  Disconnect
-                </Button>
+                <form action={disconnectDiscordFormAction}>
+                  <Button variant="outline" type="submit" disabled={isDisconnectDiscordPending}>
+                    {isDisconnectDiscordPending ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : <PowerOff className="mr-2 h-4 w-4" />}
+                    Disconnect
+                  </Button>
+                </form>
               ) : (
                 <Button onClick={handleConnectDiscord}>
                   <MessageSquare className="mr-2 h-4 w-4" /> Connect

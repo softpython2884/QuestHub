@@ -42,7 +42,13 @@ export async function auth(): Promise<Session | null> {
     
     if (!userFromDb) {
       console.warn(`[authEdge.auth] User ${decoded.uuid} from JWT not found in DB. Invalidating session.`);
-      cookieStore.delete(AUTH_COOKIE_NAME);
+      // The cookie is invalid, attempt to delete it
+      try {
+        cookieStore.delete(AUTH_COOKIE_NAME);
+      } catch (e) {
+        // Can happen in contexts where cookies can't be modified (e.g., during static generation).
+        console.error('[authEdge.auth] Failed to delete invalid auth cookie:', e);
+      }
       return null;
     }
     
@@ -52,11 +58,17 @@ export async function auth(): Promise<Session | null> {
     };
 
   } catch (error: any) {
-    console.warn('[authEdge.auth] JWT verification failed:', error.message);
-    try {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      console.warn('[authEdge.auth] JWT verification failed:', error.message);
+      // The cookie is invalid, attempt to delete it
+      try {
         cookies().delete(AUTH_COOKIE_NAME);
-    } catch (deleteError) {
-        console.error('[authEdge.auth] Failed to delete invalid auth cookie during error handling:', deleteError);
+      } catch (e) {
+        // Can happen in contexts where cookies can't be modified.
+        console.error('[authEdge.auth] Failed to delete invalid auth cookie during error handling:', e);
+      }
+    } else {
+        console.error('[authEdge.auth] An unexpected error occurred during authentication:', error);
     }
     return null;
   }
