@@ -17,10 +17,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction, updateOAuthAppAction } from './actions';
 import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info, Bot, MoreVertical, Edit } from 'lucide-react';
-import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState, UpdateOAuthAppFormState } from '@/types';
+import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope } from '@/types';
+import { ALL_SCOPES } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const oAuthAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
@@ -44,6 +46,9 @@ type OAuthAppFormValues = z.infer<typeof oAuthAppFormSchema>;
 const flowAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
   description: z.string().max(200, "Description cannot exceed 200 characters.").optional(),
+  scopes: z.array(z.string()).refine(value => value.some(item => item), {
+    message: "You have to select at least one scope.",
+  }),
 });
 type FlowAppFormValues = z.infer<typeof flowAppFormSchema>;
 
@@ -61,7 +66,7 @@ export default function DeveloperSettingsPage() {
   const [copied, setCopied] = useState<'clientId' | 'clientSecret' | 'flowAppToken' | null>(null);
   
   // FlowApp State
-  const [flowApps, setFlowApps] = useState<Omit<FlowApp, 'token'>[]>([]);
+  const [flowApps, setFlowApps] = useState<Omit<FlowApp, 'token' | 'secretHash' | 'scopes'>[]>([]);
   const [isLoadingFlowApps, setIsLoadingFlowApps] = useState(true);
   const [isCreateFlowAppDialogOpen, setIsCreateFlowAppDialogOpen] = useState(false);
   const [createdFlowApp, setCreatedFlowApp] = useState<{ name: string; token: string } | null>(null);
@@ -78,7 +83,7 @@ export default function DeveloperSettingsPage() {
 
   // FlowApp Form
   const [createFlowAppState, createFlowAppFormAction, isCreatingFlowApp] = useActionState(createFlowAppAction, { message: "", error: ""});
-  const flowAppForm = useForm<FlowAppFormValues>({ resolver: zodResolver(flowAppFormSchema), defaultValues: { name: '', description: '' } });
+  const flowAppForm = useForm<FlowAppFormValues>({ resolver: zodResolver(flowAppFormSchema), defaultValues: { name: '', description: '', scopes: [] } });
 
   useEffect(() => {
     async function loadApps() {
@@ -425,7 +430,7 @@ export default function DeveloperSettingsPage() {
                     <DialogHeader>
                         <DialogTitle>Create a New FlowApp</DialogTitle>
                         <DialogDescription>
-                          This will generate a personal access token. Treat it like a password.
+                          This will generate a personal access token. Select the permissions this token will have.
                         </DialogDescription>
                     </DialogHeader>
                     <Form {...flowAppForm}>
@@ -444,6 +449,55 @@ export default function DeveloperSettingsPage() {
                                     <FormMessage />
                                 </FormItem>
                             )}/>
+                            <FormField
+                              control={flowAppForm.control}
+                              name="scopes"
+                              render={() => (
+                                <FormItem>
+                                  <div className="mb-4">
+                                    <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
+                                    <FormDescription>
+                                      Select what this application will be allowed to do.
+                                    </FormDescription>
+                                  </div>
+                                  {ALL_SCOPES.map((item) => (
+                                    <FormField
+                                      key={item.id}
+                                      control={flowAppForm.control}
+                                      name="scopes"
+                                      render={({ field }) => {
+                                        return (
+                                          <FormItem
+                                            key={item.id}
+                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                          >
+                                            <FormControl>
+                                              <Checkbox
+                                                checked={field.value?.includes(item.id)}
+                                                onCheckedChange={(checked) => {
+                                                  return checked
+                                                    ? field.onChange([...(field.value || []), item.id])
+                                                    : field.onChange(
+                                                        field.value?.filter(
+                                                          (value) => value !== item.id
+                                                        )
+                                                      )
+                                                }}
+                                              />
+                                            </FormControl>
+                                            <FormLabel className="font-normal">
+                                                {item.id}
+                                                <FormDescription className="!mt-0">{item.description}</FormDescription>
+                                            </FormLabel>
+                                          </FormItem>
+                                        )
+                                      }}
+                                    />
+                                  ))}
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreatingFlowApp}>Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isCreatingFlowApp}>
@@ -484,7 +538,7 @@ export default function DeveloperSettingsPage() {
                   <div className="flex items-center gap-1">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setFlowAppToDelete(app)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setFlowAppToDelete(app as FlowApp)}>
                                 <Trash2 className="h-4 w-4"/>
                             </Button>
                         </AlertDialogTrigger>

@@ -16,7 +16,8 @@ import { getRegistrationModeAction, updateRegistrationModeAction, generateInvite
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { UserRole, FlowAppConsent } from "@/types";
+import type { UserRole, FlowAppConsent, FlowAppScope } from "@/types";
+import { ALL_SCOPES } from "@/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -86,13 +87,19 @@ function ConsentManager() {
     const pendingConsents = consents.filter(c => c.status === 'pending');
     const managedConsents = consents.filter(c => c.status !== 'pending');
 
+    const ScopeDescription: React.FC<{ scope: FlowAppScope }> = ({ scope }) => {
+        const scopeInfo = ALL_SCOPES.find(s => s.id === scope);
+        return <li className="text-xs">{scopeInfo?.description || scope}</li>;
+    };
+
+
     return (
       <div className="space-y-4">
         {pendingConsents.length > 0 && (
             <div className="space-y-2">
                  <h5 className="font-medium text-amber-600">Pending Requests</h5>
                  {pendingConsents.map(consent => (
-                    <Card key={consent.flowAppUuid} className="p-3 bg-amber-50 dark:bg-amber-900/20 border-amber-500/50">
+                    <Card key={consent.flowAppUuid} className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-500/50">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                             <div className="flex items-center gap-3">
                                 <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(consent.flowAppName)}</AvatarFallback></Avatar>
@@ -105,6 +112,12 @@ function ConsentManager() {
                                 <Button size="sm" variant="destructive" onClick={() => handleDecision(consent.flowAppUuid, 'denied')} disabled={isSubmitting}>Deny</Button>
                                 <Button size="sm" onClick={() => handleDecision(consent.flowAppUuid, 'granted')} disabled={isSubmitting}>Allow</Button>
                             </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-amber-500/30">
+                            <p className="text-xs font-semibold">This app is requesting permission to:</p>
+                            <ul className="list-disc pl-5 mt-1 space-y-1">
+                                {consent.scopes.map(scope => <ScopeDescription key={scope} scope={scope} />)}
+                            </ul>
                         </div>
                     </Card>
                  ))}

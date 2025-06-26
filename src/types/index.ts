@@ -282,6 +282,14 @@ export interface UpdateOAuthAppFormState {
   updatedApp?: OAuthApp;
 }
 
+export type FlowAppScope = 'profile:read' | 'projects:read';
+
+export const ALL_SCOPES: { id: FlowAppScope; description: string }[] = [
+    { id: 'profile:read', description: 'Read your public profile information (name, email, avatar).' },
+    { id: 'projects:read', description: 'Read the list of projects you are a member of.' },
+];
+
+
 export interface FlowApp {
   uuid: string;
   name: string;
@@ -289,6 +297,7 @@ export interface FlowApp {
   ownerUuid: string;
   tokenPrefix: string;
   secretHash: string;
+  scopes: FlowAppScope[];
   createdAt: string;
   updatedAt: string;
   token?: string; // Only available on creation
@@ -366,6 +375,7 @@ export interface FlowAppConsent {
     flowAppName: string;
     flowAppOwnerName: string;
     status: FlowAppConsentStatus;
+    scopes: FlowAppScope[];
     createdAt: string;
     updatedAt: string;
 }

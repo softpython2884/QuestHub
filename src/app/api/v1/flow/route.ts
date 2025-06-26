@@ -8,7 +8,13 @@ import {
     getUserByUuid,
     getProjectsForUser
 } from '@/lib/db';
-import type { FlowApp, User } from '@/types';
+import type { FlowApp, User, FlowAppScope } from '@/types';
+
+const ACTION_SCOPES: Record<string, FlowAppScope> = {
+    'getUserDetails': 'profile:read',
+    'listUserProjects': 'projects:read',
+};
+
 
 async function authenticateRequest(request: NextRequest): Promise<{ app?: FlowApp; error?: string; status?: number }> {
     const authHeader = request.headers.get('Authorization');
@@ -18,7 +24,7 @@ async function authenticateRequest(request: NextRequest): Promise<{ app?: FlowAp
 
     const token = authHeader.substring(7); // Remove 'Bearer '
     const tokenParts = token.split('_');
-    if (tokenParts.length !== 3) {
+    if (tokenParts.length !== 3 || tokenParts[0] !== 'fpat') {
         return { error: 'Invalid token format.', status: 401 };
     }
     
@@ -39,7 +45,11 @@ async function authenticateRequest(request: NextRequest): Promise<{ app?: FlowAp
 }
 
 async function handleAction(app: FlowApp, action: string, payload: any) {
-    // Every action that accesses user data requires userUuid in the payload.
+    const requiredScope = ACTION_SCOPES[action];
+    if (requiredScope && !app.scopes.includes(requiredScope)) {
+        return NextResponse.json({ error: 'Insufficient scope.', message: `This action requires the '${requiredScope}' permission, which this app does not have.` }, { status: 403 });
+    }
+
     const userUuid = payload?.userUuid;
     if (!userUuid) {
         return NextResponse.json({ error: 'userUuid is required in the payload for this action.' }, { status: 400 });
@@ -71,11 +81,9 @@ async function handleAction(app: FlowApp, action: string, payload: any) {
                 uuid: safeUser.uuid,
                 name: safeUser.name,
                 avatar: safeUser.avatar,
-                email: safeUser.email, // Assuming email is allowed by scope
+                email: safeUser.email,
                 bio: safeUser.bio,
                 websiteUrl: safeUser.websiteUrl,
-                showGithubOnProfile: safeUser.showGithubOnProfile,
-                showDiscordOnProfile: safeUser.showDiscordOnProfile,
             };
             return NextResponse.json(publicProfile);
         }
@@ -84,9 +92,6 @@ async function handleAction(app: FlowApp, action: string, payload: any) {
             const projects = await getProjectsForUser(userUuid);
             return NextResponse.json(projects);
         }
-
-        // TODO: Add more actions here like 'createTask', 'updateTask', etc.
-        // Each action should verify its own payload requirements.
 
         default:
             return NextResponse.json({ error: `Action '${action}' not found.` }, { status: 404 });

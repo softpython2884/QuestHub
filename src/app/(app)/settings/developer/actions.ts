@@ -13,7 +13,7 @@ import {
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import type { CreateOAuthAppFormState, CreateFlowAppFormState, UpdateOAuthAppFormState } from '@/types';
+import type { CreateOAuthAppFormState, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope } from '@/types';
 
 
 export async function getOAuthAppsAction() {
@@ -192,6 +192,9 @@ export async function getFlowAppsAction() {
 const CreateFlowAppSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
   description: z.string().max(200, "Description cannot exceed 200 characters.").optional(),
+  scopes: z.array(z.string()).refine(value => value.length > 0, {
+    message: "You have to select at least one scope.",
+  }),
 });
 
 export async function createFlowAppAction(
@@ -206,6 +209,7 @@ export async function createFlowAppAction(
   const validatedFields = CreateFlowAppSchema.safeParse({
     name: formData.get('name'),
     description: formData.get('description'),
+    scopes: formData.getAll('scopes'),
   });
 
   if (!validatedFields.success) {
@@ -215,13 +219,14 @@ export async function createFlowAppAction(
     };
   }
 
-  const { name, description } = validatedFields.data;
+  const { name, description, scopes } = validatedFields.data;
 
   try {
     const newApp = await dbCreateFlowApp({
         name,
         description: description || null,
         ownerUuid: userUuid,
+        scopes: scopes as FlowAppScope[],
     });
     
     revalidatePath('/settings/developer');

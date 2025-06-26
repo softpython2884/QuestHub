@@ -4,7 +4,7 @@
 import { getAppSetting, setAppSetting, createInvitation, getDbConnection, getFlowAppConsentsForUser, revokeFlowAppConsent, setFlowAppConsent } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
-import type { UserRole } from '@/types';
+import type { UserRole, FlowAppConsent } from '@/types';
 
 export async function getRegistrationModeAction(): Promise<'public' | 'private'> {
     const mode = await getAppSetting('registration_mode');
@@ -126,9 +126,9 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
         
         // --- Migration: FlowApps table update ---
         const flowAppCols = await db.all(`PRAGMA table_info(flow_apps);`);
-        if (flowAppCols.some(col => col.name === 'tokenHash')) {
-             // This is a more complex migration, better to recreate if simple
-            messages.push('FlowApps table detected with old schema. Manual migration might be needed for existing tokens.');
+        if (!flowAppCols.some(col => col.name === 'scopes')) {
+            await db.run("ALTER TABLE flow_apps ADD COLUMN scopes TEXT;");
+            messages.push('Added scopes column to flow_apps table.');
         }
         
         // --- Migration: user_flow_app_consents table update ---
@@ -151,7 +151,7 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
 }
 
 
-export async function getFlowAppConsentsAction() {
+export async function getFlowAppConsentsAction(): Promise<FlowAppConsent[] | { error: string }> {
     const userUuid = await auth().then(s => s?.user?.uuid);
     if (!userUuid) {
         return { error: 'Authentication required.' };
