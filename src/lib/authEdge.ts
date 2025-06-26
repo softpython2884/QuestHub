@@ -1,4 +1,3 @@
-
 import type { User } from '@/types';
 import { getUserByUuid as dbGetUserByUuid } from './db';
 import { cookies } from 'next/headers';

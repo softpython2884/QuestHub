@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { AuthorizeView } from './_components/AuthorizeView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -45,48 +45,53 @@ function AuthorizePageFallback() {
     );
 }
 
+function ErrorCard({ title, description }: { title: string, description: string }) {
+    return (
+        <Card className="shadow-xl">
+            <CardHeader>
+                <CardTitle className="flex items-center text-destructive">
+                <ShieldAlert className="mr-2 h-5 w-5" />
+                {title}
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <Alert variant="destructive">
+                <AlertTitle>Invalid Request</AlertTitle>
+                <AlertDescription>{description}</AlertDescription>
+                </Alert>
+                <Button asChild variant="link" className="mt-4">
+                    <Link href="/dashboard">Go to Dashboard</Link>
+                </Button>
+            </CardContent>
+        </Card>
+    );
+}
+
+
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
+  const session = await auth();
+  if (!session?.user) {
+    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
+    return redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
+  }
+
   const { client_id, redirect_uri, response_type, state, scope } = searchParams;
   
   if (!client_id || !redirect_uri || !response_type || !state) {
-    return (
-        <Card className="shadow-xl">
-        <CardHeader>
-            <CardTitle className="flex items-center text-destructive">
-            <ShieldAlert className="mr-2 h-5 w-5" />
-            Authorization Error
-            </CardTitle>
-        </CardHeader>
-        <CardContent>
-            <Alert variant="destructive">
-            <AlertTitle>Invalid Request</AlertTitle>
-            <AlertDescription>The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided.</AlertDescription>
-            </Alert>
-            <Button asChild variant="link" className="mt-4">
-                <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-        </CardContent>
-        </Card>
-    );
+    return <ErrorCard title="Authorization Error" description="The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." />;
   }
 
   if (response_type !== 'code') {
-     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'response_type'. Only 'code' is supported.</AlertTitle></Alert></CardContent></Card>;
+     return <ErrorCard title="Authorization Error" description="Invalid 'response_type'. Only 'code' is supported." />;
   }
 
   const app = await getOAuthAppByClientId(client_id);
   if (!app) {
-     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'client_id'. No application found.</AlertTitle></Alert></CardContent></Card>;
+     return <ErrorCard title="Authorization Error" description="Invalid 'client_id'. No application found." />;
   }
 
   if (!app.redirectUris.includes(redirect_uri)) {
-     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'redirect_uri'. The provided URL is not registered for this application.</AlertTitle></Alert></CardContent></Card>;
-  }
-
-  const session = await auth();
-  if (!session?.user) {
-    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
-    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
+     return <ErrorCard title="Authorization Error" description="Invalid 'redirect_uri'. The provided URL is not registered for this application." />;
   }
 
   const data: AuthorizePageData = {
