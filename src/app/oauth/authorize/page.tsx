@@ -8,8 +8,8 @@ import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getOAuthAppByClientId } from '@/lib/db';
-import { auth, type Session } from '@/lib/authEdge';
-import type { OAuthApp, User } from '@/types';
+import { auth } from '@/lib/authEdge';
+import type { OAuthApp } from '@/types';
 
 
 interface AuthorizePageProps {
@@ -31,60 +31,6 @@ interface AuthorizePageData {
   state: string;
 }
 
-async function getAuthorizePageData(
-  searchParams: AuthorizePageProps['searchParams'],
-  session: Session | null
-): Promise<{ data?: AuthorizePageData; error?: string }> {
-  
-  const clientId = searchParams?.client_id;
-  const redirectUri = searchParams?.redirect_uri;
-  const responseType = searchParams?.response_type;
-  const state = searchParams?.state;
-  const scope = searchParams?.scope;
-
-  if (!clientId || !redirectUri || !responseType || !state) {
-    return { error: "The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." };
-  }
-  
-  if (!session?.user) {
-    const callbackUrl = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: responseType,
-      state: state,
-      scope: scope || '',
-    });
-    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl.toString()}`);
-  }
-  
-  if (responseType !== 'code') {
-    return { error: "Invalid 'response_type'. Only 'code' is supported." };
-  }
-
-  const app = await getOAuthAppByClientId(clientId);
-  if (!app) {
-    return { error: `Invalid 'client_id'. No application found with ID: ${clientId}` };
-  }
-
-  if (!app.redirectUris.includes(redirectUri)) {
-    return { error: "Invalid 'redirect_uri'. The provided URL is not registered for this application." };
-  }
-  
-  const requestedScopes = scope ? scope.split(' ') : [];
-
-  return {
-    data: {
-      app,
-      user: { name: session.user.name, avatar: session.user.avatar },
-      scopes: requestedScopes,
-      redirectUri,
-      clientId,
-      state,
-    },
-  };
-}
-
-
 function AuthorizePageFallback() {
     return (
         <Card className="shadow-xl">
@@ -100,32 +46,61 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
+  // Data fetching and validation logic is now directly in the Server Component
   const session = await auth();
-  const result = await getAuthorizePageData(searchParams, session);
 
-  if (result.error) {
+  const { client_id, redirect_uri, response_type, state, scope } = searchParams;
+
+  if (!client_id || !redirect_uri || !response_type || !state) {
     return (
-      <Card className="shadow-xl">
+        <Card className="shadow-xl">
         <CardHeader>
-          <CardTitle className="flex items-center text-destructive">
+            <CardTitle className="flex items-center text-destructive">
             <ShieldAlert className="mr-2 h-5 w-5" />
             Authorization Error
-          </CardTitle>
+            </CardTitle>
         </CardHeader>
         <CardContent>
-          <Alert variant="destructive">
+            <Alert variant="destructive">
             <AlertTitle>Invalid Request</AlertTitle>
-            <AlertDescription>{result.error}</AlertDescription>
-          </Alert>
-           <Button asChild variant="link" className="mt-4">
-             <Link href="/dashboard">Go to Dashboard</Link>
-          </Button>
+            <AlertDescription>The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided.</AlertDescription>
+            </Alert>
+            <Button asChild variant="link" className="mt-4">
+                <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
         </CardContent>
-      </Card>
+        </Card>
     );
   }
 
-  return <AuthorizeView data={result.data!} />;
+  if (!session?.user) {
+    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
+    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
+  }
+  
+  if (response_type !== 'code') {
+     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'response_type'. Only 'code' is supported.</AlertTitle></Alert></CardContent></Card>;
+  }
+
+  const app = await getOAuthAppByClientId(client_id);
+  if (!app) {
+     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'client_id'. No application found.</AlertTitle></Alert></CardContent></Card>;
+  }
+
+  if (!app.redirectUris.includes(redirect_uri)) {
+     return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'redirect_uri'. The provided URL is not registered for this application.</AlertTitle></Alert></CardContent></Card>;
+  }
+
+  const data: AuthorizePageData = {
+    app,
+    user: { name: session.user.name, avatar: session.user.avatar },
+    scopes: scope ? scope.split(' ') : [],
+    redirectUri: redirect_uri,
+    clientId: client_id,
+    state,
+  };
+
+  return <AuthorizeView data={data} />;
 }
 
 export default function OAuthAuthorizePage({ searchParams }: AuthorizePageProps) {

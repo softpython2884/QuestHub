@@ -9,7 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z, run } from 'genkit';
+import * as genkit from 'genkit';
+import { z } from 'genkit';
 import type { ChatMessage } from '@/types';
 import { getCurrentUserUuid, auth } from '@/lib/authEdge';
 import { getProjectsForUser, getProjectByUuid, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole } from '@/lib/db';
@@ -172,7 +173,7 @@ ${contextDescription}
 `;
 
   try {
-    const { text } = await run('workspace-assistant-run', { context: input.context }, async () =>
+    const { text } = await genkit.run('workspace-assistant-run', { context: input.context }, async () =>
       ai.generate({
         model: 'googleai/gemini-2.0-flash',
         prompt: input.history[input.history.length - 1].content,
