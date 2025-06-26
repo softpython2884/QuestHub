@@ -15,14 +15,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction, updateOAuthAppAction } from './actions';
+import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction, updateOAuthAppAction, updateFlowAppAction } from './actions';
 import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info, Bot, MoreVertical, Edit } from 'lucide-react';
-import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope } from '@/types';
+import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope, UpdateFlowAppFormState } from '@/types';
 import { ALL_SCOPES } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const oAuthAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
@@ -46,11 +47,21 @@ type OAuthAppFormValues = z.infer<typeof oAuthAppFormSchema>;
 const flowAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
   description: z.string().max(200, "Description cannot exceed 200 characters.").optional(),
-  scopes: z.array(z.string()).refine(value => value.some(item => item), {
+  scopes: z.array(z.string()).refine(value => value.length > 0, {
     message: "You have to select at least one scope.",
   }),
 });
 type FlowAppFormValues = z.infer<typeof flowAppFormSchema>;
+
+const groupedScopes = ALL_SCOPES.reduce((acc, scope) => {
+    const category = scope.category || 'Other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(scope);
+    return acc;
+}, {} as Record<string, typeof ALL_SCOPES>);
+
 
 export default function DeveloperSettingsPage() {
   const { toast } = useToast();
@@ -66,9 +77,10 @@ export default function DeveloperSettingsPage() {
   const [copied, setCopied] = useState<'clientId' | 'clientSecret' | 'flowAppToken' | null>(null);
   
   // FlowApp State
-  const [flowApps, setFlowApps] = useState<Omit<FlowApp, 'token' | 'secretHash' | 'scopes'>[]>([]);
+  const [flowApps, setFlowApps] = useState<Omit<FlowApp, 'token' | 'secretHash'>[]>([]);
   const [isLoadingFlowApps, setIsLoadingFlowApps] = useState(true);
   const [isCreateFlowAppDialogOpen, setIsCreateFlowAppDialogOpen] = useState(false);
+  const [flowAppToEdit, setFlowAppToEdit] = useState<FlowApp | null>(null);
   const [createdFlowApp, setCreatedFlowApp] = useState<{ name: string; token: string } | null>(null);
   const [flowAppToDelete, setFlowAppToDelete] = useState<FlowApp | null>(null);
   const [isDeletingFlowApp, setIsDeletingFlowApp] = useState(false);
@@ -81,9 +93,14 @@ export default function DeveloperSettingsPage() {
   const [updateOauthState, updateOauthFormAction, isUpdatingOauth] = useActionState(updateOAuthAppAction, { message: "", error: ""});
   const oauthEditForm = useForm<OAuthAppFormValues>({ resolver: zodResolver(oAuthAppFormSchema) });
 
-  // FlowApp Form
+  // FlowApp Create Form
   const [createFlowAppState, createFlowAppFormAction, isCreatingFlowApp] = useActionState(createFlowAppAction, { message: "", error: ""});
   const flowAppForm = useForm<FlowAppFormValues>({ resolver: zodResolver(flowAppFormSchema), defaultValues: { name: '', description: '', scopes: [] } });
+
+  // FlowApp Edit Form
+  const [updateFlowAppState, updateFlowAppFormAction, isUpdatingFlowApp] = useActionState(updateFlowAppAction, { message: "", error: "" });
+  const flowAppEditForm = useForm<FlowAppFormValues>({ resolver: zodResolver(flowAppFormSchema) });
+
 
   useEffect(() => {
     async function loadApps() {
@@ -171,6 +188,27 @@ export default function DeveloperSettingsPage() {
   }, [createFlowAppState, toast, flowAppForm]);
 
   useEffect(() => {
+    if (updateFlowAppState?.message && !updateFlowAppState.error && updateFlowAppState.updatedApp) {
+        toast({ title: "Success", description: updateFlowAppState.message });
+        setFlowApps(prev => prev.map(app => app.uuid === updateFlowAppState.updatedApp!.uuid ? updateFlowAppState.updatedApp! : app));
+        setFlowAppToEdit(null);
+    }
+    if (updateFlowAppState?.error) {
+        if (updateFlowAppState.fieldErrors) {
+             Object.entries(updateFlowAppState.fieldErrors).forEach(([field, errors]) => {
+                if (errors) {
+                  // @ts-ignore
+                  flowAppEditForm.setError(field, { type: 'manual', message: errors.join(', ') });
+                }
+            });
+        } else {
+            toast({ variant: "destructive", title: "Update Error", description: updateFlowAppState.error });
+        }
+    }
+  }, [updateFlowAppState, toast, flowAppEditForm]);
+
+
+  useEffect(() => {
     if (appToEdit) {
       oauthEditForm.reset({
         name: appToEdit.name,
@@ -180,6 +218,18 @@ export default function DeveloperSettingsPage() {
       });
     }
   }, [appToEdit, oauthEditForm]);
+
+  useEffect(() => {
+    if (flowAppToEdit) {
+      flowAppEditForm.reset({
+        name: flowAppToEdit.name,
+        description: flowAppToEdit.description || '',
+        // @ts-ignore
+        scopes: flowAppToEdit.scopes,
+      });
+    }
+  }, [flowAppToEdit, flowAppEditForm]);
+
 
   const handleDeleteOAuthApp = async () => {
     if (!oauthAppToDelete) return;
@@ -214,6 +264,86 @@ export default function DeveloperSettingsPage() {
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
   };
+
+  const renderScopeSelector = (form: ReturnType<typeof useForm<any>>, isSubmitting: boolean) => (
+    <FormField
+        control={form.control}
+        name="scopes"
+        render={({ field }) => (
+        <FormItem>
+            <div className="mb-2">
+                <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
+                <FormDescription>Select what this application will be allowed to do.</FormDescription>
+            </div>
+            <Accordion type="multiple" className="w-full max-h-64 overflow-y-auto pr-3">
+                {Object.entries(groupedScopes).map(([category, scopesInCategory]) => {
+                    const categoryScopeIds = scopesInCategory.map(s => s.id);
+                    const allInCategorySelected = categoryScopeIds.every(id => field.value?.includes(id));
+
+                    const handleCategoryChange = (checked: boolean | 'indeterminate') => {
+                        const currentScopes = field.value || [];
+                        let newScopes;
+                        if (checked) {
+                            newScopes = [...new Set([...currentScopes, ...categoryScopeIds])];
+                        } else {
+                            newScopes = currentScopes.filter(s => !categoryScopeIds.includes(s));
+                        }
+                        field.onChange(newScopes);
+                    };
+
+                    return (
+                        <AccordionItem value={category} key={category}>
+                            <AccordionTrigger className="hover:no-underline py-2">
+                                <div className="flex items-center gap-3 w-full">
+                                    <Checkbox
+                                        checked={allInCategorySelected}
+                                        onCheckedChange={handleCategoryChange}
+                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={`Select all ${category} scopes`}
+                                    />
+                                    <span className="font-medium text-sm">{category}</span>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="pt-2 pl-8 space-y-4">
+                                {scopesInCategory.map((item) => (
+                                    <FormField
+                                        key={item.id}
+                                        control={form.control}
+                                        name="scopes"
+                                        render={() => (
+                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value?.includes(item.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            const currentScopes = field.value || [];
+                                                            const newScopes = checked
+                                                                ? [...currentScopes, item.id]
+                                                                : currentScopes.filter(value => value !== item.id);
+                                                            field.onChange(newScopes);
+                                                        }}
+                                                        disabled={isSubmitting}
+                                                    />
+                                                </FormControl>
+                                                <div className="flex flex-col">
+                                                    <FormLabel className="font-normal text-sm">{item.id}</FormLabel>
+                                                    <FormDescription className="!mt-0.5 text-xs">{item.description}</FormDescription>
+                                                </div>
+                                            </FormItem>
+                                        )}
+                                    />
+                                ))}
+                            </AccordionContent>
+                        </AccordionItem>
+                    );
+                })}
+            </Accordion>
+            <FormMessage />
+        </FormItem>
+        )}
+    />
+  );
+
 
   return (
     <div className="space-y-8">
@@ -422,7 +552,7 @@ export default function DeveloperSettingsPage() {
               <CardTitle className="flex items-center"><Bot className="mr-2 h-5 w-5"/>FlowApps (Personal Access Tokens)</CardTitle>
               <CardDescription>For personal scripts, automations, and server-to-server integrations.</CardDescription>
             </div>
-            <Dialog open={isCreateFlowAppDialogOpen} onOpenChange={setIsCreateFlowAppDialogOpen}>
+            <Dialog open={isCreateFlowAppDialogOpen} onOpenChange={(open) => { setIsCreateFlowAppDialogOpen(open); if(!open) flowAppForm.reset() }}>
                 <DialogTrigger asChild>
                     <Button><PlusCircle className="mr-2 h-4 w-4"/>Create New FlowApp</Button>
                 </DialogTrigger>
@@ -449,55 +579,7 @@ export default function DeveloperSettingsPage() {
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            <FormField
-                              control={flowAppForm.control}
-                              name="scopes"
-                              render={() => (
-                                <FormItem>
-                                  <div className="mb-4">
-                                    <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
-                                    <FormDescription>
-                                      Select what this application will be allowed to do.
-                                    </FormDescription>
-                                  </div>
-                                  {ALL_SCOPES.map((item) => (
-                                    <FormField
-                                      key={item.id}
-                                      control={flowAppForm.control}
-                                      name="scopes"
-                                      render={({ field }) => {
-                                        return (
-                                          <FormItem
-                                            key={item.id}
-                                            className="flex flex-row items-start space-x-3 space-y-0"
-                                          >
-                                            <FormControl>
-                                              <Checkbox
-                                                checked={field.value?.includes(item.id)}
-                                                onCheckedChange={(checked) => {
-                                                  return checked
-                                                    ? field.onChange([...(field.value || []), item.id])
-                                                    : field.onChange(
-                                                        field.value?.filter(
-                                                          (value) => value !== item.id
-                                                        )
-                                                      )
-                                                }}
-                                              />
-                                            </FormControl>
-                                            <FormLabel className="font-normal">
-                                                {item.id}
-                                                <FormDescription className="!mt-0">{item.description}</FormDescription>
-                                            </FormLabel>
-                                          </FormItem>
-                                        )
-                                      }}
-                                    />
-                                  ))}
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
+                            {renderScopeSelector(flowAppForm, isCreatingFlowApp)}
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreatingFlowApp}>Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={isCreatingFlowApp}>
@@ -535,37 +617,85 @@ export default function DeveloperSettingsPage() {
                          <p className="text-xs text-muted-foreground">Created: {new Date(app.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setFlowAppToDelete(app as FlowApp)}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
-                        </AlertDialogTrigger>
-                        {flowAppToDelete?.uuid === app.uuid && (
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete "{flowAppToDelete.name}"?</AlertDialogTitle>
-                                    <UIAlertDialogDescription>
-                                        This will permanently delete the FlowApp and its token. Any application using this token will no longer be able to access the API.
-                                    </UIAlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel onClick={() => setFlowAppToDelete(null)}>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDeleteFlowApp} disabled={isDeletingFlowApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                                        {isDeletingFlowApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        )}
-                    </AlertDialog>
-                  </div>
+                   <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setFlowAppToEdit(app as FlowApp)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                         <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setFlowAppToDelete(app as FlowApp); }}>
+                                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                                    <span className="text-destructive">Delete</span>
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            {flowAppToDelete?.uuid === app.uuid && (
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete "{flowAppToDelete.name}"?</AlertDialogTitle>
+                                        <UIAlertDialogDescription>
+                                            This will permanently delete the FlowApp and its token. Any application using this token will no longer be able to access the API.
+                                        </UIAlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel onClick={() => setFlowAppToDelete(null)}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteFlowApp} disabled={isDeletingFlowApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                            {isDeletingFlowApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            )}
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                 </Card>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!flowAppToEdit} onOpenChange={(open) => !open && setFlowAppToEdit(null)}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Edit FlowApp: {flowAppToEdit?.name}</DialogTitle>
+            <DialogDescription>Update the name, description, and permissions for this application.</DialogDescription>
+          </DialogHeader>
+          <Form {...flowAppEditForm}>
+            <form action={updateFlowAppFormAction} className="space-y-4">
+              <input type="hidden" name="uuid" value={flowAppToEdit?.uuid || ''} />
+              <FormField control={flowAppEditForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>FlowApp Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={flowAppEditForm.control} name="description" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (Optional)</FormLabel>
+                  <FormControl><Textarea {...field} rows={2} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              {renderScopeSelector(flowAppEditForm, isUpdatingFlowApp)}
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="ghost" disabled={isUpdatingFlowApp}>Cancel</Button></DialogClose>
+                <Button type="submit" disabled={isUpdatingFlowApp}>
+                  {isUpdatingFlowApp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
       
       <Dialog open={!!createdOauthAppDetails} onOpenChange={(open) => !open && setCreatedOauthAppDetails(null)}>
         <DialogContent>

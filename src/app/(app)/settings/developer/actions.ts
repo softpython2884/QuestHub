@@ -9,7 +9,7 @@ import {
     getFlowAppsForUser as dbGetFlowAppsForUser,
     deleteFlowApp as dbDeleteFlowApp,
     updateOAuthApp,
-    updateFlowApp as dbUpdateFlowApp, // Added
+    updateFlowApp as dbUpdateFlowApp,
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';

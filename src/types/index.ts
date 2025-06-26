@@ -298,21 +298,21 @@ export type FlowAppScope =
   | 'codespace:write'
   | 'announcements:global:read';
 
-export const ALL_SCOPES: { id: FlowAppScope; description: string }[] = [
-    { id: 'profile:read', description: "Read user profile information (name, email, avatar, etc.)." },
-    { id: 'projects:read', description: "Read project lists and details." },
-    { id: 'projects:write', description: "Create, update, and delete projects." },
-    { id: 'tasks:read', description: "Read tasks within projects." },
-    { id: 'tasks:write', description: "Create, update, and delete tasks within projects." },
-    { id: 'members:read', description: "Read member lists for projects." },
-    { id: 'members:write', description: "Invite and remove members from projects." },
-    { id: 'documents:read', description: "Read project documents." },
-    { id: 'documents:write', description: "Create, update, and delete project documents." },
-    { id: 'announcements:read', description: "Read project announcements." },
-    { id: 'announcements:write', description: "Create and delete project announcements." },
-    { id: 'codespace:read', description: "Read files and directories from a project's CodeSpace." },
-    { id: 'codespace:write', description: "Create, update, and delete files in a project's CodeSpace." },
-    { id: 'announcements:global:read', description: "Read global, platform-wide announcements." },
+export const ALL_SCOPES: { id: FlowAppScope; description: string; category: string }[] = [
+    { id: 'profile:read', description: "Read user profile information (name, email, avatar, etc.).", category: "Profile" },
+    { id: 'projects:read', description: "Read project lists and details.", category: "Projects" },
+    { id: 'projects:write', description: "Create, update, and delete projects.", category: "Projects" },
+    { id: 'tasks:read', description: "Read tasks within projects.", category: "Tasks" },
+    { id: 'tasks:write', description: "Create, update, and delete tasks within projects.", category: "Tasks" },
+    { id: 'members:read', description: "Read member lists for projects.", category: "Members" },
+    { id: 'members:write', description: "Invite and remove members from projects.", category: "Members" },
+    { id: 'documents:read', description: "Read project documents.", category: "Documents" },
+    { id: 'documents:write', description: "Create, update, and delete project documents.", category: "Documents" },
+    { id: 'announcements:read', description: "Read project announcements.", category: "Announcements" },
+    { id: 'announcements:write', description: "Create and delete project announcements.", category: "Announcements" },
+    { id: 'codespace:read', description: "Read files and directories from a project's CodeSpace.", category: "CodeSpace" },
+    { id: 'codespace:write', description: "Create, update, and delete files in a project's CodeSpace.", category: "CodeSpace" },
+    { id: 'announcements:global:read', description: "Read global, platform-wide announcements.", category: "Global" },
 ];
 
 
