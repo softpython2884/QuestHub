@@ -275,6 +275,27 @@ export interface CreateOAuthAppFormState {
   };
 }
 
+export interface FlowApp {
+  uuid: string;
+  name: string;
+  description?: string | null;
+  ownerUuid: string;
+  createdAt: string;
+  updatedAt: string;
+  token?: string; // Only available on creation
+}
+
+export interface CreateFlowAppFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: { [key: string]: string[] | undefined };
+  createdApp?: {
+    name: string;
+    token: string;
+  };
+}
+
+
 export interface ChatMessage {
   role: 'user' | 'model';
   content: string;

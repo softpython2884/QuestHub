@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -322,6 +322,28 @@ export async function getDbConnection() {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_apps (
+        uuid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        ownerUuid TEXT NOT NULL,
+        tokenHash TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_flow_app_consents (
+        userUuid TEXT NOT NULL,
+        flowAppUuid TEXT NOT NULL,
+        status TEXT NOT NULL, -- 'granted' or 'denied'
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (userUuid, flowAppUuid),
+        FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE,
+        FOREIGN KEY (flowAppUuid) REFERENCES flow_apps (uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS authorization_codes (
@@ -1401,7 +1423,7 @@ export async function createTask(data: {
 export async function getTaskByUuid(taskUuid: string): Promise<Task | null> {
   const connection = await getDbConnection();
   const taskData = await connection.get<Omit<Task, 'tags' | 'assigneeName' | 'isPinned'> & { isPinned: 0 | 1 }>(
-    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned
+    `SELECT uuid, projectUuid, title, description, todoListMarkdown, status, assigneeUuid, createdAt, updatedAt, isPinned, dueDate
      FROM tasks
      WHERE uuid = ?`,
     taskUuid
@@ -2161,6 +2183,61 @@ export async function getRefreshToken(token: string): Promise<{ token: string; u
     return { ...row, isRevoked: !!row.isRevoked };
 }
 
+// FlowApp Functions
+export async function createFlowApp(data: {
+    name: string;
+    description: string | null;
+    ownerUuid: string;
+}): Promise<FlowApp> {
+    const connection = await getDbConnection();
+    const appUuid = uuidv4();
+    const token = `fpat_${uuidv4().replace(/-/g, '')}`; // FlowUp Personal Access Token
+    const tokenHash = await bcrypt.hash(token, 10);
+    const now = new Date().toISOString();
+
+    await connection.run(
+        `INSERT INTO flow_apps 
+        (uuid, name, description, ownerUuid, tokenHash, createdAt, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        appUuid,
+        data.name,
+        data.description,
+        data.ownerUuid,
+        tokenHash,
+        now,
+        now
+    );
+
+    return {
+        uuid: appUuid,
+        name: data.name,
+        description: data.description,
+        ownerUuid: data.ownerUuid,
+        token: token, // Return raw token only on creation
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+
+export async function getFlowAppsForUser(userUuid: string): Promise<Omit<FlowApp, 'token'>[]> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<any[]>(
+        'SELECT uuid, name, description, ownerUuid, createdAt, updatedAt FROM flow_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
+        userUuid
+    );
+    return rows;
+}
+
+export async function deleteFlowApp(appUuid: string, userUuid: string): Promise<boolean> {
+    const connection = await getDbConnection();
+    const result = await connection.run(
+        'DELETE FROM flow_apps WHERE uuid = ? AND ownerUuid = ?',
+        appUuid,
+        userUuid
+    );
+    return result.changes ? result.changes > 0 : false;
+}
+
 
 // Dashboard Functions
 export async function getTasksForUserProjects(userUuid: string): Promise<Array<Task & { projectName: string }>> {
@@ -2589,4 +2666,20 @@ export async function getOrCreateProjectConversation(projectUuid: string): Promi
     return conversationUuid;
 }
 
+export async function getDocumentsForUser(userUuid: string): Promise<Array<{ createdAt: string }>> {
+    const connection = await getDbConnection();
+    // This function can be expanded to include global docs, etc.
+    // For now, it gets project docs to contribute to the activity graph.
+    return connection.all<{ createdAt: string }[]>(
+        `SELECT createdAt FROM project_documents WHERE createdByUuid = ?`,
+        userUuid
+    );
+}
+
+export async function getProjectByRepoName(repoName: string): Promise<Project | null> {
+    const connection = await getDbConnection();
+    const projectRow = await connection.get<Project>('SELECT * FROM projects WHERE githubRepoName = ?', repoName);
+    if (!projectRow) return null;
+    return { ...projectRow };
+}
     

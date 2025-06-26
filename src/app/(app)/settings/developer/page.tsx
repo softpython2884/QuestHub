@@ -15,9 +15,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction } from './actions';
-import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info } from 'lucide-react';
-import type { OAuthApp, CreateOAuthAppFormState } from '@/types';
+import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction } from './actions';
+import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info, Bot } from 'lucide-react';
+import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 
@@ -40,80 +40,139 @@ const oAuthAppFormSchema = z.object({
 });
 type OAuthAppFormValues = z.infer<typeof oAuthAppFormSchema>;
 
+const flowAppFormSchema = z.object({
+  name: z.string().min(3, "App name must be at least 3 characters.").max(50),
+  description: z.string().max(200, "Description cannot exceed 200 characters.").optional(),
+});
+type FlowAppFormValues = z.infer<typeof flowAppFormSchema>;
+
 export default function DeveloperSettingsPage() {
   const { toast } = useToast();
-  const [apps, setApps] = useState<OAuthApp[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [createdAppDetails, setCreatedAppDetails] = useState<{ name: string; clientId: string; clientSecret: string } | null>(null);
-  const [appToDelete, setAppToDelete] = useState<OAuthApp | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [copied, setCopied] = useState<'clientId' | 'clientSecret' | null>(null);
+  
+  // OAuth App State
+  const [oauthApps, setOauthApps] = useState<OAuthApp[]>([]);
+  const [isLoadingOauthApps, setIsLoadingOauthApps] = useState(true);
+  const [isCreateOauthDialogOpen, setIsCreateOauthDialogOpen] = useState(false);
+  const [createdOauthAppDetails, setCreatedOauthAppDetails] = useState<{ name: string; clientId: string; clientSecret: string } | null>(null);
+  const [oauthAppToDelete, setOauthAppToDelete] = useState<OAuthApp | null>(null);
+  const [isDeletingOauthApp, setIsDeletingOauthApp] = useState(false);
+  const [copied, setCopied] = useState<'clientId' | 'clientSecret' | 'flowAppToken' | null>(null);
+  
+  // FlowApp State
+  const [flowApps, setFlowApps] = useState<Omit<FlowApp, 'token'>[]>([]);
+  const [isLoadingFlowApps, setIsLoadingFlowApps] = useState(true);
+  const [isCreateFlowAppDialogOpen, setIsCreateFlowAppDialogOpen] = useState(false);
+  const [createdFlowApp, setCreatedFlowApp] = useState<{ name: string; token: string } | null>(null);
+  const [flowAppToDelete, setFlowAppToDelete] = useState<FlowApp | null>(null);
+  const [isDeletingFlowApp, setIsDeletingFlowApp] = useState(false);
+  
+  // OAuth Form
+  const [createOauthState, createOauthFormAction, isCreatingOauth] = useActionState(createOAuthAppAction, { message: "", error: ""});
+  const oauthForm = useForm<OAuthAppFormValues>({ resolver: zodResolver(oAuthAppFormSchema), defaultValues: { name: '', description: '', redirectUris: '', website: '' } });
 
-  const [createState, createFormAction, isCreating] = useActionState(createOAuthAppAction, { message: "", error: ""});
-  const form = useForm<OAuthAppFormValues>({
-    resolver: zodResolver(oAuthAppFormSchema),
-    defaultValues: { name: '', description: '', redirectUris: '', website: '' },
-  });
+  // FlowApp Form
+  const [createFlowAppState, createFlowAppFormAction, isCreatingFlowApp] = useActionState(createFlowAppAction, { message: "", error: ""});
+  const flowAppForm = useForm<FlowAppFormValues>({ resolver: zodResolver(flowAppFormSchema), defaultValues: { name: '', description: '' } });
 
   useEffect(() => {
     async function loadApps() {
+      setIsLoadingOauthApps(true);
+      setIsLoadingFlowApps(true);
       try {
-        setIsLoading(true);
-        const userApps = await getOAuthAppsAction();
-        setApps(userApps);
+        const [userOauthApps, userFlowApps] = await Promise.all([
+          getOAuthAppsAction(),
+          getFlowAppsAction()
+        ]);
+        setOauthApps(userOauthApps);
+        setFlowApps(userFlowApps);
       } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Error', description: error.message });
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not load your applications.' });
       } finally {
-        setIsLoading(false);
+        setIsLoadingOauthApps(false);
+        setIsLoadingFlowApps(false);
       }
     }
     loadApps();
   }, [toast]);
   
   useEffect(() => {
-      if (createState?.message && !createState.error && createState.createdApp) {
-          toast({ title: "Success", description: createState.message });
-          setCreatedAppDetails(createState.createdApp);
-          setIsCreateDialogOpen(false);
-          form.reset();
+    if (createOauthState?.message && !createOauthState.error && createOauthState.createdApp) {
+        toast({ title: "Success", description: createOauthState.message });
+        setCreatedOauthAppDetails(createOauthState.createdApp);
+        setIsCreateOauthDialogOpen(false);
+        oauthForm.reset();
+    }
+    if (createOauthState?.error) {
+        if (createOauthState.fieldErrors) {
+            Object.entries(createOauthState.fieldErrors).forEach(([field, errors]) => {
+                if (errors) {
+                  // @ts-ignore
+                  oauthForm.setError(field, { type: 'manual', message: errors.join(', ') });
+                }
+            });
+        } else {
+          toast({ variant: "destructive", title: "Creation Error", description: createOauthState.error });
+        }
+    }
+  }, [createOauthState, toast, oauthForm]);
+
+  useEffect(() => {
+      if (createFlowAppState?.message && !createFlowAppState.error && createFlowAppState.createdApp) {
+          toast({ title: "Success", description: createFlowAppState.message });
+          setCreatedFlowApp(createFlowAppState.createdApp);
+          setIsCreateFlowAppDialogOpen(false);
+          flowAppForm.reset();
       }
-      if (createState?.error) {
-          if (createState.fieldErrors) {
-              Object.entries(createState.fieldErrors).forEach(([field, errors]) => {
+      if (createFlowAppState?.error) {
+           if (createFlowAppState.fieldErrors) {
+              Object.entries(createFlowAppState.fieldErrors).forEach(([field, errors]) => {
                   if (errors) {
                     // @ts-ignore
-                    form.setError(field, { type: 'manual', message: errors.join(', ') });
+                    flowAppForm.setError(field, { type: 'manual', message: errors.join(', ') });
                   }
               });
           } else {
-            toast({ variant: "destructive", title: "Creation Error", description: createState.error });
+              toast({ variant: "destructive", title: "Creation Error", description: createFlowAppState.error });
           }
       }
-  }, [createState, toast, form]);
+  }, [createFlowAppState, toast, flowAppForm]);
 
-  const handleDeleteApp = async () => {
-    if (!appToDelete) return;
-    setIsDeleting(true);
-    const result = await deleteOAuthAppAction(appToDelete.uuid);
+  const handleDeleteOAuthApp = async () => {
+    if (!oauthAppToDelete) return;
+    setIsDeletingOauthApp(true);
+    const result = await deleteOAuthAppAction(oauthAppToDelete.uuid);
     if (result.success) {
       toast({ title: 'Success', description: 'Application deleted.' });
-      setApps(prev => prev.filter(app => app.uuid !== appToDelete.uuid));
-      setAppToDelete(null);
+      setOauthApps(prev => prev.filter(app => app.uuid !== oauthAppToDelete.uuid));
+      setOauthAppToDelete(null);
     } else {
       toast({ variant: 'destructive', title: 'Error', description: result.error });
     }
-    setIsDeleting(false);
+    setIsDeletingOauthApp(false);
   };
   
-  const copyToClipboard = (text: string, type: 'clientId' | 'clientSecret') => {
+  const handleDeleteFlowApp = async () => {
+    if (!flowAppToDelete) return;
+    setIsDeletingFlowApp(true);
+    const result = await deleteFlowAppAction(flowAppToDelete.uuid);
+    if (result.success) {
+      toast({ title: 'Success', description: 'FlowApp deleted.' });
+      setFlowApps(prev => prev.filter(app => app.uuid !== flowAppToDelete.uuid));
+      setFlowAppToDelete(null);
+    } else {
+      toast({ variant: 'destructive', title: 'Error', description: result.error });
+    }
+    setIsDeletingFlowApp(false);
+  };
+
+  const copyToClipboard = (text: string, type: 'clientId' | 'clientSecret' | 'flowAppToken') => {
       navigator.clipboard.writeText(text);
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <Button variant="outline" asChild>
         <Link href="/settings">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Settings
@@ -125,11 +184,22 @@ export default function DeveloperSettingsPage() {
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div>
               <CardTitle className="text-2xl font-headline flex items-center"><Code2 className="mr-2 h-6 w-6 text-primary"/>Developer Settings</CardTitle>
-              <CardDescription>Manage OAuth applications to integrate with FlowUp.</CardDescription>
+              <CardDescription>Manage applications and personal tokens to integrate with FlowUp.</CardDescription>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          </div>
+        </CardHeader>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+              <CardTitle className="flex items-center"><KeyRound className="mr-2 h-5 w-5"/>OAuth Applications</CardTitle>
+              <CardDescription>For third-party apps that need to act on behalf of other users.</CardDescription>
+            </div>
+            <Dialog open={isCreateOauthDialogOpen} onOpenChange={setIsCreateOauthDialogOpen}>
                 <DialogTrigger asChild>
-                    <Button><PlusCircle className="mr-2 h-4 w-4"/>Create New Application</Button>
+                    <Button><PlusCircle className="mr-2 h-4 w-4"/>Create OAuth App</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[525px]">
                     <DialogHeader>
@@ -138,30 +208,30 @@ export default function DeveloperSettingsPage() {
                             Provide details for your new application. Redirect URIs are required for the OAuth flow.
                         </DialogDescription>
                     </DialogHeader>
-                    <Form {...form}>
-                        <form action={createFormAction} className="space-y-4">
-                            <FormField control={form.control} name="name" render={({ field }) => (
+                    <Form {...oauthForm}>
+                        <form action={createOauthFormAction} className="space-y-4">
+                            <FormField control={oauthForm.control} name="name" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Application Name</FormLabel>
                                     <FormControl><Input {...field} placeholder="e.g., My Cool Integration"/></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            <FormField control={form.control} name="description" render={({ field }) => (
+                            <FormField control={oauthForm.control} name="description" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Description (Optional)</FormLabel>
                                     <FormControl><Textarea {...field} rows={2} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            <FormField control={form.control} name="website" render={({ field }) => (
+                            <FormField control={oauthForm.control} name="website" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Homepage URL (Optional)</FormLabel>
                                     <FormControl><Input {...field} placeholder="https://myapp.com"/></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                             <FormField control={form.control} name="redirectUris" render={({ field }) => (
+                             <FormField control={oauthForm.control} name="redirectUris" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Authorization callback URLs</FormLabel>
                                     <FormControl><Textarea {...field} rows={3} placeholder="https://myapp.com/callback&#x0a;http://localhost:3000/callback"/></FormControl>
@@ -170,9 +240,9 @@ export default function DeveloperSettingsPage() {
                                 </FormItem>
                             )}/>
                             <DialogFooter>
-                                <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreating}>Cancel</Button></DialogClose>
-                                <Button type="submit" disabled={isCreating}>
-                                    {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Register Application
+                                <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreatingOauth}>Cancel</Button></DialogClose>
+                                <Button type="submit" disabled={isCreatingOauth}>
+                                    {isCreatingOauth && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Register Application
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -182,21 +252,19 @@ export default function DeveloperSettingsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoadingOauthApps ? (
             <div className="space-y-4">
-              {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
+              {[...Array(1)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
-          ) : apps.length === 0 ? (
-            <div className="text-center py-12">
-              <KeyRound className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-medium">No Applications Yet</h3>
+          ) : oauthApps.length === 0 ? (
+            <div className="text-center py-8">
               <p className="mt-1 text-sm text-muted-foreground">
-                Create your first OAuth application to get started.
+                You haven't created any OAuth applications yet.
               </p>
             </div>
           ) : (
              <div className="space-y-4">
-              {apps.map(app => (
+              {oauthApps.map(app => (
                 <Card key={app.uuid} className="p-4 flex items-center justify-between">
                   <div className="flex items-start gap-4">
                     <div className="bg-muted p-3 rounded-md">
@@ -209,25 +277,127 @@ export default function DeveloperSettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    {/* Add edit button later */}
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setAppToDelete(app)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setOauthAppToDelete(app)}>
                                 <Trash2 className="h-4 w-4"/>
                             </Button>
                         </AlertDialogTrigger>
-                        {appToDelete?.uuid === app.uuid && (
+                        {oauthAppToDelete?.uuid === app.uuid && (
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete "{appToDelete.name}"?</AlertDialogTitle>
+                                    <AlertDialogTitle>Delete "{oauthAppToDelete.name}"?</AlertDialogTitle>
                                     <UIAlertDialogDescription>
                                         This will permanently delete the application and revoke all its existing access tokens. This action cannot be undone.
                                     </UIAlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel onClick={() => setAppToDelete(null)}>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDeleteApp} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
+                                    <AlertDialogCancel onClick={() => setOauthAppToDelete(null)}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDeleteOAuthApp} disabled={isDeletingOauthApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                        {isDeletingOauthApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        )}
+                    </AlertDialog>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+              <CardTitle className="flex items-center"><Bot className="mr-2 h-5 w-5"/>FlowApps (Personal Access Tokens)</CardTitle>
+              <CardDescription>For personal scripts, automations, and server-to-server integrations.</CardDescription>
+            </div>
+            <Dialog open={isCreateFlowAppDialogOpen} onOpenChange={setIsCreateFlowAppDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button><PlusCircle className="mr-2 h-4 w-4"/>Create New FlowApp</Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[525px]">
+                    <DialogHeader>
+                        <DialogTitle>Create a New FlowApp</DialogTitle>
+                        <DialogDescription>
+                          This will generate a personal access token. Treat it like a password.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...flowAppForm}>
+                        <form action={createFlowAppFormAction} className="space-y-4">
+                            <FormField control={flowAppForm.control} name="name" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>FlowApp Name</FormLabel>
+                                    <FormControl><Input {...field} placeholder="e.g., My CI/CD Script"/></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}/>
+                            <FormField control={flowAppForm.control} name="description" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Description (Optional)</FormLabel>
+                                    <FormControl><Textarea {...field} rows={2} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}/>
+                            <DialogFooter>
+                                <DialogClose asChild><Button type="button" variant="ghost" disabled={isCreatingFlowApp}>Cancel</Button></DialogClose>
+                                <Button type="submit" disabled={isCreatingFlowApp}>
+                                    {isCreatingFlowApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Create FlowApp
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingFlowApps ? (
+            <div className="space-y-4">
+              {[...Array(1)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
+            </div>
+          ) : flowApps.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="mt-1 text-sm text-muted-foreground">
+                You haven't created any FlowApps yet.
+              </p>
+            </div>
+          ) : (
+             <div className="space-y-4">
+              {flowApps.map(app => (
+                <Card key={app.uuid} className="p-4 flex items-center justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-muted p-3 rounded-md">
+                        <Bot className="h-6 w-6 text-primary"/>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold">{app.name}</h3>
+                        <p className="text-sm text-muted-foreground truncate max-w-xs">{app.description || "No description"}</p>
+                         <p className="text-xs text-muted-foreground">Created: {new Date(app.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setFlowAppToDelete(app)}>
+                                <Trash2 className="h-4 w-4"/>
+                            </Button>
+                        </AlertDialogTrigger>
+                        {flowAppToDelete?.uuid === app.uuid && (
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete "{flowAppToDelete.name}"?</AlertDialogTitle>
+                                    <UIAlertDialogDescription>
+                                        This will permanently delete the FlowApp and its token. Any application using this token will no longer be able to access the API.
+                                    </UIAlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel onClick={() => setFlowAppToDelete(null)}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDeleteFlowApp} disabled={isDeletingFlowApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                        {isDeletingFlowApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
@@ -241,10 +411,10 @@ export default function DeveloperSettingsPage() {
         </CardContent>
       </Card>
       
-      <Dialog open={!!createdAppDetails} onOpenChange={(open) => !open && setCreatedAppDetails(null)}>
+      <Dialog open={!!createdOauthAppDetails} onOpenChange={(open) => !open && setCreatedOauthAppDetails(null)}>
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>Application Created: {createdAppDetails?.name}</DialogTitle>
+                <DialogTitle>Application Created: {createdOauthAppDetails?.name}</DialogTitle>
                 <DialogDescription>
                     Your application has been registered. Here are your client credentials.
                 </DialogDescription>
@@ -257,8 +427,8 @@ export default function DeveloperSettingsPage() {
                  <div>
                      <Label>Client ID</Label>
                      <div className="flex items-center gap-2">
-                        <Input readOnly value={createdAppDetails?.clientId || ''} className="font-mono"/>
-                        <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdAppDetails?.clientId || '', 'clientId')}>
+                        <Input readOnly value={createdOauthAppDetails?.clientId || ''} className="font-mono"/>
+                        <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdOauthAppDetails?.clientId || '', 'clientId')}>
                            {copied === 'clientId' ? <Check className="h-4 w-4 text-green-500"/> : <Copy className="h-4 w-4"/>}
                         </Button>
                      </div>
@@ -266,9 +436,38 @@ export default function DeveloperSettingsPage() {
                  <div>
                      <Label>Client Secret</Label>
                       <div className="flex items-center gap-2">
-                        <Input readOnly value={createdAppDetails?.clientSecret || ''} className="font-mono"/>
-                         <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdAppDetails?.clientSecret || '', 'clientSecret')}>
+                        <Input readOnly value={createdOauthAppDetails?.clientSecret || ''} className="font-mono"/>
+                         <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdOauthAppDetails?.clientSecret || '', 'clientSecret')}>
                            {copied === 'clientSecret' ? <Check className="h-4 w-4 text-green-500"/> : <Copy className="h-4 w-4"/>}
+                        </Button>
+                     </div>
+                 </div>
+            </div>
+             <DialogFooter>
+                <DialogClose asChild><Button>Done</Button></DialogClose>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!createdFlowApp} onOpenChange={(open) => !open && setCreatedFlowApp(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>FlowApp Created: {createdFlowApp?.name}</DialogTitle>
+                <DialogDescription>
+                    Your personal access token has been generated.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                 <div className="p-3 bg-destructive/10 border border-destructive/50 rounded-md text-destructive flex items-start gap-3">
+                     <Info className="h-5 w-5 mt-0.5 flex-shrink-0"/>
+                     <p className="text-sm">This is the **only** time your token will be displayed. Copy it now and store it in a secure place.</p>
+                 </div>
+                 <div>
+                     <Label>Personal Access Token</Label>
+                     <div className="flex items-center gap-2">
+                        <Input readOnly value={createdFlowApp?.token || ''} className="font-mono"/>
+                        <Button variant="outline" size="icon" onClick={() => copyToClipboard(createdFlowApp?.token || '', 'flowAppToken')}>
+                           {copied === 'flowAppToken' ? <Check className="h-4 w-4 text-green-500"/> : <Copy className="h-4 w-4"/>}
                         </Button>
                      </div>
                  </div>

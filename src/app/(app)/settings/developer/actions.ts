@@ -1,14 +1,18 @@
+
 'use server';
 
 import { 
     createOAuthApp,
     getOAuthAppsForUser,
     deleteOAuthApp,
+    createFlowApp as dbCreateFlowApp,
+    getFlowAppsForUser as dbGetFlowAppsForUser,
+    deleteFlowApp as dbDeleteFlowApp,
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import type { CreateOAuthAppFormState } from '@/types';
+import type { CreateOAuthAppFormState, CreateFlowAppFormState } from '@/types';
 
 
 export async function getOAuthAppsAction() {
@@ -51,7 +55,6 @@ export async function createOAuthAppAction(
 
   const { name, description, redirectUris, website } = validatedFields.data;
   
-  // Validate Redirect URIs
   const uris = redirectUris.split('\n').map(uri => uri.trim()).filter(Boolean);
   if (uris.length === 0) {
       return { error: 'Invalid input.', fieldErrors: { redirectUris: ["At least one Redirect URI is required."] }};
@@ -96,6 +99,84 @@ export async function deleteOAuthAppAction(appUuid: string) {
     
     try {
         const success = await deleteOAuthApp(appUuid, userUuid);
+        if (success) {
+            revalidatePath('/settings/developer');
+            return { success: true };
+        }
+        return { error: 'Failed to delete application, or you are not the owner.' };
+    } catch (error: any) {
+        return { error: error.message || 'An error occurred while deleting the application.' };
+    }
+}
+
+
+// --- FlowApp Actions ---
+
+export async function getFlowAppsAction() {
+    const userUuid = await getCurrentUserUuid();
+    if (!userUuid) {
+        throw new Error('Authentication required.');
+    }
+    return dbGetFlowAppsForUser(userUuid);
+}
+
+const CreateFlowAppSchema = z.object({
+  name: z.string().min(3, "App name must be at least 3 characters.").max(50),
+  description: z.string().max(200, "Description cannot exceed 200 characters.").optional(),
+});
+
+export async function createFlowAppAction(
+  prevState: CreateFlowAppFormState,
+  formData: FormData
+): Promise<CreateFlowAppFormState> {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return { error: 'Authentication required.' };
+  }
+  
+  const validatedFields = CreateFlowAppSchema.safeParse({
+    name: formData.get('name'),
+    description: formData.get('description'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { name, description } = validatedFields.data;
+
+  try {
+    const newApp = await dbCreateFlowApp({
+        name,
+        description: description || null,
+        ownerUuid: userUuid,
+    });
+    
+    revalidatePath('/settings/developer');
+    
+    return { 
+        message: 'FlowApp created successfully!',
+        createdApp: {
+            name: newApp.name,
+            token: newApp.token!,
+        }
+    };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to create application.' };
+  }
+}
+
+export async function deleteFlowAppAction(appUuid: string) {
+    const userUuid = await getCurrentUserUuid();
+    if (!userUuid) {
+        return { error: 'Authentication required.' };
+    }
+    
+    try {
+        const success = await dbDeleteFlowApp(appUuid, userUuid);
         if (success) {
             revalidatePath('/settings/developer');
             return { success: true };
