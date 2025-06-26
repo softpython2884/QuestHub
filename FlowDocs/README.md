@@ -45,3 +45,6 @@ Nous allons construire cette documentation en suivant les étapes ci-dessous. Ch
 - **Étape 11 : Déploiement & Configuration (`11-Deployment.md`)**
   - Variables d'environnement nécessaires.
   - Instructions pour le build et le déploiement.
+
+- **Étape 12 : API FlowApps (`12-FlowApps-API.md`)**
+  - Explique comment utiliser les jetons d'accès personnels pour les scripts et automations.
