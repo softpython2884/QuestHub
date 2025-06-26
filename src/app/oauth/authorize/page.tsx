@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { AuthorizeView } from './_components/AuthorizeView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -11,6 +11,7 @@ import { getOAuthAppByClientId } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import type { OAuthApp } from '@/types';
 
+export const dynamic = 'force-dynamic';
 
 interface AuthorizePageProps {
   searchParams: {
