@@ -1989,6 +1989,28 @@ export async function toggleStar(projectUuid: string, userUuid: string): Promise
     }
 }
 
+export async function togglePinProject(userUuid: string, projectUuid: string): Promise<{ pinned: boolean }> {
+    const connection = await getDbConnection();
+    const existingPin = await connection.get(
+        'SELECT * FROM user_pinned_projects WHERE userUuid = ? AND projectUuid = ?',
+        userUuid, projectUuid
+    );
+
+    if (existingPin) {
+        await connection.run(
+            'DELETE FROM user_pinned_projects WHERE userUuid = ? AND projectUuid = ?',
+            userUuid, projectUuid
+        );
+        return { pinned: false };
+    } else {
+        await connection.run(
+            'INSERT INTO user_pinned_projects (userUuid, projectUuid) VALUES (?, ?)',
+            userUuid, projectUuid
+        );
+        return { pinned: true };
+    }
+}
+
 export async function getPublicProfile(userUuid: string): Promise<(User & { projects: Project[], pinnedProjects: Project[] }) | null> {
     const connection = await getDbConnection();
     const user = await connection.get<User>('SELECT uuid, name, email, role, avatar, bio, websiteUrl, showGithubOnProfile, showDiscordOnProfile FROM users WHERE uuid = ?', userUuid);
