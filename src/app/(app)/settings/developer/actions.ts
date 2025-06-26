@@ -10,6 +10,7 @@ import {
     deleteFlowApp as dbDeleteFlowApp,
     updateOAuthApp,
     updateFlowApp as dbUpdateFlowApp,
+    getFlowAppByUuid,
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';
@@ -188,6 +189,18 @@ export async function getFlowAppsAction() {
         throw new Error('Authentication required.');
     }
     return dbGetFlowAppsForUser(userUuid);
+}
+
+export async function getFlowAppAction(uuid: string): Promise<FlowApp | { error: string }> {
+    const userUuid = await getCurrentUserUuid();
+    if (!userUuid) {
+        return { error: 'Authentication required.' };
+    }
+    const app = await getFlowAppByUuid(uuid, userUuid);
+    if (!app) {
+        return { error: 'App not found or you do not have permission to view it.' };
+    }
+    return app;
 }
 
 const CreateFlowAppSchema = z.object({
