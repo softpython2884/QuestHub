@@ -86,7 +86,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4 justify-center">
-        <Logo iconSize={28} textSize="text-xl" />
+        <Logo href="/dashboard" iconSize={28} textSize="text-xl" />
       </SidebarHeader>
       <SidebarContent className="p-2 flex flex-col justify-between">
         <SidebarMenu>

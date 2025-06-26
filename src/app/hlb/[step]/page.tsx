@@ -6,103 +6,127 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft, ArrowRight, Database, Shield, Lock, Layers, Cpu, Users, MessageSquare, Star, KeyRound, Workflow, BrainCircuit, Bot, Megaphone, Lightbulb, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
-const PresentationFrame = ({ step, title, children }: { step: number, title: string, children: React.ReactNode }) => (
-    <div className="w-full">
-        <Card className="bg-card/80 backdrop-blur-sm border-white/10 w-full">
-            <CardHeader>
-                <CardTitle className="text-3xl font-bold tracking-tight">{title}</CardTitle>
-                <CardDescription>Partie {step} de la présentation technique</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 text-muted-foreground text-base leading-relaxed">
-                {children}
-            </CardContent>
-        </Card>
-        <div className="mt-6 flex justify-between w-full">
-            <Button variant="outline" asChild disabled={step <= 1}>
-                <Link href={`/hlb/${step - 1}`}><ArrowLeft className="mr-2 h-4 w-4" /> Précédent</Link>
-            </Button>
-            <Button asChild disabled={step >= 9}>
-                <Link href={`/hlb/${step + 1}`}>Suivant <ArrowRight className="ml-2 h-4 w-4" /></Link>
-            </Button>
-        </div>
-    </div>
+const AnimationStep = ({ step, currentStep, children, delay = 0 }: { step: number, currentStep: number, children: React.ReactNode, delay?: number }) => (
+  <div
+    className={cn(
+      'transition-all duration-500 ease-out',
+      currentStep >= step ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
+    )}
+    style={{ transitionDelay: `${delay}ms`}}
+  >
+    {children}
+  </div>
 );
+
+
+const PresentationFrame = ({ step, title, children }: { step: number, title: string, children: React.ReactNode }) => {
+    const [animationStep, setAnimationStep] = useState(0);
+    useEffect(() => {
+        const timer = setTimeout(() => setAnimationStep(1), 100);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return (
+        <div className="w-full">
+            <AnimationStep step={1} currentStep={animationStep}>
+                <Card className="bg-card/80 backdrop-blur-sm border-border/20 w-full shadow-2xl">
+                    <CardHeader>
+                        <CardTitle className="text-3xl font-bold tracking-tight font-headline">{title}</CardTitle>
+                        <CardDescription>Part {step} of the technical presentation</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6 text-muted-foreground text-base leading-relaxed">
+                        {children}
+                    </CardContent>
+                </Card>
+            </AnimationStep>
+            <div className="mt-6 flex justify-between w-full">
+                <Button variant="outline" asChild disabled={step <= 1}>
+                    <Link href={`/hlb/${step - 1}`}><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Link>
+                </Button>
+                <Button asChild disabled={step >= 9}>
+                    <Link href={`/hlb/${step + 1}`}>Next <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                </Button>
+            </div>
+        </div>
+    );
+};
 
 const Step1 = () => (
     <div className="space-y-4">
         <p>
-            FlowUp est une plateforme de gestion de projet conçue pour les développeurs, centralisant tous les outils nécessaires à la collaboration et à la productivité. Elle intègre la gestion des tâches, le code, la documentation, l'IA et la communication en temps réel.
+            FlowUp is a project management platform designed for developers, centralizing all the necessary tools for collaboration and productivity. It integrates task management, code, documentation, AI, and real-time communication.
         </p>
-        <h3 className="font-semibold text-xl text-foreground pt-4">Stack Technique</h3>
+        <h3 className="font-semibold text-xl text-foreground pt-4">Tech Stack</h3>
         <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Next.js & React :</strong> Pour un frontend moderne, réactif et optimisé pour le SEO.</li>
-            <li><strong>Tailwind CSS & ShadCN :</strong> Pour une interface utilisateur élégante, cohérente et rapidement développable.</li>
-            <li><strong>Genkit (AI) :</strong> Pour toutes les fonctionnalités d'intelligence artificielle, de la génération de code à l'assistance.</li>
-            <li><strong>SQLite :</strong> Pour une base de données légère, performante et facile à gérer, intégrée directement dans le projet.</li>
+            <li><strong>Next.js & React:</strong> For a modern, reactive, and SEO-friendly frontend.</li>
+            <li><strong>Tailwind CSS & ShadCN:</strong> For an elegant, consistent, and rapidly developed UI.</li>
+            <li><strong>Genkit (AI):</strong> For all artificial intelligence features, from code generation to assistance.</li>
+            <li><strong>SQLite:</strong> For a lightweight, performant, and easy-to-manage database integrated directly into the project.</li>
         </ul>
-        <h3 className="font-semibold text-xl text-foreground pt-4">Architecture des Dossiers</h3>
-        <ul className="list-disc pl-5 space-y-2">
-            <li><code>/src/app</code> : Contient les routes, les pages et la logique backend (Server Actions).</li>
-            <li><code>/src/components</code> : Composants React réutilisables.</li>
-            <li><code>/src/lib</code> : Fonctions utilitaires, logique de base de données (db.ts) et d'authentification (authService.ts).</li>
-            <li><code>/src/ai</code> : Tous les "flows" Genkit qui définissent le comportement de l'IA.</li>
+        <h3 className="font-semibold text-xl text-foreground pt-4">Folder Architecture</h3>
+        <ul className="list-disc pl-5 space-y-2 font-code text-sm">
+            <li><code>/src/app</code>: Contains routes, pages, and backend logic (Server Actions).</li>
+            <li><code>/src/components</code>: Reusable React components.</li>
+            <li><code>/src/lib</code>: Utility functions, database logic (db.ts), and authentication (authService.ts).</li>
+            <li><code>/src/ai</code>: All Genkit "flows" that define the AI's behavior.</li>
         </ul>
     </div>
 );
 
 const Step2 = () => (
     <div className="space-y-4">
-        <p>La base de données est le cœur du système. Elle est conçue pour être relationnelle et garantir l'intégrité des données.</p>
+        <p>The database is the core of the system. It's designed to be relational and ensure data integrity.</p>
         <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Users /> Tables Principales</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Users /> Main Tables</CardTitle></CardHeader>
                 <CardContent className="text-sm">
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong>users :</strong> Stocke les informations des utilisateurs (profil, rôle, etc.).</li>
-                        <li><strong>projects :</strong> Contient les détails de chaque projet (nom, propriétaire, visibilité).</li>
-                        <li><strong>tasks :</strong> Gère les tâches individuelles liées à un projet.</li>
+                        <li><strong>users:</strong> Stores user information (profile, role, etc.).</li>
+                        <li><strong>projects:</strong> Contains the details of each project (name, owner, visibility).</li>
+                        <li><strong>tasks:</strong> Manages individual tasks related to a project.</li>
                     </ul>
                 </CardContent>
             </Card>
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Layers /> Tables de Liaison</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Layers /> Junction Tables</CardTitle></CardHeader>
                 <CardContent className="text-sm">
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong>project_members :</strong> Associe les utilisateurs aux projets avec un rôle spécifique.</li>
-                        <li><strong>task_tags :</strong> Lie les tags (étiquettes) aux tâches.</li>
-                        <li><strong>conversation_members :</strong> Connecte les utilisateurs aux conversations de chat.</li>
+                        <li><strong>project_members:</strong> Associates users with projects with a specific role.</li>
+                        <li><strong>task_tags:</strong> Links tags to tasks.</li>
+                        <li><strong>conversation_members:</strong> Connects users to chat conversations.</li>
                     </ul>
                 </CardContent>
             </Card>
         </div>
-        <p className="pt-2">L'utilisation de clés étrangères (comme `projectUuid`) et de contraintes assure que les relations entre les données sont toujours valides, empêchant par exemple une tâche d'exister sans projet.</p>
+        <p className="pt-2">The use of foreign keys (like `projectUuid`) and constraints ensures that relationships between data are always valid, preventing, for example, a task from existing without a project.</p>
     </div>
 );
 
 const Step3 = () => (
     <div className="space-y-4">
-        <p>Le système d'authentification est sécurisé et flexible, basé sur des standards modernes.</p>
+        <p>The authentication system is secure and flexible, based on modern standards.</p>
         <div className="space-y-4">
             <div className="flex items-start gap-4 p-4 rounded-lg bg-background/50">
                 <Shield className="h-8 w-8 text-primary mt-1" />
                 <div>
-                    <h4 className="font-semibold text-foreground">JWT & Cookies HttpOnly</h4>
-                    <p className="text-sm">Après une connexion réussie, un JSON Web Token (JWT) est généré et stocké dans un cookie `HttpOnly`, le protégeant des attaques XSS car il est inaccessible par le JavaScript côté client.</p>
+                    <h4 className="font-semibold text-foreground">JWT & HttpOnly Cookies</h4>
+                    <p className="text-sm">Upon successful login, a JSON Web Token (JWT) is generated and stored in an `HttpOnly` cookie, protecting it from XSS attacks as it is inaccessible to client-side JavaScript.</p>
                 </div>
             </div>
             <div className="flex items-start gap-4 p-4 rounded-lg bg-background/50">
                 <Lock className="h-8 w-8 text-primary mt-1" />
                 <div>
                     <h4 className="font-semibold text-foreground">Middleware & Server Actions</h4>
-                    <p className="text-sm">Chaque requête sensible est validée par un middleware (`authEdge.ts`) qui vérifie le JWT. La logique métier (connexion, inscription) est gérée par des "Server Actions" (`authService.ts`), garantissant que toutes les opérations critiques sont exécutées côté serveur.</p>
+                    <p className="text-sm">Every sensitive request is validated by middleware (`authEdge.ts`) that verifies the JWT. Business logic (login, signup) is handled by Server Actions (`authService.ts`), ensuring all critical operations are executed server-side.</p>
                 </div>
             </div>
              <div className="flex items-start gap-4 p-4 rounded-lg bg-background/50">
                 <GitBranch className="h-8 w-8 text-primary mt-1" />
                 <div>
-                    <h4 className="font-semibold text-foreground">Flux OAuth (GitHub & Discord)</h4>
-                    <p className="text-sm">FlowUp utilise le flux OAuth2 pour la connexion et la liaison de compte. Si l'utilisateur est déjà connecté à FlowUp, le service tiers est simplement lié. Sinon, le système crée un nouveau compte FlowUp ou se connecte à un compte existant basé sur l'adresse e-mail, assurant une expérience fluide.</p>
+                    <h4 className="font-semibold text-foreground">OAuth Flow (GitHub & Discord)</h4>
+                    <p className="text-sm">FlowUp uses the OAuth2 flow for login and account linking. If the user is already logged into FlowUp, the third-party service is simply linked. Otherwise, the system creates a new FlowUp account or logs into an existing one based on the email address, ensuring a seamless experience.</p>
                 </div>
             </div>
         </div>
@@ -111,55 +135,55 @@ const Step3 = () => (
 
 const Step4 = () => (
      <div className="space-y-4">
-        <p>La page Projet est la fonctionnalité centrale. Elle est organisée en onglets pour une navigation claire.</p>
+        <p>The Project page is the central feature. It's organized into tabs for clear navigation.</p>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">Tasks</h4>
-                <p className="text-sm">Un tableau Kanban visuel (`To Do`, `In Progress`, `Done`) pour suivre le travail.</p>
+                <p className="text-sm">A visual Kanban board (`To Do`, `In Progress`, `Done`) to track work.</p>
             </div>
              <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">README</h4>
-                <p className="text-sm">La page d'accueil du projet, éditable en Markdown et synchronisée avec GitHub.</p>
+                <p className="text-sm">The project's homepage, editable in Markdown and synced with GitHub.</p>
             </div>
              <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">Documents</h4>
-                <p className="text-sm">Un espace pour la documentation interne (notes de réunion, spécifications).</p>
+                <p className="text-sm">A space for internal documentation (meeting notes, specifications).</p>
             </div>
              <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">Announcements</h4>
-                <p className="text-sm">Pour communiquer les informations importantes à l'équipe du projet.</p>
+                <p className="text-sm">To communicate important information to the project team.</p>
             </div>
             <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">CodeSpace</h4>
-                <p className="text-sm">Un explorateur de fichiers intégré à GitHub pour lire, modifier et générer du code directement dans FlowUp.</p>
+                <p className="text-sm">A file explorer integrated with GitHub to read, edit, and generate code directly within FlowUp.</p>
             </div>
              <div className="p-4 rounded-lg bg-background/50">
                 <h4 className="font-semibold text-foreground mb-2">Team & Settings</h4>
-                <p className="text-sm">Gérer les membres, leurs rôles, et les intégrations comme les webhooks Discord.</p>
+                <p className="text-sm">Manage members, their roles, and integrations like Discord webhooks.</p>
             </div>
         </div>
-         <p className="pt-2">Toute la logique est gérée par des "Server Actions" dans `projects/[id]/actions.ts`, ce qui garantit que les règles de permissions sont toujours respectées.</p>
+         <p className="pt-2">All logic is handled by Server Actions in `projects/[id]/actions.ts`, which ensures that permission rules are always enforced.</p>
     </div>
 );
 
 const Step5 = () => (
     <div className="space-y-4">
-        <p>Toutes les fonctionnalités d'IA sont construites avec Genkit, le framework open-source de Google, pour une intégration fiable et structurée.</p>
+        <p>All AI features are built with Genkit, Google's open-source framework, for reliable and structured integration.</p>
         <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Workflow /> Flows & Schémas</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Workflow /> Flows & Schemas</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                   Chaque outil de l'AI Studio correspond à un "flow" Genkit, une fonction TypeScript sécurisée côté serveur. Nous utilisons des schémas Zod pour définir strictement les entrées et les sorties, garantissant que l'IA respecte le format de données attendu.
+                   Each AI Studio tool corresponds to a Genkit "flow", a secure server-side TypeScript function. We use Zod schemas to strictly define inputs and outputs, ensuring the AI adheres to the expected data format.
                 </CardContent>
             </Card>
              <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><BrainCircuit /> Outils Disponibles</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><BrainCircuit /> Available Tools</CardTitle></CardHeader>
                 <CardContent className="text-sm">
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong>Project Idea Generator :</strong> Génère des idées de projets et des listes de tâches.</li>
-                        <li><strong>Project Scaffolder :</strong> Crée une arborescence de fichiers et le code de base.</li>
-                        <li><strong>Document Generator :</strong> Rédige de la documentation technique.</li>
-                        <li><strong>AI File Editor :</strong> Modifie un fichier existant à partir d'un prompt.</li>
+                        <li><strong>Project Idea Generator:</strong> Generates project ideas and task lists.</li>
+                        <li><strong>Project Scaffolder:</strong> Creates a file tree and boilerplate code.</li>
+                        <li><strong>Document Generator:</strong> Writes technical documentation.</li>
+                        <li><strong>AI File Editor:</strong> Modifies an existing file from a prompt.</li>
                     </ul>
                 </CardContent>
             </Card>
@@ -167,8 +191,8 @@ const Step5 = () => (
         <div className="p-4 rounded-lg bg-background/50 flex items-start gap-4 mt-4">
              <Bot className="h-8 w-8 text-primary mt-1 flex-shrink-0" />
             <div>
-                <h4 className="font-semibold text-foreground">Assistant "Flowy"</h4>
-                <p className="text-sm">Un chatbot conversationnel disponible dans toute l'application pour fournir de l'aide contextuelle, comme créer une tâche ou lister des projets, en utilisant les "tools" de Genkit.</p>
+                <h4 className="font-semibold text-foreground">"Flowy" Assistant</h4>
+                <p className="text-sm">A conversational chatbot available throughout the application to provide contextual help, such as creating a task or listing projects, using Genkit's "tools".</p>
             </div>
         </div>
     </div>
@@ -176,18 +200,18 @@ const Step5 = () => (
 
 const Step6 = () => (
      <div className="space-y-4">
-        <p>FlowUp intègre des outils pour connecter les utilisateurs et faciliter la communication.</p>
+        <p>FlowUp integrates tools to connect users and facilitate communication.</p>
         <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-background/50">
                 <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Star /> Discover & Team</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                   La page <strong>Discover</strong> permet d'explorer les projets publics et les utilisateurs de la communauté. La page <strong>Team</strong> offre une vue d'ensemble de vos collaborateurs et permet de lancer rapidement des conversations de groupe ou privées.
+                   The <strong>Discover</strong> page allows exploring public projects and community users. The <strong>Team</strong> page provides an overview of your collaborators and allows you to quickly start group or private conversations.
                 </CardContent>
             </Card>
              <Card className="bg-background/50">
                 <CardHeader><CardTitle className="text-lg flex items-center gap-2"><MessageSquare /> Chat</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                  Le système de chat supporte les conversations de projet et les messages directs. Pour simuler le temps réel sans la complexité des WebSockets, il utilise une technique de **polling** (interrogation du serveur à intervalle régulier) pour les messages et la liste des conversations, et une **mise à jour optimiste** pour donner une impression de réactivité instantanée lors de l'envoi de messages.
+                  The chat system supports project conversations and direct messages. To simulate real-time without the complexity of WebSockets, it uses a **polling** technique (querying the server at regular intervals) for messages and the conversation list, and **optimistic updates** to give an impression of instant reactivity when sending messages.
                 </CardContent>
             </Card>
         </div>
@@ -196,42 +220,42 @@ const Step6 = () => (
 
 const Step7 = () => (
     <div className="space-y-4">
-        <p>Au-delà des projets, FlowUp offre des outils pour toute la communauté.</p>
+        <p>Beyond projects, FlowUp offers tools for the entire community.</p>
         <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Megaphone /> Annonces Globales</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Megaphone /> Global Announcements</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                   Permet aux administrateurs de communiquer des informations importantes (mises à jour, maintenances) à tous les utilisateurs.
+                   Allows administrators to communicate important information (updates, maintenance) to all users.
                 </CardContent>
             </Card>
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Lightbulb /> Boîte à Suggestions</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Lightbulb /> Suggestion Box</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                  Une plateforme démocratique où les utilisateurs peuvent proposer des améliorations pour FlowUp et voter pour les idées des autres.
+                  A democratic platform where users can propose improvements for FlowUp and vote on others' ideas.
                 </CardContent>
             </Card>
         </div>
         <div className="p-4 rounded-lg bg-background/50 mt-4">
-             <h4 className="font-semibold text-foreground mb-2 text-lg">Coffre-Fort Sécurisé (Secure Vault)</h4>
-             <p className="text-sm">Il s'agit d'une implémentation spéciale d'un Projet FlowUp. Lors du premier accès, le système crée automatiquement un projet **strictement privé** et un **dépôt GitHub privé** associé, offrant à chaque utilisateur un espace personnel et sécurisé pour stocker des informations sensibles comme des clés d'API.</p>
+             <h4 className="font-semibold text-foreground mb-2 text-lg">Secure Vault</h4>
+             <p className="text-sm">This is a special implementation of a FlowUp Project. On first access, the system automatically creates a **strictly private** project and an associated **private GitHub repository**, providing each user with a personal and secure space to store sensitive information like API keys.</p>
         </div>
     </div>
 );
 
 const Step8 = () => (
     <div className="space-y-4">
-        <p>FlowUp est conçu pour être extensible et s'intégrer à d'autres outils via deux types d'API.</p>
+        <p>FlowUp is designed to be extensible and integrate with other tools via two API types.</p>
         <div className="grid md:grid-cols-2 gap-4">
             <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><KeyRound /> Applications OAuth</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><KeyRound /> OAuth Applications</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                   <p>Permet à des développeurs tiers de créer des applications qui accèdent aux données d'un utilisateur **après son consentement explicite**. Ce système suit le flux standard OAuth2 "Authorization Code Grant" pour une intégration sécurisée.</p>
+                   <p>Allows third-party developers to create applications that access a user's data **after their explicit consent**. This system follows the standard OAuth2 "Authorization Code Grant" flow for secure integration.</p>
                 </CardContent>
             </Card>
              <Card className="bg-background/50">
-                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Cpu /> API FlowApps</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Cpu /> FlowApps API</CardTitle></CardHeader>
                 <CardContent className="text-sm">
-                  <p>Permet des automations et des scripts personnalisés via des **jetons d'accès personnels (PAT)**. Chaque jeton a des permissions spécifiques (scopes) qui définissent ce qu'il peut faire. L'API utilise un point d'entrée unique (`/api/v1/flow`) et nécessite un consentement de l'utilisateur lors du premier accès par une nouvelle application.</p>
+                  <p>Enables custom automations and scripts via **Personal Access Tokens (PATs)**. Each token has specific permissions (scopes) that define what it can do. The API uses a single endpoint (`/api/v1/flow`) and requires user consent upon first access by a new application.</p>
                 </CardContent>
             </Card>
         </div>
@@ -240,10 +264,10 @@ const Step8 = () => (
 
 const Step9 = () => (
     <div className="text-center space-y-6 py-16">
-        <h2 className="text-4xl font-bold text-foreground">Merci de votre attention.</h2>
-        <p className="text-xl text-muted-foreground">Des questions ?</p>
+        <h2 className="text-4xl font-bold text-foreground">Thank you for your attention.</h2>
+        <p className="text-xl text-muted-foreground">Any questions?</p>
          <Button size="lg" asChild className="!mt-10">
-            <Link href="/dashboard">Accéder à l'application <ArrowRight className="ml-2 h-5 w-5"/></Link>
+            <Link href="/dashboard">Go to the Application <ArrowRight className="ml-2 h-5 w-5"/></Link>
         </Button>
     </div>
 );
@@ -251,24 +275,30 @@ const Step9 = () => (
 
 const stepComponents: { [key: number]: { title: string; component: React.FC } } = {
     1: { title: "Introduction & Architecture", component: Step1 },
-    2: { title: "Schéma de la Base de Données", component: Step2 },
-    3: { title: "Système d'Authentification", component: Step3 },
-    4: { title: "Fonctionnalité Clé : Le Projet", component: Step4 },
-    5: { title: "Intégration de l'IA avec Genkit", component: Step5 },
+    2: { title: "Database Schema", component: Step2 },
+    3: { title: "Authentication System", component: Step3 },
+    4: { title: "Key Feature: The Project", component: Step4 },
+    5: { title: "AI Integration with Genkit", component: Step5 },
     6: { title: "Collaboration & Communication", component: Step6 },
-    7: { title: "Fonctionnalités Communautaires", component: Step7 },
-    8: { title: "APIs pour Développeurs", component: Step8 },
+    7: { title: "Community Features", component: Step7 },
+    8: { title: "Developer APIs", component: Step8 },
     9: { title: "Conclusion", component: Step9 },
 };
 
-export default function HlbStepPage({ params }: { params: { step: string } }) {
+export default function HlbStepPage() {
     const router = useRouter();
-    const currentStep = parseInt(params.step, 10);
+    const params = useParams();
+    const currentStep = parseInt(params.step as string, 10);
     const stepContent = stepComponents[currentStep];
 
+    useEffect(() => {
+        if (isNaN(currentStep) || !stepContent) {
+            router.push('/hlb/1');
+        }
+    }, [currentStep, stepContent, router]);
+    
     if (isNaN(currentStep) || !stepContent) {
-        router.push('/hlb/1');
-        return null;
+        return null; // Or a loading spinner
     }
 
     return (
