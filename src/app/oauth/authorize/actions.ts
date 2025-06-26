@@ -18,7 +18,8 @@ const HandleAuthorizationSchema = z.object({
 export async function handleAuthorization(prevState: any, formData: FormData) {
   const session = await auth();
   if (!session?.user) {
-    redirect('/login');
+    // This should ideally not be hit if the page component redirects, but as a safeguard.
+    return { error: 'User not authenticated.' };
   }
 
   const validatedFields = HandleAuthorizationSchema.safeParse({
@@ -68,3 +69,5 @@ export async function handleAuthorization(prevState: any, formData: FormData) {
   // Fallback
   return { error: 'Invalid decision.' };
 }
+
+    

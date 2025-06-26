@@ -46,7 +46,6 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  // Data fetching and validation logic is now directly in the Server Component
   const session = await auth();
 
   const { client_id, redirect_uri, response_type, state, scope } = searchParams;
@@ -110,3 +109,5 @@ export default function OAuthAuthorizePage({ searchParams }: AuthorizePageProps)
     </Suspense>
   );
 }
+
+    
