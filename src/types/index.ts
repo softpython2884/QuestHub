@@ -313,6 +313,13 @@ export interface CreateFlowAppFormState {
   };
 }
 
+export interface UpdateFlowAppFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: { [key: string]: string[] | undefined };
+  updatedApp?: FlowApp;
+}
+
 
 export interface ChatMessage {
   role: 'user' | 'model';

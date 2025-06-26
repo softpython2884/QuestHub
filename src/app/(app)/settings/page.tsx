@@ -76,57 +76,22 @@ function ConsentManager() {
         return <Skeleton className="h-24 w-full" />;
     }
     
-    if (consents.length === 0) {
+    const allConsents = consents.filter(c => c.status !== 'pending');
+
+    if (allConsents.length === 0) {
         return (
-            <p className="text-sm text-muted-foreground p-4 text-center">No applications have requested access to your account yet.</p>
+            <p className="text-sm text-muted-foreground p-4 text-center">No applications have been authorized or denied yet.</p>
         )
     }
     
     const getInitials = (name?: string) => name ? name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase() : '??';
 
-    const pendingConsents = consents.filter(c => c.status === 'pending');
-    const managedConsents = consents.filter(c => c.status !== 'pending');
-
-    const ScopeDescription: React.FC<{ scope: FlowAppScope }> = ({ scope }) => {
-        const scopeInfo = ALL_SCOPES.find(s => s.id === scope);
-        return <li className="text-xs">{scopeInfo?.description || scope}</li>;
-    };
-
-
     return (
       <div className="space-y-4">
-        {pendingConsents.length > 0 && (
-            <div className="space-y-2">
-                 <h5 className="font-medium text-amber-600">Pending Requests</h5>
-                 {pendingConsents.map(consent => (
-                    <Card key={consent.flowAppUuid} className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-500/50">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                            <div className="flex items-center gap-3">
-                                <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(consent.flowAppName)}</AvatarFallback></Avatar>
-                                <div>
-                                    <p className="font-semibold">{consent.flowAppName}</p>
-                                    <p className="text-xs text-muted-foreground">Owned by {consent.flowAppOwnerName}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 self-end sm:self-center">
-                                <Button size="sm" variant="destructive" onClick={() => handleDecision(consent.flowAppUuid, 'denied')} disabled={isSubmitting}>Deny</Button>
-                                <Button size="sm" onClick={() => handleDecision(consent.flowAppUuid, 'granted')} disabled={isSubmitting}>Allow</Button>
-                            </div>
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-amber-500/30">
-                            <p className="text-xs font-semibold">This app is requesting permission to:</p>
-                            <ul className="list-disc pl-5 mt-1 space-y-1">
-                                {consent.scopes.map(scope => <ScopeDescription key={scope} scope={scope} />)}
-                            </ul>
-                        </div>
-                    </Card>
-                 ))}
-            </div>
-        )}
-         {managedConsents.length > 0 && (
+         {allConsents.length > 0 && (
             <div className="space-y-2">
                  <h5 className="font-medium">Managed Applications</h5>
-                 {managedConsents.map(consent => (
+                 {allConsents.map(consent => (
                      <Card key={consent.flowAppUuid} className="p-3">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                             <div className="flex items-center gap-3">
@@ -325,6 +290,18 @@ export default function SettingsPage() {
               <Link href="/settings/developer">Manage Applications</Link>
             </Button>
           </CardContent>
+        </Card>
+
+         <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center"><KeyRound className="mr-2 h-5 w-5 text-primary"/> Your User ID & API Access</CardTitle>
+                <CardDescription>View your unique user ID for API use and manage pending application requests.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button className="w-full" asChild>
+                    <Link href="/settings/my-uuid">View User ID & Requests</Link>
+                </Button>
+            </CardContent>
         </Card>
       </div>
 

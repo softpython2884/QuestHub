@@ -3,7 +3,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp, FlowAppConsent, FlowAppConsentStatus } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp, FlowAppConsent, FlowAppConsentStatus, FlowAppScope } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -332,6 +332,7 @@ export async function getDbConnection() {
         ownerUuid TEXT NOT NULL,
         tokenPrefix TEXT UNIQUE NOT NULL,
         secretHash TEXT NOT NULL,
+        scopes TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -340,7 +341,7 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS user_flow_app_consents (
         userUuid TEXT NOT NULL,
         flowAppUuid TEXT NOT NULL,
-        status TEXT NOT NULL, -- 'pending' or 'granted' or 'denied'
+        status TEXT NOT NULL CHECK(status IN ('pending', 'granted', 'denied')) DEFAULT 'pending',
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         PRIMARY KEY (userUuid, flowAppUuid),
@@ -2229,6 +2230,7 @@ export async function createFlowApp(data: {
     name: string;
     description: string | null;
     ownerUuid: string;
+    scopes: FlowAppScope[];
 }): Promise<FlowApp> {
     const connection = await getDbConnection();
     const appUuid = uuidv4();
@@ -2239,14 +2241,15 @@ export async function createFlowApp(data: {
 
     await connection.run(
         `INSERT INTO flow_apps 
-        (uuid, name, description, ownerUuid, tokenPrefix, secretHash, createdAt, updatedAt) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (uuid, name, description, ownerUuid, tokenPrefix, secretHash, scopes, createdAt, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         appUuid,
         data.name,
         data.description,
         data.ownerUuid,
         tokenPrefix,
         secretHash,
+        JSON.stringify(data.scopes),
         now,
         now
     );
@@ -2259,28 +2262,72 @@ export async function createFlowApp(data: {
         token: `${tokenPrefix}_${secret}`, // Return full token
         tokenPrefix: tokenPrefix,
         secretHash: secretHash,
+        scopes: data.scopes,
         createdAt: now,
         updatedAt: now,
     };
 }
 
-export async function getFlowAppsForUser(userUuid: string): Promise<Omit<FlowApp, 'token' | 'secretHash'>[]> {
+export async function getFlowAppsForUser(userUuid: string): Promise<FlowApp[]> {
     const connection = await getDbConnection();
     const rows = await connection.all<any[]>(
-        'SELECT uuid, name, description, ownerUuid, tokenPrefix, createdAt, updatedAt FROM flow_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
+        'SELECT uuid, name, description, ownerUuid, tokenPrefix, scopes, createdAt, updatedAt FROM flow_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
         userUuid
     );
-    return rows;
+    return rows.map(row => ({
+        ...row,
+        scopes: JSON.parse(row.scopes || '[]')
+    }));
 }
 
 export async function getFlowAppByPrefix(prefix: string): Promise<FlowApp | null> {
     const connection = await getDbConnection();
-    const app = await connection.get<FlowApp>(
+    const app = await connection.get<any>(
         `SELECT * FROM flow_apps WHERE tokenPrefix = ?`,
         prefix
     );
-    return app || null;
+    if (!app) return null;
+    return {
+        ...app,
+        scopes: JSON.parse(app.scopes || '[]'),
+    };
 }
+
+export async function updateFlowApp(data: {
+    uuid: string;
+    ownerUuid: string;
+    name: string;
+    description: string | null;
+    scopes: FlowAppScope[];
+}): Promise<FlowApp | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+
+    const result = await connection.run(
+        `UPDATE flow_apps 
+         SET name = ?, description = ?, scopes = ?, updatedAt = ?
+         WHERE uuid = ? AND ownerUuid = ?`,
+        data.name,
+        data.description,
+        JSON.stringify(data.scopes),
+        now,
+        data.uuid,
+        data.ownerUuid
+    );
+
+    if (result.changes === 0) {
+        return null; // App not found or owner mismatch
+    }
+
+    const updatedApp = await connection.get<any>('SELECT * FROM flow_apps WHERE uuid = ?', data.uuid);
+    if (!updatedApp) return null;
+
+    return {
+        ...updatedApp,
+        scopes: JSON.parse(updatedApp.scopes || '[]'),
+    };
+}
+
 
 export async function deleteFlowApp(appUuid: string, userUuid: string): Promise<boolean> {
     const connection = await getDbConnection();
@@ -2308,6 +2355,7 @@ export async function getFlowAppConsentsForUser(userUuid: string): Promise<FlowA
             ufac.flowAppUuid,
             fa.name as flowAppName,
             u.name as flowAppOwnerName,
+            fa.scopes,
             ufac.status,
             ufac.createdAt,
             ufac.updatedAt
@@ -2315,12 +2363,13 @@ export async function getFlowAppConsentsForUser(userUuid: string): Promise<FlowA
         JOIN flow_apps fa ON ufac.flowAppUuid = fa.uuid
         JOIN users u ON fa.ownerUuid = u.uuid
         WHERE ufac.userUuid = ?
-        ORDER BY ufac.updatedAt DESC`,
+        ORDER BY ufac.status ASC, ufac.updatedAt DESC`,
         userUuid
     );
     return rows.map(row => ({
         ...row,
-        status: row.status as FlowAppConsentStatus
+        status: row.status as FlowAppConsentStatus,
+        scopes: JSON.parse(row.scopes || '[]')
     }));
 }
 

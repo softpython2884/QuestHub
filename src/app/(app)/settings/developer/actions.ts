@@ -9,11 +9,12 @@ import {
     getFlowAppsForUser as dbGetFlowAppsForUser,
     deleteFlowApp as dbDeleteFlowApp,
     updateOAuthApp,
+    updateFlowApp as dbUpdateFlowApp, // Added
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import type { CreateOAuthAppFormState, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope } from '@/types';
+import type { CreateOAuthAppFormState, CreateFlowAppFormState, UpdateOAuthAppFormState, FlowAppScope, UpdateFlowAppFormState, FlowApp } from '@/types';
 
 
 export async function getOAuthAppsAction() {
@@ -259,4 +260,58 @@ export async function deleteFlowAppAction(appUuid: string) {
     } catch (error: any) {
         return { error: error.message || 'An error occurred while deleting the application.' };
     }
+}
+
+
+const UpdateFlowAppSchema = CreateFlowAppSchema.extend({
+  uuid: z.string().uuid("Invalid App ID."),
+});
+
+export async function updateFlowAppAction(
+  prevState: UpdateFlowAppFormState,
+  formData: FormData
+): Promise<UpdateFlowAppFormState> {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return { error: 'Authentication required.' };
+  }
+  
+  const validatedFields = UpdateFlowAppSchema.safeParse({
+    uuid: formData.get('uuid'),
+    name: formData.get('name'),
+    description: formData.get('description'),
+    scopes: formData.getAll('scopes'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+  
+  const { uuid, name, description, scopes } = validatedFields.data;
+
+  try {
+    const updatedApp = await dbUpdateFlowApp({
+      uuid,
+      ownerUuid: userUuid,
+      name,
+      description: description || null,
+      scopes: scopes as FlowAppScope[],
+    });
+    
+    if (!updatedApp) {
+      return { error: "Failed to update FlowApp. It may have been deleted or you don't have permission." };
+    }
+    
+    revalidatePath('/settings/developer');
+    
+    return { 
+        message: 'FlowApp updated successfully!',
+        updatedApp,
+    };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to update FlowApp.' };
+  }
 }
