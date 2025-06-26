@@ -8,11 +8,12 @@ import {
     createFlowApp as dbCreateFlowApp,
     getFlowAppsForUser as dbGetFlowAppsForUser,
     deleteFlowApp as dbDeleteFlowApp,
+    updateOAuthApp,
 } from '@/lib/db';
 import { getCurrentUserUuid } from '@/lib/authEdge';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import type { CreateOAuthAppFormState, CreateFlowAppFormState } from '@/types';
+import type { CreateOAuthAppFormState, CreateFlowAppFormState, UpdateOAuthAppFormState } from '@/types';
 
 
 export async function getOAuthAppsAction() {
@@ -107,6 +108,74 @@ export async function deleteOAuthAppAction(appUuid: string) {
     } catch (error: any) {
         return { error: error.message || 'An error occurred while deleting the application.' };
     }
+}
+
+
+const UpdateOAuthAppSchema = CreateOAuthAppSchema.extend({
+  uuid: z.string().uuid("Invalid App ID."),
+});
+
+export async function updateOAuthAppAction(
+  prevState: UpdateOAuthAppFormState,
+  formData: FormData
+): Promise<UpdateOAuthAppFormState> {
+  const userUuid = await getCurrentUserUuid();
+  if (!userUuid) {
+    return { error: 'Authentication required.' };
+  }
+  
+  const validatedFields = UpdateOAuthAppSchema.safeParse({
+    uuid: formData.get('uuid'),
+    name: formData.get('name'),
+    description: formData.get('description'),
+    redirectUris: formData.get('redirectUris'),
+    website: formData.get('website'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      error: "Invalid input.",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { uuid, name, description, redirectUris, website } = validatedFields.data;
+  
+  const uris = redirectUris.split('\n').map(uri => uri.trim()).filter(Boolean);
+  if (uris.length === 0) {
+      return { error: 'Invalid input.', fieldErrors: { redirectUris: ["At least one Redirect URI is required."] }};
+  }
+  for (const uri of uris) {
+      try {
+          new URL(uri);
+      } catch (_) {
+           return { error: 'Invalid input.', fieldErrors: { redirectUris: [`Invalid URL format: ${uri}`] }};
+      }
+  }
+
+  try {
+    const updatedApp = await updateOAuthApp({
+        uuid,
+        ownerUuid: userUuid,
+        name,
+        description: description || null,
+        redirectUris: uris,
+        website: website || null,
+    });
+    
+    if (!updatedApp) {
+        return { error: "Failed to update application. It may have been deleted or you don't have permission." };
+    }
+    
+    revalidatePath('/settings/developer');
+    
+    return { 
+        message: 'Application updated successfully!',
+        updatedApp,
+    };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to update application.' };
+  }
 }
 
 

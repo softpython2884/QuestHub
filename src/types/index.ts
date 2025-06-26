@@ -275,6 +275,13 @@ export interface CreateOAuthAppFormState {
   };
 }
 
+export interface UpdateOAuthAppFormState {
+  message?: string;
+  error?: string;
+  fieldErrors?: { [key: string]: string[] | undefined };
+  updatedApp?: OAuthApp;
+}
+
 export interface FlowApp {
   uuid: string;
   name: string;

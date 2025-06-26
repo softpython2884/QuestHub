@@ -15,11 +15,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction } from './actions';
-import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info, Bot } from 'lucide-react';
-import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState } from '@/types';
+import { getOAuthAppsAction, createOAuthAppAction, deleteOAuthAppAction, getFlowAppsAction, createFlowAppAction, deleteFlowAppAction, updateOAuthAppAction } from './actions';
+import { ArrowLeft, Code2, PlusCircle, Trash2, KeyRound, Copy, Check, Info, Bot, MoreVertical, Edit } from 'lucide-react';
+import type { OAuthApp, CreateOAuthAppFormState, FlowApp, CreateFlowAppFormState, UpdateOAuthAppFormState } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const oAuthAppFormSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),
@@ -53,6 +54,7 @@ export default function DeveloperSettingsPage() {
   const [oauthApps, setOauthApps] = useState<OAuthApp[]>([]);
   const [isLoadingOauthApps, setIsLoadingOauthApps] = useState(true);
   const [isCreateOauthDialogOpen, setIsCreateOauthDialogOpen] = useState(false);
+  const [appToEdit, setAppToEdit] = useState<OAuthApp | null>(null);
   const [createdOauthAppDetails, setCreatedOauthAppDetails] = useState<{ name: string; clientId: string; clientSecret: string } | null>(null);
   const [oauthAppToDelete, setOauthAppToDelete] = useState<OAuthApp | null>(null);
   const [isDeletingOauthApp, setIsDeletingOauthApp] = useState(false);
@@ -66,9 +68,13 @@ export default function DeveloperSettingsPage() {
   const [flowAppToDelete, setFlowAppToDelete] = useState<FlowApp | null>(null);
   const [isDeletingFlowApp, setIsDeletingFlowApp] = useState(false);
   
-  // OAuth Form
+  // OAuth Create Form
   const [createOauthState, createOauthFormAction, isCreatingOauth] = useActionState(createOAuthAppAction, { message: "", error: ""});
   const oauthForm = useForm<OAuthAppFormValues>({ resolver: zodResolver(oAuthAppFormSchema), defaultValues: { name: '', description: '', redirectUris: '', website: '' } });
+  
+  // OAuth Edit Form
+  const [updateOauthState, updateOauthFormAction, isUpdatingOauth] = useActionState(updateOAuthAppAction, { message: "", error: ""});
+  const oauthEditForm = useForm<OAuthAppFormValues>({ resolver: zodResolver(oAuthAppFormSchema) });
 
   // FlowApp Form
   const [createFlowAppState, createFlowAppFormAction, isCreatingFlowApp] = useActionState(createFlowAppAction, { message: "", error: ""});
@@ -98,6 +104,7 @@ export default function DeveloperSettingsPage() {
   useEffect(() => {
     if (createOauthState?.message && !createOauthState.error && createOauthState.createdApp) {
         toast({ title: "Success", description: createOauthState.message });
+        setOauthApps(prev => [createOauthState.createdApp as OAuthApp, ...prev]);
         setCreatedOauthAppDetails(createOauthState.createdApp);
         setIsCreateOauthDialogOpen(false);
         oauthForm.reset();
@@ -117,8 +124,29 @@ export default function DeveloperSettingsPage() {
   }, [createOauthState, toast, oauthForm]);
 
   useEffect(() => {
+    if (updateOauthState?.message && !updateOauthState.error && updateOauthState.updatedApp) {
+        toast({ title: "Success", description: updateOauthState.message });
+        setOauthApps(prev => prev.map(app => app.uuid === updateOauthState.updatedApp!.uuid ? updateOauthState.updatedApp! : app));
+        setAppToEdit(null);
+    }
+    if (updateOauthState?.error) {
+        if (updateOauthState.fieldErrors) {
+             Object.entries(updateOauthState.fieldErrors).forEach(([field, errors]) => {
+                if (errors) {
+                  // @ts-ignore
+                  oauthEditForm.setError(field, { type: 'manual', message: errors.join(', ') });
+                }
+            });
+        } else {
+            toast({ variant: "destructive", title: "Update Error", description: updateOauthState.error });
+        }
+    }
+  }, [updateOauthState, toast, oauthEditForm]);
+
+  useEffect(() => {
       if (createFlowAppState?.message && !createFlowAppState.error && createFlowAppState.createdApp) {
           toast({ title: "Success", description: createFlowAppState.message });
+          setFlowApps(prev => [createFlowAppState.createdApp as FlowApp, ...prev]);
           setCreatedFlowApp(createFlowAppState.createdApp);
           setIsCreateFlowAppDialogOpen(false);
           flowAppForm.reset();
@@ -136,6 +164,17 @@ export default function DeveloperSettingsPage() {
           }
       }
   }, [createFlowAppState, toast, flowAppForm]);
+
+  useEffect(() => {
+    if (appToEdit) {
+      oauthEditForm.reset({
+        name: appToEdit.name,
+        description: appToEdit.description || '',
+        website: appToEdit.website || '',
+        redirectUris: appToEdit.redirectUris.join('\n'),
+      });
+    }
+  }, [appToEdit, oauthEditForm]);
 
   const handleDeleteOAuthApp = async () => {
     if (!oauthAppToDelete) return;
@@ -276,37 +315,100 @@ export default function DeveloperSettingsPage() {
                          <p className="text-xs text-muted-foreground">Created: {new Date(app.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setOauthAppToDelete(app)}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
-                        </AlertDialogTrigger>
-                        {oauthAppToDelete?.uuid === app.uuid && (
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete "{oauthAppToDelete.name}"?</AlertDialogTitle>
-                                    <UIAlertDialogDescription>
-                                        This will permanently delete the application and revoke all its existing access tokens. This action cannot be undone.
-                                    </UIAlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel onClick={() => setOauthAppToDelete(null)}>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDeleteOAuthApp} disabled={isDeletingOauthApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                                        {isDeletingOauthApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        )}
-                    </AlertDialog>
-                  </div>
+                   <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setAppToEdit(app)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setOauthAppToDelete(app); }}>
+                                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                                <span className="text-destructive">Delete</span>
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          {oauthAppToDelete?.uuid === app.uuid && (
+                              <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete "{oauthAppToDelete.name}"?</AlertDialogTitle>
+                                      <UIAlertDialogDescription>
+                                          This will permanently delete the application and revoke all its existing access tokens. This action cannot be undone.
+                                      </UIAlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                      <AlertDialogCancel onClick={() => setOauthAppToDelete(null)}>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={handleDeleteOAuthApp} disabled={isDeletingOauthApp} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                          {isDeletingOauthApp && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Delete
+                                      </AlertDialogAction>
+                                  </AlertDialogFooter>
+                              </AlertDialogContent>
+                          )}
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                 </Card>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+      
+      <Dialog open={!!appToEdit} onOpenChange={(open) => !open && setAppToEdit(null)}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Edit: {appToEdit?.name}</DialogTitle>
+            <DialogDescription>
+              Update your application's details.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...oauthEditForm}>
+            <form action={updateOauthFormAction} className="space-y-4">
+              <input type="hidden" name="uuid" value={appToEdit?.uuid || ''} />
+              <FormField control={oauthEditForm.control} name="name" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Application Name</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )}/>
+              <FormField control={oauthEditForm.control} name="description" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl><Textarea {...field} rows={2} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )}/>
+              <FormField control={oauthEditForm.control} name="website" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Homepage URL (Optional)</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )}/>
+               <FormField control={oauthEditForm.control} name="redirectUris" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Authorization callback URLs</FormLabel>
+                      <FormControl><Textarea {...field} rows={3} /></FormControl>
+                      <FormDescription>Enter one URL per line.</FormDescription>
+                      <FormMessage />
+                  </FormItem>
+              )}/>
+              <DialogFooter>
+                  <DialogClose asChild><Button type="button" variant="ghost" disabled={isUpdatingOauth}>Cancel</Button></DialogClose>
+                  <Button type="submit" disabled={isUpdatingOauth}>
+                      {isUpdatingOauth && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} Save Changes
+                  </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

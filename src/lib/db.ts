@@ -2111,6 +2111,45 @@ export async function createOAuthApp(data: {
     };
 }
 
+export async function updateOAuthApp(data: {
+    uuid: string;
+    ownerUuid: string;
+    name: string;
+    description: string | null;
+    redirectUris: string[];
+    website: string | null;
+}): Promise<OAuthApp | null> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+
+    const result = await connection.run(
+        `UPDATE oauth_apps 
+         SET name = ?, description = ?, redirectUris = ?, website = ?, updatedAt = ? 
+         WHERE uuid = ? AND ownerUuid = ?`,
+        data.name,
+        data.description,
+        JSON.stringify(data.redirectUris),
+        data.website,
+        now,
+        data.uuid,
+        data.ownerUuid
+    );
+
+    if (result.changes === 0) {
+        // Either app not found or owner didn't match
+        return null;
+    }
+
+    const updatedApp = await connection.get<any>('SELECT * FROM oauth_apps WHERE uuid = ?', data.uuid);
+    if (!updatedApp) return null;
+
+    return {
+        ...updatedApp,
+        redirectUris: JSON.parse(updatedApp.redirectUris || '[]'),
+    };
+}
+
+
 export async function getOAuthAppsForUser(userUuid: string): Promise<OAuthApp[]> {
     const connection = await getDbConnection();
     const rows = await connection.all<any[]>(
