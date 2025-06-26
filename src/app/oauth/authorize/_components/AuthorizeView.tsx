@@ -12,7 +12,7 @@ import type { OAuthApp } from '@/types';
 interface AuthorizeViewProps {
   data: {
     app: Pick<OAuthApp, 'name' | 'description' | 'website' | 'logoUrl'>;
-    user: { name: string; avatar?: string };
+    user: { uuid: string; name: string; avatar?: string };
     scopes: string[];
     redirectUri: string;
     clientId: string;
@@ -90,6 +90,7 @@ export function AuthorizeView({ data }: AuthorizeViewProps) {
       </CardContent>
       <CardFooter>
         <form action={formAction} className="w-full grid grid-cols-2 gap-4">
+            <input type="hidden" name="userUuid" value={data.user.uuid} />
             <input type="hidden" name="clientId" value={data.clientId} />
             <input type="hidden" name="redirectUri" value={data.redirectUri} />
             <input type="hidden" name="state" value={data.state} />

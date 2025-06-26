@@ -25,7 +25,7 @@ interface AuthorizePageProps {
 
 interface AuthorizePageData {
   app: Pick<OAuthApp, 'name' | 'description' | 'website' | 'logoUrl'>;
-  user: { name: string; avatar?: string };
+  user: { uuid: string; name: string; avatar?: string };
   scopes: string[];
   redirectUri: string;
   clientId: string;
@@ -97,7 +97,7 @@ async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
 
   const data: AuthorizePageData = {
     app,
-    user: { name: session.user.name, avatar: session.user.avatar },
+    user: { uuid: session.user.uuid, name: session.user.name, avatar: session.user.avatar },
     scopes: scope ? scope.split(' ') : [],
     redirectUri: redirect_uri,
     clientId: client_id,

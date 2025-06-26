@@ -3,12 +3,12 @@
 
 import { redirect } from 'next/navigation';
 import { createAuthorizationCode } from '@/lib/db';
-import { auth } from '@/lib/authEdge';
 import { z } from 'zod';
 import crypto from 'crypto';
 
 const HandleAuthorizationSchema = z.object({
   decision: z.enum(['accept', 'deny']),
+  userUuid: z.string().uuid(),
   clientId: z.string(),
   redirectUri: z.string().url(),
   state: z.string(),
@@ -16,14 +16,9 @@ const HandleAuthorizationSchema = z.object({
 });
 
 export async function handleAuthorization(prevState: any, formData: FormData) {
-  const session = await auth();
-  if (!session?.user) {
-    // This should ideally not be hit if the page component redirects, but as a safeguard.
-    return { error: 'User not authenticated.' };
-  }
-
   const validatedFields = HandleAuthorizationSchema.safeParse({
     decision: formData.get('decision'),
+    userUuid: formData.get('userUuid'),
     clientId: formData.get('clientId'),
     redirectUri: formData.get('redirectUri'),
     state: formData.get('state'),
@@ -34,7 +29,7 @@ export async function handleAuthorization(prevState: any, formData: FormData) {
     return { error: 'Invalid form submission.' };
   }
 
-  const { decision, clientId, redirectUri, state, scope } = validatedFields.data;
+  const { decision, userUuid, clientId, redirectUri, state, scope } = validatedFields.data;
   const redirectUrl = new URL(redirectUri);
 
   if (decision === 'deny') {
@@ -49,7 +44,7 @@ export async function handleAuthorization(prevState: any, formData: FormData) {
         await createAuthorizationCode(
             authCode,
             clientId,
-            session.user.uuid,
+            userUuid,
             redirectUri,
             scope || ''
         );
