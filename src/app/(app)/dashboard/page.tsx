@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart as PieChartIcon, Info, Keyboard } from 'lucide-react';
+import { PlusCircle, CheckCircle2, ListChecks, FolderKanban, Megaphone, Users, Loader2, BarChart3, PieChart as PieChartIcon, Info, Keyboard, DownloadCloud } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -22,6 +22,41 @@ export default function DashboardPage() {
 
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    // This effect runs only on the client
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (!deferredPrompt) {
+      return;
+    }
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
+      if (choiceResult.outcome === 'accepted') {
+        toast({ title: "App Installed!", description: "FlowUp is now available on your device." });
+      }
+      setDeferredPrompt(null);
+      setIsInstallable(false);
+    });
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -106,6 +141,18 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {isInstallable && !isStandalone && (
+        <Card className="bg-primary/10 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><DownloadCloud className="h-5 w-5"/> Install FlowUp</CardTitle>
+            <CardDescription>Get a desktop-like experience by installing FlowUp on your device for faster access.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleInstallClick}>Install App</Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20 shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-headline sm:text-3xl text-primary">
