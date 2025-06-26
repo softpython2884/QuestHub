@@ -5,8 +5,12 @@ import { redirect } from 'next/navigation';
 import { getOAuthAppByClientId, createAuthorizationCode } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { z } from 'zod';
-import type { OAuthApp } from '@/types';
+import type { OAuthApp, User } from '@/types';
 import crypto from 'crypto';
+
+interface Session {
+  user?: Omit<User, 'hashedPassword'>; 
+}
 
 interface AuthorizePageData {
   app: Pick<OAuthApp, 'name' | 'description' | 'website' | 'logoUrl'>;
@@ -18,7 +22,8 @@ interface AuthorizePageData {
 }
 
 export async function getAuthorizePageData(
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams: { [key: string]: string | string[] | undefined },
+  session: Session | null
 ): Promise<{ data?: AuthorizePageData; error?: string }> {
   
   const clientId = searchParams?.client_id as string;
@@ -30,8 +35,7 @@ export async function getAuthorizePageData(
   if (!clientId || !redirectUri || !responseType || !state) {
     return { error: "The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." };
   }
-
-  const session = await auth();
+  
   if (!session?.user) {
     const callbackUrl = new URLSearchParams({
       client_id: clientId,

@@ -40,16 +40,16 @@ const prompt = ai.definePrompt({
   input: { schema: GenerateTasksInputSchema },
   output: { schema: GenerateTasksOutputSchema },
   prompt: `You are an expert project manager who is excellent at breaking down large goals into actionable tasks.
-Based on the user's prompt, generate a list of tasks. For each task, provide a clear title, a short description, and a checklist of sub-tasks.
+Based on the user's prompt, generate a list of tasks. For each task, provide a clear title, a short description, and an optional checklist of sub-tasks.
 
-**CRITICAL**: The 'todoListMarkdown' field MUST be a valid Markdown checklist. Each item must start with \`- [ ] \` for an open task.
+**CRITICAL RULE**: The 'todoListMarkdown' field, if used, MUST be a valid GitHub-flavored Markdown checklist.
+Each checklist item MUST start with \`- [ ] \` for an open task.
+Do NOT use asterisks (\`*\`) or simple hyphens (\`-\`) for the checklist. You MUST use the precise \`- [ ] \` format.
 
-Example of a good sub-task list in the 'todoListMarkdown' field:
+Example of a good 'todoListMarkdown' field:
 - [ ] Design the database schema for users.
 - [ ] Implement user registration endpoint.
 - [ ] Add password hashing.
-
-Do NOT use asterisks (\`*\`) or simple hyphens (\`-\`) for the checklist. Use exactly the \`- [ ] \` format.
 
 User Prompt: {{{prompt}}}
 `,

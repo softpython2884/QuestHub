@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { auth } from '@/lib/authEdge';
 
 interface AuthorizePageProps {
   searchParams: {
@@ -33,8 +34,8 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  // Pass the entire searchParams object to the server action
-  const result = await getAuthorizePageData(searchParams);
+  const session = await auth();
+  const result = await getAuthorizePageData(searchParams, session);
 
   if (result.error) {
     return (
