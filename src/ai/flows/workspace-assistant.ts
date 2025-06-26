@@ -25,7 +25,7 @@ const WorkspaceContextSchema = z.object({
   fileContent: z.string().optional().describe("The content of the file the user is currently viewing, if any."),
 });
 
-export const WorkspaceAssistantInputSchema = z.object({
+const WorkspaceAssistantInputSchema = z.object({
   history: z.array(
     z.object({
       role: z.enum(['user', 'model']),
@@ -36,7 +36,7 @@ export const WorkspaceAssistantInputSchema = z.object({
 });
 export type WorkspaceAssistantInput = z.infer<typeof WorkspaceAssistantInputSchema>;
 
-export const WorkspaceAssistantOutputSchema = z.object({
+const WorkspaceAssistantOutputSchema = z.object({
   response: z.string().describe("The AI's response to the user's latest message."),
 });
 export type WorkspaceAssistantOutput = z.infer<typeof WorkspaceAssistantOutputSchema>;
