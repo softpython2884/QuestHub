@@ -92,52 +92,54 @@ export function Chatbot() {
               Your AI-powered workspace assistant. Ask me anything!
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-grow pr-4 -mr-4" ref={scrollAreaRef}>
-            <div className="space-y-4 pr-4">
-              {messages.map((message, index) => (
-                <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-                   {message.role === 'model' && (
-                     <Avatar className="h-8 w-8">
-                        <AvatarImage src="/favicon.png" alt="Flowy Avatar" />
-                        <AvatarFallback>AI</AvatarFallback>
-                    </Avatar>
-                   )}
-                  <div className={cn('max-w-[80%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      className={cn(
-                        'prose prose-sm max-w-none break-words',
-                        message.role === 'model' && 'dark:prose-invert'
-                      )}
-                      components={{
-                        a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.role === 'user' ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                   {message.role === 'user' && user && (
-                     <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="user avatar" />
-                        <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-                    </Avatar>
-                   )}
-                </div>
-              ))}
-              {isLoading && (
-                  <div className="flex items-start gap-3 justify-start">
+           <div className="flex-grow min-h-0">
+            <ScrollArea className="h-full pr-4 -mr-4" ref={scrollAreaRef}>
+              <div className="space-y-4 pr-4">
+                {messages.map((message, index) => (
+                  <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+                    {message.role === 'model' && (
                       <Avatar className="h-8 w-8">
                           <AvatarImage src="/favicon.png" alt="Flowy Avatar" />
                           <AvatarFallback>AI</AvatarFallback>
                       </Avatar>
-                      <div className="bg-muted rounded-lg px-3 py-2 text-sm flex items-center">
-                          <Loader2 className="h-4 w-4 animate-spin mr-2"/> Thinking...
-                      </div>
+                    )}
+                    <div className={cn('max-w-[80%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        className={cn(
+                          'prose prose-sm max-w-none break-words',
+                          message.role === 'model' && 'dark:prose-invert'
+                        )}
+                        components={{
+                          a: ({node, ...props}) => <a {...props} className={cn("text-inherit hover:opacity-80", message.role === 'user' ? 'underline' : 'text-primary underline')} target="_blank" rel="noopener noreferrer" />
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                    {message.role === 'user' && user && (
+                      <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="user avatar" />
+                          <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                      </Avatar>
+                    )}
                   </div>
-              )}
-            </div>
-          </ScrollArea>
-          <DialogFooter>
+                ))}
+                {isLoading && (
+                    <div className="flex items-start gap-3 justify-start">
+                        <Avatar className="h-8 w-8">
+                            <AvatarImage src="/favicon.png" alt="Flowy Avatar" />
+                            <AvatarFallback>AI</AvatarFallback>
+                        </Avatar>
+                        <div className="bg-muted rounded-lg px-3 py-2 text-sm flex items-center">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2"/> Thinking...
+                        </div>
+                    </div>
+                )}
+              </div>
+            </ScrollArea>
+           </div>
+          <DialogFooter className="flex-shrink-0">
             <form onSubmit={handleSendMessage} className="flex w-full items-center space-x-2">
               <Input
                 value={input}
