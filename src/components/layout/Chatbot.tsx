@@ -22,6 +22,7 @@ import { workspaceAssistant } from '@/ai/flows/workspace-assistant';
 import type { ChatMessage, Project } from '@/types';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/contexts/PageContext';
+import { useRouter } from 'next/navigation';
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,6 +32,7 @@ export function Chatbot() {
   const { user } = useAuth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const pageContext = usePageContext();
+  const router = useRouter();
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -72,6 +74,11 @@ export function Chatbot() {
       
       const aiMessage: ChatMessage = { role: 'model', content: result.response };
       setMessages((prev) => [...prev, aiMessage]);
+
+      if (result.mutationOccurred) {
+        console.log('[Chatbot] Mutation occurred, refreshing router.');
+        router.refresh();
+      }
 
     } catch (error) {
       const errorMessage: ChatMessage = { role: 'model', content: 'Sorry, I encountered an error. Please try again.' };

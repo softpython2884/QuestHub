@@ -38,6 +38,7 @@ export type WorkspaceAssistantInput = z.infer<typeof WorkspaceAssistantInputSche
 
 const WorkspaceAssistantOutputSchema = z.object({
   response: z.string().describe("The AI's response to the user's latest message."),
+  mutationOccurred: z.boolean().optional().describe("True if a tool was used that modified data."),
 });
 export type WorkspaceAssistantOutput = z.infer<typeof WorkspaceAssistantOutputSchema>;
 
@@ -132,7 +133,7 @@ const createTaskInProjectTool = ai.defineTool(
       throw new Error(`You do not have permission to create tasks in this project.`);
     }
 
-    const newTask = await dbCreateTask({ projectUuid, title, description, status: 'To Do' });
+    const newTask = await dbCreateTask({ projectUuid, title, description: description || undefined, status: 'To Do' });
     return { success: true, taskUuid: newTask.uuid, title: newTask.title };
   }
 );
@@ -273,7 +274,7 @@ You have access to a set of tools to perform actions. You should decide to use a
 - \`listTasksInProject\`: To list all tasks for a given project. Requires a projectUuid.
 - \`getProjectDetails\`: To get more information about a project like its description or members. Requires a projectUuid.
 - \`createTaskInProject\`: To create a new task in a specified project. Requires a projectUuid and a title.
-- \`updateTaskInProject\`: To update a task, for example by adding sub-tasks. Requires a projectUuid and the task's title. You MUST append to existing sub-tasks if any, not replace them.
+- \`updateTaskInProject\`: To update a task, for example by adding sub-tasks. Requires a projectUuid and the task's title.
 - \`createProjectAnnouncement\`: To create an announcement in a project. Requires a projectUuid.
 - \`summarizeCurrentFile\`: To summarize the content of the file the user is currently viewing. Requires fileContent.
 
@@ -289,7 +290,7 @@ ${contextDescription}
 `;
 
       try {
-        const { text } = await ai.generate({
+        const { text, toolCalls } = await ai.generate({
           model: 'googleai/gemini-2.0-flash',
           prompt: promptWithContext,
           system: systemPrompt,
@@ -297,7 +298,13 @@ ${contextDescription}
           tools: toolsToUse,
         });
 
-        return { response: text };
+        let mutationOccurred = false;
+        if (toolCalls && toolCalls.length > 0) {
+            const mutatingToolNames = ['createTaskInProject', 'updateTaskInProject', 'createProjectAnnouncement'];
+            mutationOccurred = toolCalls.some(call => mutatingToolNames.includes(call.toolName));
+        }
+
+        return { response: text, mutationOccurred };
       } catch (error: any) {
         console.error("[WorkspaceAssistant] Error during AI generation or tool execution:", error);
         let errorMessage = "I encountered an issue and couldn't complete your request.";

@@ -1035,7 +1035,7 @@ export async function generateTasksFromPromptAction(
   }
   
   try {
-    const aiResult = await generateTasks({ prompt });
+    const aiResult = await generateTasks({ prompt, projectUuid });
     if (!aiResult.tasks || aiResult.tasks.length === 0) {
       return { error: "The AI didn't generate any tasks. Please try a different prompt." };
     }
@@ -1048,6 +1048,7 @@ export async function generateTasksFromPromptAction(
         description: task.description,
         todoListMarkdown: task.todoListMarkdown,
         status: 'To Do',
+        tagsString: task.tags?.join(', '),
       });
       createdCount++;
     }
@@ -2244,7 +2245,7 @@ export async function updateProjectDiscordSettingsAction(
             return { error: "You do not have permission to change Discord settings for this project." };
         }
 
-        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, discordNotifyTasks, discordNotifyMembers, discordNotifyAnnouncements, discordNotifyDocuments, discordNotifySettings);
+        const updatedProject = await dbUpdateProjectDiscordSettings(projectUuid, discordWebhookUrl, discordNotificationsEnabled, notifyTasks, notifyMembers, notifyAnnouncements, notifyDocuments, notifySettings);
 
         if (!updatedProject) {
             return { error: "Failed to update project settings in the database." };
