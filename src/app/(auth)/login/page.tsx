@@ -1,4 +1,3 @@
-
 'use client';
 
 import { LoginForm } from '@/components/auth/LoginForm';
@@ -8,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Play } from 'lucide-react';
+import { Play, GraduationCap } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -46,9 +45,12 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent>
         <LoginForm />
-         <div className="!mt-6 text-center">
+         <div className="!mt-6 text-center space-x-4">
             <Button variant="link" asChild className="text-muted-foreground">
                 <Link href="/present"><Play className="mr-2 h-4 w-4" /> Watch Presentation</Link>
+            </Button>
+            <Button variant="link" asChild className="text-muted-foreground">
+                <Link href="/hlb"><GraduationCap className="mr-2 h-4 w-4" /> School Presentation</Link>
             </Button>
         </div>
       </CardContent>
