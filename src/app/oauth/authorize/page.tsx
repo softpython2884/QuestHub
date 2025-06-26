@@ -46,10 +46,8 @@ function AuthorizePageFallback() {
 }
 
 async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  const session = await auth();
-
   const { client_id, redirect_uri, response_type, state, scope } = searchParams;
-
+  
   if (!client_id || !redirect_uri || !response_type || !state) {
     return (
         <Card className="shadow-xl">
@@ -72,11 +70,6 @@ async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
     );
   }
 
-  if (!session?.user) {
-    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
-    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
-  }
-  
   if (response_type !== 'code') {
      return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'response_type'. Only 'code' is supported.</AlertTitle></Alert></CardContent></Card>;
   }
@@ -88,6 +81,12 @@ async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
 
   if (!app.redirectUris.includes(redirect_uri)) {
      return <Card className="shadow-xl"><CardContent><Alert variant="destructive"><AlertTitle>Invalid 'redirect_uri'. The provided URL is not registered for this application.</AlertTitle></Alert></CardContent></Card>;
+  }
+
+  const session = await auth();
+  if (!session?.user) {
+    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
+    redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
   }
 
   const data: AuthorizePageData = {
@@ -109,5 +108,3 @@ export default function OAuthAuthorizePage({ searchParams }: AuthorizePageProps)
     </Suspense>
   );
 }
-
-    

@@ -69,5 +69,3 @@ export async function handleAuthorization(prevState: any, formData: FormData) {
   // Fallback
   return { error: 'Invalid decision.' };
 }
-
-    
