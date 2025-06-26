@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useActionState } from 'react';
@@ -103,10 +102,11 @@ export default function NewFlowAppPage() {
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                             <FormField
+                            
+                            <FormField
                                 control={flowAppForm.control}
                                 name="scopes"
-                                render={() => (
+                                render={({ field }) => (
                                     <FormItem>
                                         <div className="mb-2">
                                             <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
@@ -118,35 +118,24 @@ export default function NewFlowAppPage() {
                                                     <h4 className="font-medium mb-2 border-b pb-1">{category}</h4>
                                                     <div className="space-y-3 pl-2">
                                                         {scopesInCategory.map((item) => (
-                                                            <FormField
-                                                                key={item.id}
-                                                                control={flowAppForm.control}
-                                                                name="scopes"
-                                                                render={({ field }) => {
-                                                                    return (
-                                                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                                                        <FormControl>
-                                                                            <Checkbox
-                                                                                checked={field.value?.includes(item.id)}
-                                                                                onCheckedChange={(checked) => {
-                                                                                    return checked
-                                                                                    ? field.onChange([...(field.value || []), item.id])
-                                                                                    : field.onChange(
-                                                                                        (field.value || []).filter(
-                                                                                            (value) => value !== item.id
-                                                                                        )
-                                                                                    )
-                                                                                }}
-                                                                            />
-                                                                        </FormControl>
-                                                                        <div className="space-y-1 leading-none">
-                                                                            <FormLabel className="font-normal">{item.id}</FormLabel>
-                                                                            <FormDescription>{item.description}</FormDescription>
-                                                                        </div>
-                                                                    </FormItem>
-                                                                    )
-                                                                }}
-                                                            />
+                                                          <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0">
+                                                              <FormControl>
+                                                                  <Checkbox
+                                                                      checked={field.value?.includes(item.id)}
+                                                                      onCheckedChange={(checked) => {
+                                                                          const currentScopes = field.value || [];
+                                                                          const newScopes = checked
+                                                                              ? [...currentScopes, item.id]
+                                                                              : currentScopes.filter((value) => value !== item.id);
+                                                                          field.onChange(newScopes);
+                                                                      }}
+                                                                  />
+                                                              </FormControl>
+                                                              <div className="space-y-1 leading-none">
+                                                                  <FormLabel className="font-normal">{item.id}</FormLabel>
+                                                                  <FormDescription>{item.description}</FormDescription>
+                                                              </div>
+                                                          </FormItem>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -156,6 +145,12 @@ export default function NewFlowAppPage() {
                                     </FormItem>
                                 )}
                             />
+
+                            {/* Hidden inputs to ensure data submission */}
+                            {flowAppForm.watch('scopes').map((scope) => (
+                                <input key={scope} type="hidden" name="scopes" value={scope} />
+                            ))}
+
                             <div className="flex justify-end gap-2">
                                 <Button type="button" variant="ghost" disabled={isCreatingFlowApp} asChild>
                                     <Link href="/settings/developer">Cancel</Link>
