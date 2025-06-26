@@ -279,9 +279,10 @@ export default function DeveloperSettingsPage() {
                 {Object.entries(groupedScopes).map(([category, scopesInCategory]) => {
                     const categoryScopeIds = scopesInCategory.map(s => s.id);
                     const allInCategorySelected = categoryScopeIds.every(id => field.value?.includes(id));
+                    const isIndeterminate = categoryScopeIds.some(id => field.value?.includes(id)) && !allInCategorySelected;
 
                     const handleCategoryChange = (checked: boolean | 'indeterminate') => {
-                        const currentScopes = field.value || [];
+                        const currentScopes = Array.isArray(field.value) ? field.value : [];
                         let newScopes;
                         if (checked) {
                             newScopes = [...new Set([...currentScopes, ...categoryScopeIds])];
@@ -293,24 +294,25 @@ export default function DeveloperSettingsPage() {
 
                     return (
                         <AccordionItem value={category} key={category}>
-                            <AccordionTrigger className="hover:no-underline py-2">
-                                <div className="flex items-center gap-3 w-full">
+                            <div className="flex items-center hover:bg-accent/50 rounded-md transition-colors">
+                                <div className="p-2 flex-shrink-0">
                                     <Checkbox
                                         checked={allInCategorySelected}
                                         onCheckedChange={handleCategoryChange}
-                                        onClick={(e) => e.stopPropagation()}
                                         aria-label={`Select all ${category} scopes`}
                                     />
-                                    <span className="font-medium text-sm">{category}</span>
                                 </div>
-                            </AccordionTrigger>
+                                <AccordionTrigger className="py-2 px-2 flex-1 text-left">
+                                     <span className="font-medium text-sm">{category}</span>
+                                </AccordionTrigger>
+                            </div>
                             <AccordionContent className="pt-2 pl-8 space-y-4">
                                 {scopesInCategory.map((item) => (
                                     <FormField
                                         key={item.id}
                                         control={form.control}
                                         name="scopes"
-                                        render={() => (
+                                        render={({ field }) => (
                                             <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                                                 <FormControl>
                                                     <Checkbox
