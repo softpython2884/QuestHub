@@ -1,7 +1,7 @@
 
 'use client';
 import type { Project } from '@/types';
-import { createContext, useState, useContext, type ReactNode } from 'react';
+import { createContext, useState, useContext, type ReactNode, useCallback } from 'react';
 
 export interface PageContextType {
   project?: Project;
@@ -17,9 +17,9 @@ const PageContext = createContext<PageContextValue | undefined>(undefined);
 export const PageProvider = ({ children }: { children: ReactNode }) => {
   const [context, setContext] = useState<PageContextType>({});
   
-  const setPageContext = (newContext: PageContextType) => {
+  const setPageContext = useCallback((newContext: PageContextType) => {
     setContext(newContext);
-  };
+  }, []);
   
   return (
     <PageContext.Provider value={{ ...context, setPageContext }}>
