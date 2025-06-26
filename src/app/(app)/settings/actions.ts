@@ -1,7 +1,7 @@
 
 'use server';
 
-import { getAppSetting, setAppSetting, createInvitation, getDbConnection } from '@/lib/db';
+import { getAppSetting, setAppSetting, createInvitation, getDbConnection, getFlowAppConsentsForUser, revokeFlowAppConsent, setFlowAppConsent } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
 import type { UserRole } from '@/types';
@@ -123,6 +123,21 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
             await db.run('ALTER TABLE messages ADD COLUMN isDeleted BOOLEAN NOT NULL DEFAULT FALSE;');
             messages.push('Added isDeleted column to messages table.');
         }
+        
+        // --- Migration: FlowApps table update ---
+        const flowAppCols = await db.all(`PRAGMA table_info(flow_apps);`);
+        if (flowAppCols.some(col => col.name === 'tokenHash')) {
+             // This is a more complex migration, better to recreate if simple
+            messages.push('FlowApps table detected with old schema. Manual migration might be needed for existing tokens.');
+        }
+        
+        // --- Migration: user_flow_app_consents table update ---
+        const consentCols = await db.all(`PRAGMA table_info(user_flow_app_consents);`);
+        if (!consentCols.some(col => col.name === 'status')) {
+            await db.run("ALTER TABLE user_flow_app_consents ADD COLUMN status TEXT NOT NULL CHECK(status IN ('pending', 'granted', 'denied')) DEFAULT 'pending';");
+            messages.push('Added status column to user_flow_app_consents table.');
+        }
+
 
         if (messages.length === 0) {
             return { success: true, message: 'Database schema is already up to date.' };
@@ -132,5 +147,42 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
     } catch (e: any) {
         console.error("Database migration failed:", e);
         return { success: false, message: '', error: e.message || 'An unknown error occurred during migration.' };
+    }
+}
+
+
+export async function getFlowAppConsentsAction() {
+    const userUuid = await auth().then(s => s?.user?.uuid);
+    if (!userUuid) {
+        return { error: 'Authentication required.' };
+    }
+    return getFlowAppConsentsForUser(userUuid);
+}
+
+export async function handleFlowAppConsentAction(flowAppUuid: string, decision: 'granted' | 'denied') {
+    const userUuid = await auth().then(s => s?.user?.uuid);
+    if (!userUuid) {
+        return { error: 'Authentication required.' };
+    }
+    try {
+        await setFlowAppConsent(userUuid, flowAppUuid, decision);
+        revalidatePath('/settings');
+        return { success: true };
+    } catch (e: any) {
+        return { error: e.message || 'Failed to update consent.' };
+    }
+}
+
+export async function revokeFlowAppConsentAction(flowAppUuid: string) {
+    const userUuid = await auth().then(s => s?.user?.uuid);
+    if (!userUuid) {
+        return { error: 'Authentication required.' };
+    }
+    try {
+        await revokeFlowAppConsent(userUuid, flowAppUuid);
+        revalidatePath('/settings');
+        return { success: true };
+    } catch (e: any) {
+        return { error: e.message || 'Failed to revoke consent.' };
     }
 }

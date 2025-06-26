@@ -280,6 +280,8 @@ export interface FlowApp {
   name: string;
   description?: string | null;
   ownerUuid: string;
+  tokenPrefix: string;
+  secretHash: string;
   createdAt: string;
   updatedAt: string;
   token?: string; // Only available on creation
@@ -347,4 +349,16 @@ export interface Conversation {
     hasUnread: boolean;
     projectUuid?: string; // Only for project chats
     otherUserUuid?: string; // Only for DMs
+}
+
+export type FlowAppConsentStatus = 'pending' | 'granted' | 'denied';
+
+export interface FlowAppConsent {
+    userUuid: string;
+    flowAppUuid: string;
+    flowAppName: string;
+    flowAppOwnerName: string;
+    status: FlowAppConsentStatus;
+    createdAt: string;
+    updatedAt: string;
 }
