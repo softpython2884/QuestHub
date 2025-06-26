@@ -11,12 +11,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Loader2, AlertTriangle, FileText, Edit, Trash2, Tag, Link2 as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, FileText, Edit, Trash2, Tag, Link2 as LinkIcon, Sparkles } from 'lucide-react';
 import { getGlobalDocumentAction, deleteGlobalDocumentAction } from '../actions';
 import type { GlobalDocument } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { summarizeDocumentation } from '@/ai/flows/summarize-project-documentation';
+import { Dialog, DialogClose } from '@/components/ui/dialog';
+import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function ViewDocumentPage() {
   const { user } = useAuth();
@@ -28,6 +31,11 @@ export default function ViewDocumentPage() {
   const [document, setDocument] = useState<GlobalDocument | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
+
 
   useEffect(() => {
     async function loadDocument() {
@@ -74,6 +82,25 @@ export default function ViewDocumentPage() {
     }
   };
 
+  const handleSummarize = async () => {
+    if (!document?.content) {
+        toast({ variant: 'destructive', title: 'Cannot Summarize', description: 'Document is empty.' });
+        return;
+    }
+    setIsSummarizing(true);
+    setSummary(null);
+    setIsSummaryDialogOpen(true);
+    try {
+        const result = await summarizeDocumentation({ content: document.content, title: document.title });
+        setSummary(result.summary);
+    } catch (e: any) {
+        toast({ variant: 'destructive', title: 'Summarization Failed', description: e.message || "The AI could not generate a summary." });
+        setIsSummaryDialogOpen(false);
+    } finally {
+        setIsSummarizing(false);
+    }
+  };
+
   const canModify = user && document && (user.uuid === document.authorUuid || user.role === 'admin');
 
   if (isLoading) {
@@ -105,30 +132,35 @@ export default function ViewDocumentPage() {
         <Button variant="outline" onClick={() => router.push('/documentation')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Documentation
         </Button>
-        {canModify && (
-          <div className="flex gap-2">
-            <Button asChild>
-              <Link href={`/documentation/${document.uuid}/edit`}><Edit className="mr-2 h-4 w-4"/> Edit</Link>
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSummarize} disabled={isSummarizing}>
+                <Sparkles className="mr-2 h-4 w-4 text-primary" /> {isSummarizing ? 'Summarizing...' : 'Summarize with AI'}
             </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Document: "{document.title}"?</AlertDialogTitle>
-                  <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        )}
+            {canModify && (
+                <>
+                    <Button asChild>
+                        <Link href={`/documentation/${document.uuid}/edit`}><Edit className="mr-2 h-4 w-4"/> Edit</Link>
+                    </Button>
+                    <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Document: "{document.title}"?</AlertDialogTitle>
+                        <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                    </AlertDialog>
+                </>
+            )}
+        </div>
       </div>
 
       <Card>
@@ -172,6 +204,28 @@ export default function ViewDocumentPage() {
           </div>
         </CardContent>
       </Card>
+      
+      <Dialog open={isSummaryDialogOpen} onOpenChange={setIsSummaryDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> AI Summary of "{document.title}"</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 max-h-[60vh] overflow-y-auto">
+            {isSummarizing ? (
+              <div className="flex justify-center items-center h-40">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="prose dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary || 'No summary generated.'}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

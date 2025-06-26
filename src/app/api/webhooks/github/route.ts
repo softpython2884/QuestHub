@@ -1,59 +1,65 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getProjectByUuid } from '@/lib/db';
+import { getProjectByRepoName } from '@/lib/db';
 
-async function verifySignature(request: NextRequest): Promise<{isValid: boolean, error?: string, body?: any}> {
+async function verifySignature(request: NextRequest, secret: string): Promise<boolean> {
     const signature = request.headers.get('x-hub-signature-256');
     if (!signature) {
-        return { isValid: false, error: 'No signature found on request' };
+        return false;
     }
 
     const body = await request.text();
-    
-    // TODO: Need a way to map the incoming webhook to a project to get the secret.
-    // This could be via a query param in the webhook URL, or by inspecting the payload.
-    // For now, using a global secret for demonstration, but this is NOT secure for production.
-    const secret = process.env.GITHUB_WEBHOOK_SECRET;
-    if (!secret) {
-        return { isValid: false, error: 'Webhook secret not configured on server.' };
-    }
-
     const expectedSignature = `sha256=${crypto.createHmac('sha256', secret).update(body).digest('hex')}`;
 
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-        return { isValid: false, error: 'Signature does not match' };
+        return false;
     }
 
-    return { isValid: true, body: JSON.parse(body) };
+    return true;
 }
 
 
 export async function POST(request: NextRequest) {
   try {
-    // const { isValid, error, body } = await verifySignature(request);
-    
-    // if (!isValid) {
-    //   console.warn('[GitHub Webhook] Unauthorized request:', error);
-    //   return NextResponse.json({ message: `Unauthorized: ${error}` }, { status: 401 });
-    // }
-    
     const event = request.headers.get('x-github-event');
-    const body = await request.json(); // Temporary until verification is fully implemented
+    const bodyClone = request.clone(); // Clone the request to read body multiple times
+    const body = await bodyClone.json();
+    const repoName = body.repository?.full_name;
+    
+    if (!repoName) {
+        return NextResponse.json({ message: 'Repository information missing from payload.' }, { status: 400 });
+    }
 
-    console.log(`[GitHub Webhook] Received event: '${event}' for repository: ${body.repository?.full_name}`);
+    const project = await getProjectByRepoName(repoName);
+    if (!project || !project.githubWebhookSecret) {
+        console.warn(`[GitHub Webhook] Received event for unlinked or unconfigured repository: ${repoName}`);
+        // Return 200 to avoid GitHub marking the webhook as failed for legit repos that just aren't configured here
+        return NextResponse.json({ message: 'Project not configured for webhooks.' }, { status: 200 });
+    }
+    
+    const isValid = await verifySignature(request, project.githubWebhookSecret);
+    
+    if (!isValid) {
+      console.warn(`[GitHub Webhook] Unauthorized request for repo: ${repoName}. Signature mismatch.`);
+      return NextResponse.json({ message: `Unauthorized: Invalid signature.` }, { status: 401 });
+    }
+    
+    console.log(`[GitHub Webhook] Received valid event: '${event}' for repository: ${repoName}`);
     
     // Here you would process the event, e.g., store commit data, send Discord notifications, etc.
-    // switch (event) {
-    //   case 'push':
-    //     console.log('Processing push event...');
-    //     break;
-    //   case 'pull_request':
-    //     console.log('Processing pull_request event...');
-    //     break;
-    //   default:
-    //     console.log(`Unhandled event type: ${event}`);
-    // }
+    switch (event) {
+      case 'push':
+        console.log(`[GitHub Webhook] Processing push event for ${repoName}. Commits:`, body.commits.map((c: any) => c.message));
+        // TODO: Store this activity in the database.
+        break;
+      case 'pull_request':
+        console.log(`[GitHub Webhook] Processing pull_request event. Action: ${body.action}, Title: ${body.pull_request?.title}`);
+        // TODO: Store this activity in the database.
+        break;
+      default:
+        console.log(`[GitHub Webhook] Unhandled event type: ${event}`);
+    }
 
     return NextResponse.json({ message: 'Webhook received' }, { status: 200 });
 

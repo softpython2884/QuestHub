@@ -1,6 +1,7 @@
+
 'use server';
 
-import { getPublicProfile, togglePinProject as dbTogglePinProject } from "@/lib/db";
+import { getPublicProfile, togglePinProject as dbTogglePinProject, getTasksForUserProjects, getDocumentsForUser } from "@/lib/db";
 import { auth } from "@/lib/authEdge";
 import type { User, Project } from "@/types";
 import { revalidatePath } from "next/cache";
@@ -8,10 +9,34 @@ import { revalidatePath } from "next/cache";
 
 export async function getPublicProfileAction(
     userUuid: string
-): Promise<(User & { projects: Project[]; pinnedProjects: Project[] }) | null> {
+): Promise<(User & { projects: Project[]; pinnedProjects: Project[]; contributionData: Record<string, number> }) | null> {
     try {
         const profile = await getPublicProfile(userUuid);
-        return profile;
+        if (!profile) return null;
+
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+        const tasks = await getTasksForUserProjects(userUuid);
+        const docs = await getDocumentsForUser(userUuid);
+        
+        const contributions: Record<string, number> = {};
+
+        tasks.forEach(task => {
+            if (task.status === 'Done' && new Date(task.updatedAt) > oneYearAgo) {
+                const date = new Date(task.updatedAt).toISOString().split('T')[0];
+                contributions[date] = (contributions[date] || 0) + 1;
+            }
+        });
+
+        docs.forEach(doc => {
+            if (new Date(doc.createdAt) > oneYearAgo) {
+                 const date = new Date(doc.createdAt).toISOString().split('T')[0];
+                 contributions[date] = (contributions[date] || 0) + 1;
+            }
+        });
+
+        return { ...profile, contributionData: contributions };
     } catch (error) {
         console.error(`Failed to fetch public profile for ${userUuid}:`, error);
         return null;

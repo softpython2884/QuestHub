@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,24 +11,64 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getPublicProfileAction, togglePinProjectAction } from '../actions';
 import type { User, Project } from '@/types';
-import { Loader2, ArrowLeft, Building, Mail, Globe, Github, MessageSquare, Pin, PinOff } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Badge } from '@/components/ui/badge';
-import { fetchDiscordUserDetailsAction, fetchGithubUserDetailsAction } from '../../projects/[id]/actions';
+import { Loader2, ArrowLeft, Building, Mail, Globe, Github, MessageSquare, Pin, PinOff, Activity } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-
+import { fetchDiscordUserDetailsAction, fetchGithubUserDetailsAction } from '../../projects/[id]/actions';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProfileData extends User {
     projects: Project[];
     pinnedProjects: Project[];
+    contributionData: Record<string, number>;
 }
 
 interface SocialDetails {
     github: { login: string; html_url: string } | null;
     discord: { username: string; discriminator: string } | null;
 }
+
+const ContributionGraph = ({ data }: { data: Record<string, number> }) => {
+    const today = new Date();
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(today.getFullYear() - 1);
+
+    const dates: { date: string, count: number }[] = [];
+    let currentDate = new Date(oneYearAgo);
+    while (currentDate <= today) {
+        dates.push({
+            date: currentDate.toISOString().split('T')[0],
+            count: data[currentDate.toISOString().split('T')[0]] || 0,
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    const getLevelColor = (count: number) => {
+        if (count === 0) return 'bg-muted/30';
+        if (count < 2) return 'bg-primary/20';
+        if (count < 4) return 'bg-primary/40';
+        if (count < 6) return 'bg-primary/70';
+        return 'bg-primary';
+    }
+
+    return (
+        <TooltipProvider>
+            <div className="flex flex-wrap gap-1">
+                {dates.map(({ date, count }) => (
+                     <Tooltip key={date}>
+                        <TooltipTrigger asChild>
+                            <div className={cn("h-3 w-3 rounded-sm", getLevelColor(count))}></div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{count} contributions on {new Date(date).toLocaleDateString()}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                ))}
+            </div>
+        </TooltipProvider>
+    );
+};
+
 
 export default function PublicProfilePage() {
     const { user: currentUser } = useAuth();
@@ -96,6 +137,12 @@ export default function PublicProfilePage() {
             toast({ variant: 'destructive', title: 'Error', description: result.error });
         }
     }
+    
+    const totalContributions = useMemo(() => {
+        if (!profile?.contributionData) return 0;
+        return Object.values(profile.contributionData).reduce((sum, count) => sum + count, 0);
+    }, [profile]);
+
 
     if (isLoading) {
         return (
@@ -169,6 +216,13 @@ export default function PublicProfilePage() {
                 </div>
 
                 <div className="w-full md:w-3/4">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-semibold mb-3 flex items-center"><Activity className="mr-2 h-5 w-5 text-primary"/>{totalContributions} Contributions in the last year</h2>
+                        <Card className="p-4">
+                            <ContributionGraph data={profile.contributionData} />
+                        </Card>
+                    </div>
+
                     {profile.pinnedProjects.length > 0 && (
                         <div className="mb-6">
                             <h2 className="text-xl font-semibold mb-3 flex items-center"><Pin className="mr-2 h-5 w-5 text-primary"/>Pinned Projects</h2>

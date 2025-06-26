@@ -36,8 +36,8 @@ const prompt = ai.definePrompt({
   output: {schema: EditFileContentAIOutputSchema},
   prompt: `You are an expert code and text editor.
 The user will provide you with the current content of a file and a prompt describing the changes they want to make.
-Your task is to return the ENTIRE new content of the file with the requested changes applied.
-Do not just provide the changes or a diff. Provide the complete, final file content.
+Your task is to return a JSON object with a single key, "newContent", containing the ENTIRE new content of the file with the requested changes applied.
+Do not just provide the changes or a diff. Provide the complete, final file content inside the JSON structure.
 
 Current File Content:
 \`\`\`
@@ -46,7 +46,7 @@ Current File Content:
 
 User's Edit Request: {{{userPrompt}}}
 
-Return the new, complete file content below:
+Return the JSON object with the new, complete file content below:
 `,
 });
 
@@ -58,15 +58,11 @@ const editFileContentAIFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
-    if (!output || !output.newContent) {
-        // Fallback or error handling if AI doesn't return expected output
-        console.error("AI did not return the expected new content for file editing.");
-        // Optionally, return original content or throw an error
-        // For now, returning original content to avoid breaking the file completely if AI fails.
-        // A more robust solution might involve user feedback or retries.
-        return { newContent: input.currentContent }; 
+    if (!output?.newContent) {
+      // Fallback or error handling if AI doesn't return expected output
+      console.error("AI did not return the expected new content for file editing.");
+      throw new Error("AI did not return the expected new content. The response might be empty or in the wrong format.");
     }
     return output;
   }
 );
-

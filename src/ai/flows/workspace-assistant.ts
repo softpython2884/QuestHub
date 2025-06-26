@@ -13,8 +13,8 @@ import { z } from 'genkit';
 import type { ChatMessage } from '@/types';
 import { getCurrentUserUuid, auth } from '@/lib/authEdge';
 import { getProjectsForUser, getProjectByUuid, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole } from '@/lib/db';
-import { summarizeProjectDocumentation } from './summarize-project-documentation';
-import { run } from 'genkit/flow';
+import { summarizeDocumentation } from './summarize-project-documentation';
+import { run } from 'genkit';
 
 // Schemas for context, input, and output
 const WorkspaceContextSchema = z.object({
@@ -127,7 +127,7 @@ const summarizeCurrentFileTool = ai.defineTool(
     if (!flowContext?.fileContent) {
       throw new Error("I can't summarize because you are not currently viewing a file. Please navigate to a file in the CodeSpace.");
     }
-    return summarizeProjectDocumentation({ documentation: flowContext.fileContent });
+    return summarizeDocumentation({ content: flowContext.fileContent, title: flowContext.filePath });
   }
 );
 

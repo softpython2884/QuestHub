@@ -1,53 +1,66 @@
-'use server';
 
+'use server';
 /**
- * @fileOverview Summarizes project documentation using AI.
+ * @fileOverview An AI agent for summarizing document content.
  *
- * - summarizeProjectDocumentation - A function that summarizes project documentation.
- * - SummarizeProjectDocumentationInput - The input type for the summarizeProjectDocumentation function.
- * - SummarizeProjectDocumentationOutput - The return type for the summarizeProjectDocumentation function.
+ * - summarizeDocumentation - A function that takes text content and returns a concise summary.
+ * - SummarizeDocumentationInput - The input type for the function.
+ * - SummarizeDocumentationOutput - The return type for the function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const SummarizeProjectDocumentationInputSchema = z.object({
-  documentation: z
+const SummarizeDocumentationInputSchema = z.object({
+  content: z.string().describe('The document content to be summarized.'),
+  title: z.string().optional().describe('The title of the document, for context.'),
+});
+export type SummarizeDocumentationInput = z.infer<typeof SummarizeDocumentationInputSchema>;
+
+const SummarizeDocumentationOutputSchema = z.object({
+  summary: z
     .string()
-    .describe('The project documentation to be summarized.'),
+    .describe('A concise, well-structured summary of the document content in Markdown format.'),
 });
-export type SummarizeProjectDocumentationInput = z.infer<
-  typeof SummarizeProjectDocumentationInputSchema
->;
+export type SummarizeDocumentationOutput = z.infer<typeof SummarizeDocumentationOutputSchema>;
 
-const SummarizeProjectDocumentationOutputSchema = z.object({
-  summary: z.string().describe('The summary of the project documentation.'),
-});
-export type SummarizeProjectDocumentationOutput = z.infer<
-  typeof SummarizeProjectDocumentationOutputSchema
->;
 
-export async function summarizeProjectDocumentation(
-  input: SummarizeProjectDocumentationInput
-): Promise<SummarizeProjectDocumentationOutput> {
-  return summarizeProjectDocumentationFlow(input);
+export async function summarizeDocumentation(
+  input: SummarizeDocumentationInput
+): Promise<SummarizeDocumentationOutput> {
+  return summarizeDocumentationFlow(input);
 }
 
+
 const prompt = ai.definePrompt({
-  name: 'summarizeProjectDocumentationPrompt',
-  input: {schema: SummarizeProjectDocumentationInputSchema},
-  output: {schema: SummarizeProjectDocumentationOutputSchema},
-  prompt: `Summarize the following project documentation: {{{documentation}}}`,
+  name: 'summarizeDocumentationPrompt',
+  input: {schema: SummarizeDocumentationInputSchema},
+  output: {schema: SummarizeDocumentationOutputSchema},
+  prompt: `You are an expert at technical writing and summarization.
+Your task is to create a concise, easy-to-read summary of the provided document content.
+The summary should be in Markdown format.
+Focus on the key points, purpose, and main takeaways of the document.
+
+Document Title (for context): {{{title}}}
+
+Document Content to Summarize:
+---
+{{{content}}}
+---
+`,
 });
 
-const summarizeProjectDocumentationFlow = ai.defineFlow(
+const summarizeDocumentationFlow = ai.defineFlow(
   {
-    name: 'summarizeProjectDocumentationFlow',
-    inputSchema: SummarizeProjectDocumentationInputSchema,
-    outputSchema: SummarizeProjectDocumentationOutputSchema,
+    name: 'summarizeDocumentationFlow',
+    inputSchema: SummarizeDocumentationInputSchema,
+    outputSchema: SummarizeDocumentationOutputSchema,
   },
   async input => {
     const {output} = await prompt(input);
-    return output!;
+    if (!output?.summary) {
+        throw new Error("AI failed to generate a summary.");
+    }
+    return output;
   }
 );
