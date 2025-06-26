@@ -267,82 +267,73 @@ export default function DeveloperSettingsPage() {
 
   const renderScopeSelector = (form: ReturnType<typeof useForm<any>>, isSubmitting: boolean) => (
     <FormField
-        control={form.control}
-        name="scopes"
-        render={({ field }) => (
+      control={form.control}
+      name="scopes"
+      render={({ field }) => (
         <FormItem>
-            <div className="mb-2">
-                <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
-                <FormDescription>Select what this application will be allowed to do.</FormDescription>
-            </div>
-            <Accordion type="multiple" className="w-full max-h-64 overflow-y-auto pr-3">
-                {Object.entries(groupedScopes).map(([category, scopesInCategory]) => {
-                    const categoryScopeIds = scopesInCategory.map(s => s.id);
-                    const allInCategorySelected = categoryScopeIds.every(id => field.value?.includes(id));
-                    const isIndeterminate = categoryScopeIds.some(id => field.value?.includes(id)) && !allInCategorySelected;
+          <div className="mb-2">
+            <FormLabel className="text-base">Permissions (Scopes)</FormLabel>
+            <FormDescription>Select what this application will be allowed to do.</FormDescription>
+          </div>
+          <Accordion type="multiple" className="w-full max-h-64 overflow-y-auto pr-3">
+            {Object.entries(groupedScopes).map(([category, scopesInCategory]) => {
+              const categoryScopeIds = scopesInCategory.map(s => s.id);
+              const selectedScopes = field.value || [];
+              const allInCategorySelected = categoryScopeIds.every(id => selectedScopes.includes(id));
+              
+              const handleCategoryChange = (checked: boolean) => {
+                let newScopes;
+                if (checked) {
+                  newScopes = [...new Set([...selectedScopes, ...categoryScopeIds])];
+                } else {
+                  newScopes = selectedScopes.filter((s: string) => !categoryScopeIds.includes(s));
+                }
+                field.onChange(newScopes);
+              };
 
-                    const handleCategoryChange = (checked: boolean | 'indeterminate') => {
-                        const currentScopes = Array.isArray(field.value) ? field.value : [];
-                        let newScopes;
-                        if (checked) {
-                            newScopes = [...new Set([...currentScopes, ...categoryScopeIds])];
-                        } else {
-                            newScopes = currentScopes.filter(s => !categoryScopeIds.includes(s));
-                        }
-                        field.onChange(newScopes);
-                    };
-
-                    return (
-                        <AccordionItem value={category} key={category}>
-                            <div className="flex items-center hover:bg-accent/50 rounded-md transition-colors">
-                                <div className="p-2 flex-shrink-0">
-                                    <Checkbox
-                                        checked={allInCategorySelected}
-                                        onCheckedChange={handleCategoryChange}
-                                        aria-label={`Select all ${category} scopes`}
-                                    />
-                                </div>
-                                <AccordionTrigger className="py-2 px-2 flex-1 text-left">
-                                     <span className="font-medium text-sm">{category}</span>
-                                </AccordionTrigger>
-                            </div>
-                            <AccordionContent className="pt-2 pl-8 space-y-4">
-                                {scopesInCategory.map((item) => (
-                                    <FormField
-                                        key={item.id}
-                                        control={form.control}
-                                        name="scopes"
-                                        render={({ field }) => (
-                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                                <FormControl>
-                                                    <Checkbox
-                                                        checked={field.value?.includes(item.id)}
-                                                        onCheckedChange={(checked) => {
-                                                            const currentScopes = field.value || [];
-                                                            const newScopes = checked
-                                                                ? [...currentScopes, item.id]
-                                                                : currentScopes.filter(value => value !== item.id);
-                                                            field.onChange(newScopes);
-                                                        }}
-                                                        disabled={isSubmitting}
-                                                    />
-                                                </FormControl>
-                                                <div className="flex flex-col">
-                                                    <FormLabel className="font-normal text-sm">{item.id}</FormLabel>
-                                                    <FormDescription className="!mt-0.5 text-xs">{item.description}</FormDescription>
-                                                </div>
-                                            </FormItem>
-                                        )}
-                                    />
-                                ))}
-                            </AccordionContent>
-                        </AccordionItem>
-                    );
-                })}
-            </Accordion>
-            <FormMessage />
+              return (
+                <AccordionItem value={category} key={category}>
+                   <div className="flex items-center hover:bg-accent/50 rounded-md transition-colors pr-4">
+                      <div className="p-2 flex-shrink-0">
+                          <Checkbox
+                              checked={allInCategorySelected}
+                              onCheckedChange={handleCategoryChange}
+                              aria-label={`Select all ${category} scopes`}
+                          />
+                      </div>
+                      <AccordionTrigger className="py-2 px-0 flex-1 text-left no-underline hover:no-underline">
+                           <span className="font-medium text-sm">{category}</span>
+                      </AccordionTrigger>
+                   </div>
+                  <AccordionContent className="pt-2 pl-8 space-y-4">
+                    {scopesInCategory.map((item) => (
+                      <FormItem key={item.id} className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={selectedScopes.includes(item.id)}
+                            onCheckedChange={(checked) => {
+                              const newScopes = checked
+                                ? [...selectedScopes, item.id]
+                                : selectedScopes.filter((value: string) => value !== item.id);
+                              field.onChange(newScopes);
+                            }}
+                            disabled={isSubmitting}
+                          />
+                        </FormControl>
+                        <div className="flex flex-col">
+                          <FormLabel className="font-normal text-sm">{item.id}</FormLabel>
+                          <FormDescription className="!mt-0.5 text-xs">{item.description}</FormDescription>
+                        </div>
+                      </FormItem>
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+          <FormMessage />
         </FormItem>
-        )}
+      )}
     />
   );
 
