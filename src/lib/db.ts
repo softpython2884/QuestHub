@@ -3,11 +3,12 @@
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp, FlowAppConsent, FlowAppConsentStatus } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { getCurrentUserUuid } from './authEdge';
 
 
@@ -329,7 +330,8 @@ export async function getDbConnection() {
         name TEXT NOT NULL,
         description TEXT,
         ownerUuid TEXT NOT NULL,
-        tokenHash TEXT NOT NULL,
+        tokenPrefix TEXT UNIQUE NOT NULL,
+        secretHash TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         FOREIGN KEY (ownerUuid) REFERENCES users (uuid) ON DELETE CASCADE
@@ -338,7 +340,7 @@ export async function getDbConnection() {
     CREATE TABLE IF NOT EXISTS user_flow_app_consents (
         userUuid TEXT NOT NULL,
         flowAppUuid TEXT NOT NULL,
-        status TEXT NOT NULL, -- 'granted' or 'denied'
+        status TEXT NOT NULL, -- 'pending' or 'granted' or 'denied'
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         PRIMARY KEY (userUuid, flowAppUuid),
@@ -2191,19 +2193,21 @@ export async function createFlowApp(data: {
 }): Promise<FlowApp> {
     const connection = await getDbConnection();
     const appUuid = uuidv4();
-    const token = `fpat_${uuidv4().replace(/-/g, '')}`; // FlowUp Personal Access Token
-    const tokenHash = await bcrypt.hash(token, 10);
+    const tokenPrefix = `fpat_${uuidv4().replace(/-/g, '').substring(0, 16)}`;
+    const secret = crypto.randomBytes(24).toString('hex');
+    const secretHash = await bcrypt.hash(secret, 10);
     const now = new Date().toISOString();
 
     await connection.run(
         `INSERT INTO flow_apps 
-        (uuid, name, description, ownerUuid, tokenHash, createdAt, updatedAt) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (uuid, name, description, ownerUuid, tokenPrefix, secretHash, createdAt, updatedAt) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         appUuid,
         data.name,
         data.description,
         data.ownerUuid,
-        tokenHash,
+        tokenPrefix,
+        secretHash,
         now,
         now
     );
@@ -2213,19 +2217,30 @@ export async function createFlowApp(data: {
         name: data.name,
         description: data.description,
         ownerUuid: data.ownerUuid,
-        token: token, // Return raw token only on creation
+        token: `${tokenPrefix}_${secret}`, // Return full token
+        tokenPrefix: tokenPrefix,
+        secretHash: secretHash,
         createdAt: now,
         updatedAt: now,
     };
 }
 
-export async function getFlowAppsForUser(userUuid: string): Promise<Omit<FlowApp, 'token'>[]> {
+export async function getFlowAppsForUser(userUuid: string): Promise<Omit<FlowApp, 'token' | 'secretHash'>[]> {
     const connection = await getDbConnection();
     const rows = await connection.all<any[]>(
-        'SELECT uuid, name, description, ownerUuid, createdAt, updatedAt FROM flow_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
+        'SELECT uuid, name, description, ownerUuid, tokenPrefix, createdAt, updatedAt FROM flow_apps WHERE ownerUuid = ? ORDER BY createdAt DESC',
         userUuid
     );
     return rows;
+}
+
+export async function getFlowAppByPrefix(prefix: string): Promise<FlowApp | null> {
+    const connection = await getDbConnection();
+    const app = await connection.get<FlowApp>(
+        `SELECT * FROM flow_apps WHERE tokenPrefix = ?`,
+        prefix
+    );
+    return app || null;
 }
 
 export async function deleteFlowApp(appUuid: string, userUuid: string): Promise<boolean> {
@@ -2236,6 +2251,57 @@ export async function deleteFlowApp(appUuid: string, userUuid: string): Promise<
         userUuid
     );
     return result.changes ? result.changes > 0 : false;
+}
+
+export async function getFlowAppConsent(userUuid: string, flowAppUuid: string): Promise<{ status: FlowAppConsentStatus } | null> {
+    const connection = await getDbConnection();
+    return connection.get(
+        `SELECT status FROM user_flow_app_consents WHERE userUuid = ? AND flowAppUuid = ?`,
+        userUuid, flowAppUuid
+    );
+}
+
+export async function getFlowAppConsentsForUser(userUuid: string): Promise<FlowAppConsent[]> {
+    const connection = await getDbConnection();
+    const rows = await connection.all<any[]>(
+        `SELECT
+            ufac.userUuid,
+            ufac.flowAppUuid,
+            fa.name as flowAppName,
+            u.name as flowAppOwnerName,
+            ufac.status,
+            ufac.createdAt,
+            ufac.updatedAt
+        FROM user_flow_app_consents ufac
+        JOIN flow_apps fa ON ufac.flowAppUuid = fa.uuid
+        JOIN users u ON fa.ownerUuid = u.uuid
+        WHERE ufac.userUuid = ?
+        ORDER BY ufac.updatedAt DESC`,
+        userUuid
+    );
+    return rows.map(row => ({
+        ...row,
+        status: row.status as FlowAppConsentStatus
+    }));
+}
+
+
+export async function setFlowAppConsent(userUuid: string, flowAppUuid: string, status: FlowAppConsentStatus): Promise<void> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    await connection.run(
+        `INSERT INTO user_flow_app_consents (userUuid, flowAppUuid, status, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(userUuid, flowAppUuid) DO UPDATE SET
+           status = excluded.status,
+           updatedAt = excluded.updatedAt`,
+        userUuid, flowAppUuid, status, now, now
+    );
+}
+
+export async function revokeFlowAppConsent(userUuid: string, flowAppUuid: string): Promise<void> {
+    const connection = await getDbConnection();
+    await connection.run('DELETE FROM user_flow_app_consents WHERE userUuid = ? AND flowAppUuid = ?', userUuid, flowAppUuid);
 }
 
 
