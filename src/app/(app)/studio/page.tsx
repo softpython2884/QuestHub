@@ -14,24 +14,27 @@ import {
   generateProjectScaffoldAction,
   generateDocumentContentAction,
   addScaffoldToProjectAction,
+  createProjectFromAIAction,
 } from './actions';
 import { fetchProjectsAction } from '../projects/actions';
 import type { Project } from '@/types';
 import type { GenerateProjectIdeasOutput } from '@/ai/flows/generate-project-ideas';
 import type { GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import type { GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
-import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2 } from 'lucide-react';
+import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2, Rocket } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useRouter } from 'next/navigation';
 
-type AIGeneratorTool = 'ideas' | 'scaffold' | 'docs';
+type AIGeneratorTool = 'ideas' | 'scaffold' | 'docs' | 'kickstart';
 
 export default function StudioPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const { user } = useAuth();
     const [isPending, startTransition] = useTransition();
     
@@ -77,6 +80,12 @@ export default function StudioPage() {
                 } else if (tool === 'docs') {
                     result = await generateDocumentContentAction(prompt);
                     if (result.data) setDocResult(result.data);
+                } else if (tool === 'kickstart') {
+                    result = await createProjectFromAIAction(prompt);
+                    if (result.data) {
+                        toast({ title: 'Project Created!', description: `Successfully created "${result.data.name}". Redirecting...` });
+                        router.push(`/projects/${result.data.uuid}`);
+                    }
                 }
 
                 if (result?.error) {
@@ -189,6 +198,12 @@ export default function StudioPage() {
     };
 
     const studioTools = [
+         {
+            tool: 'kickstart' as AIGeneratorTool,
+            icon: Rocket,
+            title: 'Project Kick-starter',
+            description: "Describe your project idea, and the AI will generate a name, description, README, and create the project for you instantly.",
+        },
         {
             tool: 'ideas' as AIGeneratorTool,
             icon: Lightbulb,

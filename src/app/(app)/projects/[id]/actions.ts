@@ -2203,12 +2203,12 @@ export interface UpdateProjectDiscordSettingsFormState {
 const updateDiscordSettingsSchema = z.object({
   projectUuid: z.string().uuid(),
   discordWebhookUrl: z.string().url("Please enter a valid Discord webhook URL.").or(z.literal('')),
-  discordNotificationsEnabled: z.enum(['true', 'false']).transform(v => v === 'true'),
-  discordNotifyTasks: z.boolean().optional(),
-  discordNotifyMembers: z.boolean().optional(),
-  discordNotifyAnnouncements: z.boolean().optional(),
-  discordNotifyDocuments: z.boolean().optional(),
-  discordNotifySettings: z.boolean().optional(),
+  discordNotificationsEnabled: z.preprocess((val) => val === 'true', z.boolean()),
+  discordNotifyTasks: z.preprocess((val) => val === 'true', z.boolean()),
+  discordNotifyMembers: z.preprocess((val) => val === 'true', z.boolean()),
+  discordNotifyAnnouncements: z.preprocess((val) => val === 'true', z.boolean()),
+  discordNotifyDocuments: z.preprocess((val) => val === 'true', z.boolean()),
+  discordNotifySettings: z.preprocess((val) => val === 'true', z.boolean()),
 });
 
 
@@ -2225,11 +2225,11 @@ export async function updateProjectDiscordSettingsAction(
         projectUuid: formData.get('projectUuid'),
         discordWebhookUrl: formData.get('discordWebhookUrl'),
         discordNotificationsEnabled: formData.get('discordNotificationsEnabled'),
-        discordNotifyTasks: formData.get('discordNotifyTasks') === 'true',
-        discordNotifyMembers: formData.get('discordNotifyMembers') === 'true',
-        discordNotifyAnnouncements: formData.get('discordNotifyAnnouncements') === 'true',
-        discordNotifyDocuments: formData.get('discordNotifyDocuments') === 'true',
-        discordNotifySettings: formData.get('discordNotifySettings') === 'true',
+        discordNotifyTasks: formData.get('discordNotifyTasks'),
+        discordNotifyMembers: formData.get('discordNotifyMembers'),
+        discordNotifyAnnouncements: formData.get('discordNotifyAnnouncements'),
+        discordNotifyDocuments: formData.get('discordNotifyDocuments'),
+        discordNotifySettings: formData.get('discordNotifySettings'),
     });
 
     if (!validatedFields.success) {
@@ -2560,5 +2560,3 @@ export async function setProjectVanityIdAction(
     return { error: error.message || "An unexpected error occurred." };
   }
 }
-
-    

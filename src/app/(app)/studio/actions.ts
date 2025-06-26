@@ -114,5 +114,3 @@ export async function createProjectFromAIAction(
     return { error: e.message || 'Failed to create project using AI.' };
   }
 }
-
-    

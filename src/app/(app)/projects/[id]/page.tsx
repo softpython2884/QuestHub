@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -8,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow, HardDrive } from 'lucide-react';
+import { ArrowLeft, Edit3, PlusCircle, Trash2, CheckSquare, FileText, Megaphone, Users, FolderGit2, Loader2, Mail, UserX, Tag as TagIcon, BookOpen, Pin, PinOff, ShieldAlert, Eye as EyeIcon, Flame, AlertCircle, ListChecks, Palette, CheckCircle, ExternalLink, Info, Code2, Github, Link2, Unlink, Copy as CopyIcon, Terminal, InfoIcon, GitBranch, DownloadCloud, MessageSquare, FileCode, Edit, XCircle, Settings2, Bell, Archive, HelpCircle, GitPullRequestArrow, HardDrive, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { Project, Task, Document as ProjectDocumentType, Tag as TagType, ProjectMember, ProjectMemberRole, TaskStatus, Announcement as ProjectAnnouncementType, UserGithubOAuthToken, DuplicateProjectFormState } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +66,8 @@ import {
   type SetupGithubWebhookFormState,
   duplicateProjectAction,
   checkGithubAccessAction, // Added
+  generateTasksFromPromptAction,
+  type GenerateTasksAIFormState,
 } from './actions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,6 +113,11 @@ const taskFormSchema = z.object({
   todoListMarkdown: z.string().optional().default(''),
 });
 type TaskFormValues = z.infer<typeof taskFormSchema>;
+
+const generateTasksFormSchema = z.object({
+    prompt: z.string().min(10, "Prompt must be at least 10 characters.").max(1000, "Prompt is too long."),
+});
+type GenerateTasksFormValues = z.infer<typeof generateTasksFormSchema>;
 
 const projectTagFormSchema = z.object({
   tagName: z.string().min(1, "Tag name is required.").max(50, "Tag name too long."),
@@ -243,6 +249,8 @@ function ProjectDetailPageContent() {
 
   const [isCreateAnnouncementDialogOpen, setIsCreateAnnouncementDialogOpen] = useState(false);
   const [announcementToDelete, setAnnouncementToDelete] = useState<ProjectAnnouncementType | null>(null);
+  
+  const [isGenerateTasksDialogOpen, setIsGenerateTasksDialogOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState('tasks');
 
@@ -327,6 +335,11 @@ function ProjectDetailPageContent() {
     defaultValues: { title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' },
   });
 
+  const generateTasksForm = useForm<GenerateTasksFormValues>({
+    resolver: zodResolver(generateTasksFormSchema),
+    defaultValues: { prompt: '' },
+  });
+
   const projectTagForm = useForm<ProjectTagFormValues>({
     resolver: zodResolver(projectTagFormSchema),
     defaultValues: { tagName: '', tagColor: '#6B7280' },
@@ -357,6 +370,7 @@ function ProjectDetailPageContent() {
   const [deleteProjectState, deleteProjectFormAction, isDeleteProjectPending] = useActionState(deleteProjectAction, {success: false});
   const [setupWebhookState, setupGithubWebhookFormAction, isSetupWebhookPending] = useActionState(setupGithubWebhookAction, { success: false });
   const [duplicateFormState, duplicateFormAction, isDuplicating] = useActionState(duplicateProjectAction, { message: "", error: ""});
+  const [generateTasksState, generateTasksFormAction, isGeneratingTasks] = useActionState(generateTasksFromPromptAction, { message: "", error: "" });
 
 
   const loadTasks = useCallback(async () => {
@@ -793,6 +807,20 @@ function ProjectDetailPageContent() {
     }
   }, [setupWebhookState, isSetupWebhookPending, toast]);
 
+  useEffect(() => {
+    if (!isGeneratingTasks && generateTasksState) {
+        if (generateTasksState.message && !generateTasksState.error) {
+            toast({ title: "AI Success", description: generateTasksState.message });
+            setIsGenerateTasksDialogOpen(false);
+            generateTasksForm.reset();
+            loadTasks();
+        }
+        if (generateTasksState.error) {
+            toast({ variant: "destructive", title: "AI Generation Error", description: generateTasksState.error });
+        }
+    }
+  }, [generateTasksState, isGeneratingTasks, toast, generateTasksForm, loadTasks]);
+
 
   useEffect(() => {
     if (project) {
@@ -858,6 +886,16 @@ function ProjectDetailPageContent() {
 
     startTransition(() => {
       createTaskFormAction(formData);
+    });
+  };
+
+  const handleGenerateTasksSubmit = (values: GenerateTasksFormValues) => {
+    if (!project) return;
+    const formData = new FormData();
+    formData.append('projectUuid', project.uuid);
+    formData.append('prompt', values.prompt);
+    startTransition(() => {
+        generateTasksFormAction(formData);
     });
   };
 
@@ -1478,97 +1516,137 @@ function ProjectDetailPageContent() {
           <Card>
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle>Tasks ({tasks.length})</CardTitle>
-               <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
-                <DialogTrigger asChild>
-                    <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' })}>
-                        <PlusCircle className="mr-2 h-4 w-4"/> Add Task
+              <div className="flex items-center gap-2">
+                <Dialog open={isGenerateTasksDialogOpen} onOpenChange={setIsGenerateTasksDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={!canCreateUpdateDeleteTasks}>
+                      <Sparkles className="mr-2 h-4 w-4 text-primary" /> Generate with AI
                     </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[525px]">
+                  </DialogTrigger>
+                  <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Create New Task</DialogTitle>
-                        <DialogDescription>Fill in the details for the new task.</DialogDescription>
+                        <DialogTitle>Generate Tasks with AI</DialogTitle>
+                        <DialogDescription>Describe a feature or goal, and the AI will break it down into actionable tasks for you.</DialogDescription>
                     </DialogHeader>
-                    <Form {...taskForm}>
-                        <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
-                            <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-                            <Controller
-                                control={taskForm.control}
-                                name="tagsString"
+                    <Form {...generateTasksForm}>
+                        <form onSubmit={generateTasksForm.handleSubmit(handleGenerateTasksSubmit)} className="space-y-4">
+                            <FormField
+                                control={generateTasksForm.control}
+                                name="prompt"
                                 render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Tags (comma-separated)</FormLabel>
-                                    <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'}
-                                             onOpenChange={(open) => {
-                                                if(!open && document.activeElement !== tagInputRef.current) {
-                                                    setShowTagSuggestions(false);
-                                                }
-                                            }}
-                                    >
-                                      <PopoverAnchor>
+                                    <FormItem>
+                                        <FormLabel>Your Goal or Feature</FormLabel>
                                         <FormControl>
-                                        <Input
-                                            {...field}
-                                            ref={tagInputRef}
-                                            placeholder="e.g. frontend, bug, urgent"
-                                            onFocus={() => {
-                                                setActiveTagInputName('tagsString');
-                                                const fragment = getCurrentTagFragment(field.value || "");
-                                                if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
-                                            }}
-                                            onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
-                                            onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
-                                            onBlur={() => setTimeout(() => {
-                                                if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
-                                                    setShowTagSuggestions(false);
-                                                }
-                                            }, 150)}
-                                        />
+                                            <Textarea {...field} rows={4} placeholder="e.g., Implement a user login system with email and password." />
                                         </FormControl>
-                                      </PopoverAnchor>
-                                      {showTagSuggestions && tagSuggestions.length > 0 && (
-                                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                                        <Command shouldFilter={false}>
-                                            <CommandList>
-                                            <CommandEmpty>No matching tags found.</CommandEmpty>
-                                            <CommandGroup>
-                                                {tagSuggestions.map((suggestion, index) => (
-                                                <CommandItem
-                                                    key={suggestion.uuid}
-                                                    value={suggestion.name}
-                                                    onSelect={() => {
-                                                        handleTagSuggestionClick(suggestion, field, taskForm);
-                                                    }}
-                                                    className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
-                                                >
-                                                    {suggestion.name}
-                                                </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                      </PopoverContent>
-                                      )}
-                                    </Popover>
-                                    <FormMessage />
-                                </FormItem>
+                                        <FormMessage />
+                                    </FormItem>
                                 )}
                             />
-                             <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
-                            {createTaskState?.error && !createTaskState.fieldErrors && <p className="text-sm text-destructive">{createTaskState.error}</p>}
-                            {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {createTaskState.fieldErrors.title.join(', ')}</p>}
-                            {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
+                            {generateTasksState?.error && <p className="text-sm text-destructive">{generateTasksState.error}</p>}
                             <DialogFooter>
-                                <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
-                                <Button type="submit" disabled={isCreateTaskPending}> {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task </Button>
+                                <DialogClose asChild><Button type="button" variant="ghost" disabled={isGeneratingTasks}>Cancel</Button></DialogClose>
+                                <Button type="submit" disabled={isGeneratingTasks}>
+                                    {isGeneratingTasks ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                                    Generate Tasks
+                                </Button>
                             </DialogFooter>
                         </form>
                     </Form>
-                </DialogContent>
-               </Dialog>
+                  </DialogContent>
+                </Dialog>
+                <Dialog open={isCreateTaskDialogOpen} onOpenChange={(isOpen) => { setIsCreateTaskDialogOpen(isOpen); if (!isOpen) { setTagSuggestions([]); setShowTagSuggestions(false); setActiveTagInputName(null); setActiveSuggestionIndex(-1); taskForm.clearErrors(); taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' });} }}>
+                  <DialogTrigger asChild>
+                      <Button size="sm" disabled={!canCreateUpdateDeleteTasks} onClick={() => taskForm.reset({ title: '', description: '', status: 'To Do', assigneeUuid: UNASSIGNED_VALUE, tagsString: '', todoListMarkdown: '' })}>
+                          <PlusCircle className="mr-2 h-4 w-4"/> Add Task
+                      </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[525px]">
+                      <DialogHeader>
+                          <DialogTitle>Create New Task</DialogTitle>
+                          <DialogDescription>Fill in the details for the new task.</DialogDescription>
+                      </DialogHeader>
+                      <Form {...taskForm}>
+                          <form onSubmit={taskForm.handleSubmit(handleCreateTaskSubmit)} className="space-y-4">
+                              <FormField control={taskForm.control} name="title" render={({ field }) => ( <FormItem> <FormLabel>Title</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                              <FormField control={taskForm.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Description (Optional, Markdown supported)</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )}/>
+                              <FormField control={taskForm.control} name="status" render={({ field }) => ( <FormItem> <FormLabel>Status</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl> <SelectContent> {taskStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                              <FormField control={taskForm.control} name="assigneeUuid" render={({ field }) => ( <FormItem> <FormLabel>Assign To (Optional)</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value || UNASSIGNED_VALUE}> <FormControl><SelectTrigger><SelectValue placeholder="Select assignee" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value={UNASSIGNED_VALUE}>Unassigned / Everyone</SelectItem> {projectMembers.map(member => ( <SelectItem key={member.userUuid} value={member.userUuid}>{member.user?.name}</SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                              <Controller
+                                  control={taskForm.control}
+                                  name="tagsString"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel>Tags (comma-separated)</FormLabel>
+                                      <Popover open={showTagSuggestions && activeTagInputName === 'tagsString'}
+                                              onOpenChange={(open) => {
+                                                  if(!open && document.activeElement !== tagInputRef.current) {
+                                                      setShowTagSuggestions(false);
+                                                  }
+                                              }}
+                                      >
+                                        <PopoverAnchor>
+                                          <FormControl>
+                                          <Input
+                                              {...field}
+                                              ref={tagInputRef}
+                                              placeholder="e.g. frontend, bug, urgent"
+                                              onFocus={() => {
+                                                  setActiveTagInputName('tagsString');
+                                                  const fragment = getCurrentTagFragment(field.value || "");
+                                                  if (fragment) handleTagsStringInputChange({ currentTarget: { value: field.value } } as React.ChangeEvent<HTMLInputElement>, field, taskForm);
+                                              }}
+                                              onChange={(e) => handleTagsStringInputChange(e, field, taskForm)}
+                                              onKeyDown={(e) => handleTagInputKeyDown(e, field, taskForm)}
+                                              onBlur={() => setTimeout(() => {
+                                                  if (document.activeElement !== tagInputRef.current && !document.querySelector('[data-radix-popper-content-wrapper]:hover')) {
+                                                      setShowTagSuggestions(false);
+                                                  }
+                                              }, 150)}
+                                          />
+                                          </FormControl>
+                                        </PopoverAnchor>
+                                        {showTagSuggestions && tagSuggestions.length > 0 && (
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                          <Command shouldFilter={false}>
+                                              <CommandList>
+                                              <CommandEmpty>No matching tags found.</CommandEmpty>
+                                              <CommandGroup>
+                                                  {tagSuggestions.map((suggestion, index) => (
+                                                  <CommandItem
+                                                      key={suggestion.uuid}
+                                                      value={suggestion.name}
+                                                      onSelect={() => {
+                                                          handleTagSuggestionClick(suggestion, field, taskForm);
+                                                      }}
+                                                      className={cn("cursor-pointer", index === activeSuggestionIndex && "bg-accent text-accent-foreground")}
+                                                  >
+                                                      {suggestion.name}
+                                                  </CommandItem>
+                                                  ))}
+                                              </CommandGroup>
+                                              </CommandList>
+                                          </Command>
+                                        </PopoverContent>
+                                        )}
+                                      </Popover>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                              />
+                               <FormField control={taskForm.control} name="todoListMarkdown" render={({ field }) => ( <FormItem hidden> <FormLabel>Sub-tasks (hidden)</FormLabel> <FormControl><Input type="hidden" {...field} /></FormControl> <FormMessage /> </FormItem> )}/>
+                              {createTaskState?.error && !createTaskState.fieldErrors && <p className="text-sm text-destructive">{createTaskState.error}</p>}
+                              {createTaskState?.fieldErrors?.title && <p className="text-sm text-destructive">Title: {createTaskState.fieldErrors.title.join(', ')}</p>}
+                              {createTaskState?.fieldErrors?.assigneeUuid && <p className="text-sm text-destructive">Assignee: {createTaskState.fieldErrors.assigneeUuid.join(', ')}</p>}
+                              <DialogFooter>
+                                  <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                                  <Button type="submit" disabled={isCreateTaskPending}> {isCreateTaskPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Task </Button>
+                              </DialogFooter>
+                          </form>
+                      </Form>
+                  </DialogContent>
+                 </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               {tasks.length === 0 ? (
