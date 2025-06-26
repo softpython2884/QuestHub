@@ -20,11 +20,6 @@ import {
     createDocument as dbCreateDocument,
     updateDocumentContent as dbUpdateDocumentContent,
     deleteDocument as dbDeleteDocument,
-    getRepoContentsAction,
-    getFileContentAction,
-    createGithubFileAction,
-    saveFileContentAction,
-    deleteGithubFileAction,
     getProjectMembers,
     addProjectMember,
     removeProjectMember,
@@ -33,6 +28,13 @@ import {
     deleteProjectAnnouncement,
     getGlobalAnnouncements,
 } from '@/lib/db';
+import {
+    getRepoContentsAction,
+    getFileContentAction,
+    createGithubFileAction,
+    saveFileContentAction,
+    deleteGithubFileAction,
+} from '@/app/(app)/projects/[id]/actions';
 import type { FlowApp, User, FlowAppScope, ProjectMemberRole, Project } from '@/types';
 
 const ACTION_SCOPES: Record<string, FlowAppScope> = {
