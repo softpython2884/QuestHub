@@ -93,7 +93,7 @@ export function Chatbot() {
             </DialogDescription>
           </DialogHeader>
            <div className="flex-grow min-h-0">
-            <ScrollArea className="h-full pr-4 -mr-4" ref={scrollAreaRef}>
+            <ScrollArea className="h-full pr-4" ref={scrollAreaRef as React.RefObject<HTMLDivElement>}>
               <div className="space-y-4 pr-4">
                 {messages.map((message, index) => (
                   <div key={index} className={cn('flex items-start gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}>
@@ -103,11 +103,11 @@ export function Chatbot() {
                           <AvatarFallback>AI</AvatarFallback>
                       </Avatar>
                     )}
-                    <div className={cn('max-w-[80%] rounded-lg px-3 py-2 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                    <div className={cn('max-w-[80%] rounded-lg px-3 py-2 text-sm break-words', message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         className={cn(
-                          'prose prose-sm max-w-none break-words',
+                          'prose prose-sm max-w-none',
                           message.role === 'model' && 'dark:prose-invert'
                         )}
                         components={{

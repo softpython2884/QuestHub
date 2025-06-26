@@ -11,9 +11,9 @@
 import { ai } from '@/ai/genkit';
 import * as genkit from 'genkit';
 import { z } from 'genkit';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, Task } from '@/types';
 import { getCurrentUserUuid, auth } from '@/lib/authEdge';
-import { getProjectsForUser, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole, getTaskByTitleInProject, updateTask as dbUpdateTask } from '@/lib/db';
+import { getProjectsForUser, createTask as dbCreateTask, createProjectAnnouncement as dbCreateProjectAnnouncement, getProjectMemberRole, getTaskByTitleInProject, updateTask as dbUpdateTask, getTasksForProject, getProjectByUuid, getProjectMembers } from '@/lib/db';
 import { summarizeDocumentation } from './summarize-project-documentation';
 
 // Schemas for context, input, and output
@@ -56,6 +56,57 @@ const listUserProjectsTool = ai.defineTool(
     return getProjectsForUser(userUuid);
   }
 );
+
+const listTasksInProjectTool = ai.defineTool(
+    {
+        name: 'listTasksInProject',
+        description: 'Lists all tasks for a given project.',
+        inputSchema: z.object({
+            projectUuid: z.string().uuid().describe("The UUID of the project to get tasks for."),
+        }),
+        outputSchema: z.array(z.object({
+            title: z.string(),
+            status: z.string(),
+            assigneeName: z.string().nullable(),
+        })),
+    },
+    async ({ projectUuid }) => {
+        const tasks = await getTasksForProject(projectUuid);
+        return tasks.map(task => ({
+            title: task.title,
+            status: task.status,
+            assigneeName: task.assigneeName || null,
+        }));
+    }
+);
+
+const getProjectDetailsTool = ai.defineTool(
+    {
+        name: 'getProjectDetails',
+        description: 'Gets details for a specific project, such as its description and members.',
+        inputSchema: z.object({
+            projectUuid: z.string().uuid().describe("The UUID of the project."),
+        }),
+        outputSchema: z.object({
+            name: z.string(),
+            description: z.string().nullable(),
+            ownerName: z.string().nullable(),
+            members: z.array(z.string()),
+        }),
+    },
+    async ({ projectUuid }) => {
+        const project = await getProjectByUuid(projectUuid);
+        if (!project) throw new Error("Project not found.");
+        const members = await getProjectMembers(projectUuid);
+        return {
+            name: project.name,
+            description: project.description || null,
+            ownerName: project.ownerName || null,
+            members: members.map(m => m.user?.name || 'Unknown User'),
+        };
+    }
+);
+
 
 const createTaskInProjectTool = ai.defineTool(
   {
@@ -185,7 +236,7 @@ export async function workspaceAssistant(
 
       const context = flowInput.context;
       let contextDescription = "The user is currently not on a specific page that provides context.";
-      let toolsToUse: any[] = [listUserProjectsTool, createProjectAnnouncementTool, createTaskInProjectTool, updateTaskInProjectTool];
+      let toolsToUse: any[] = [listUserProjectsTool, createTaskInProjectTool, updateTaskInProjectTool, createProjectAnnouncementTool, listTasksInProjectTool, getProjectDetailsTool];
       const latestMessage = flowInput.history[flowInput.history.length - 1].content;
       let promptWithContext = latestMessage;
 
@@ -214,12 +265,14 @@ User Request: ${latestMessage}`;
         }
       }
 
-      const systemPrompt = `You are Flowy, an intelligent and friendly AI assistant integrated into the FlowUp project management platform. Your purpose is to help users manage their work efficiently.
+      const systemPrompt = `You are Flowy, an intelligent and friendly AI assistant integrated into the FlowUp project management platform. Your purpose is to help users manage their work efficiently by understanding their requests and using available tools to perform actions.
 
 **Your Capabilities (Tools):**
-You have access to a set of tools to perform actions on behalf of the user. You should decide to use a tool when the user's request matches a tool's capability. Your available tools are:
+You have access to a set of tools to perform actions. You should decide to use a tool when the user's request matches a tool's capability. Your available tools are:
 - \`listUserProjects\`: To list all projects the current user is a member of.
-- \`createTaskInProject\`: To create a new task in a specified project. Requires a projectUuid.
+- \`listTasksInProject\`: To list all tasks for a given project. Requires a projectUuid.
+- \`getProjectDetails\`: To get more information about a project like its description or members. Requires a projectUuid.
+- \`createTaskInProject\`: To create a new task in a specified project. Requires a projectUuid and a title.
 - \`updateTaskInProject\`: To update a task, for example by adding sub-tasks. Requires a projectUuid and the task's title. You MUST append to existing sub-tasks if any, not replace them.
 - \`createProjectAnnouncement\`: To create an announcement in a project. Requires a projectUuid.
 - \`summarizeCurrentFile\`: To summarize the content of the file the user is currently viewing. Requires fileContent.
