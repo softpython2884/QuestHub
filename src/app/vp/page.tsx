@@ -18,7 +18,8 @@ const Scene = ({ currentScene, sceneNumber, children }: SceneProps) => (
   <div
     className={cn(
       'absolute inset-0 flex flex-col items-center justify-center text-center transition-opacity duration-1000 ease-in-out',
-      currentScene === sceneNumber ? 'opacity-100' : 'opacity-0'
+      // Hide if not the current scene, but keep the final scene visible once it's reached
+      currentScene === sceneNumber || (sceneNumber === 6 && currentScene > 5) ? 'opacity-100' : 'opacity-0 pointer-events-none'
     )}
   >
     {children}
@@ -33,7 +34,7 @@ const AnimatedCard = ({ icon, title, description, delay }: { icon: React.Element
     const Icon = icon;
     return (
         <div className={cn("flex flex-col items-center text-center p-4 animate-fade-in-up")} style={{ animationDelay: delay }}>
-            <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10 mb-4">
+            <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10 mb-4 transition-transform duration-300 hover:scale-110">
                 <Icon className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-xl font-bold">{title}</h3>
@@ -49,25 +50,32 @@ export default function VpPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (audio) {
-      audio.play().catch(error => console.error("Audio autoplay failed:", error));
+      setTimeout(() => {
+        audio.play().catch(error => console.error("Audio autoplay failed. User interaction might be required.", error));
+      }, 100);
     }
 
     const sceneTimers = [
-      setTimeout(() => setScene(1), 500),      // Initial Fade In
-      setTimeout(() => setScene(2), 4000),     // Transition to cards
-      setTimeout(() => setScene(3), 12000),    // Transition to AI
-      setTimeout(() => setScene(4), 20000),    // Transition to communication
-      setTimeout(() => setScene(5), 28000),    // Transition to final CTA
-      setTimeout(() => setScene(6), 38000),    // Show button
+      setTimeout(() => setScene(1), 500),      // Scene 1: Initial Fade In (0.5s)
+      setTimeout(() => setScene(2), 4500),     // Scene 2: Unified Workspace (4.5s)
+      setTimeout(() => setScene(3), 12500),    // Scene 3: AI (12.5s)
+      setTimeout(() => setScene(4), 20500),    // Scene 4: Secure & Extensible (20.5s)
+      setTimeout(() => setScene(5), 28500),    // Scene 5: Final Slogan (28.5s)
+      setTimeout(() => setScene(6), 36500),    // Scene 6: CTA Button (36.5s)
     ];
 
     return () => {
       sceneTimers.forEach(clearTimeout);
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
     };
   }, []);
 
   return (
     <div className="relative h-screen w-screen">
+      {/* The audio element now uses the src attribute directly */}
       <audio ref={audioRef} src="/vp.mp3" />
       
       <Scene currentScene={scene} sceneNumber={1}>
@@ -90,7 +98,7 @@ export default function VpPage() {
 
       <Scene currentScene={scene} sceneNumber={3}>
          <AnimatedText className="flex flex-col items-center">
-            <div className="flex items-center justify-center h-24 w-24 rounded-full bg-primary/10 mb-6">
+            <div className="flex items-center justify-center h-24 w-24 rounded-full bg-primary/10 mb-6 animate-pulse">
                  <Sparkles className="h-12 w-12 text-primary" />
             </div>
             <h2 className="text-4xl font-bold tracking-tight">AI-Powered Acceleration.</h2>
