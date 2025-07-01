@@ -2,65 +2,76 @@
 
 ## 1. Vision & Objective
 
-**CodeQuest Academy** is a gamified learning and project management platform designed for private IT schools. Its goal is to transform the educational journey into an engaging adventure by structuring learning around "Quests." It provides students with the tools to manage their projects, professors with the means to guide and evaluate them, and administrators with the ability to manage the ecosystem.
+**CodeQuest Academy** is a gamified learning and project management platform designed for private IT schools. Its core objective is to transform the educational journey into an engaging adventure by structuring learning around "Quests" and practical project work. It provides students with the tools to manage their projects, professors with the means to create structured learning paths and evaluate progress, and administrators with the ability to manage the entire ecosystem.
 
 ---
 
 ## 2. User Roles & Permissions
 
-*   **Student (User):** The primary user. They can accept Quests, manage their corresponding projects (tasks, documentation), collaborate with others, and submit their work for evaluation.
-*   **Professor (Manager):** Creates and assigns "Quests" to students or groups. They can monitor progress, provide feedback, create quizzes, and grade final submissions.
+*   **Student (User):** The primary user. They navigate the Quest Tree, accept Quests which generate Projects in their workspace, manage tasks, code, documentation, collaborate with peers, and submit completed Quests for evaluation.
+*   **Professor (Manager):** The architect of the learning experience. They create and manage the Main Quest Tree, design Dynamic Side Quests for specific assignments, monitor student progress, provide feedback, create quizzes, and grade final submissions.
 *   **Administrator (Admin):** Manages the entire platform. Their key responsibilities include:
     *   Sending out all user invitations (students and professors). Registration is **invite-only**.
     *   Managing platform-wide settings and announcements.
-    *   Overseeing all users and quests.
+    *   Overseeing all users, quests, and platform integrity.
 
 ---
 
 ## 3. Core Features
 
-### 3.1. The Quest System
-*   **What it is:** The central learning unit of the platform. A "Quest" is a high-level assignment created by a Professor.
-*   **Functionality:**
-    *   Professors create Quests with a title, detailed description (learning objectives, required technologies), and a deadline.
-    *   They can assign a Quest to one or more students.
-    *   When a student accepts a Quest, a new **Project** is automatically created and linked to it in their workspace.
+### 3.1. The Quest System: A Dual Approach
 
-### 3.2. Project Management (Student Workspace)
-*   **What it is:** The student's personal workspace for a given Quest.
-*   **Functionality:**
-    *   **Kanban Board:** Students break down their Quest into actionable tasks (`To Do`, `In Progress`, `Done`).
-    *   **CodeSpace:** Full GitHub integration. Students can link their project to a new or existing GitHub repository to manage their code.
-    *   **Documents:** An integrated space to write project-specific documentation (e.g., technical design, user manual).
+The Quest System is the central pedagogical tool of the platform, composed of two distinct but complementary quest types.
 
-### 3.3. Quiz & Evaluation Engine
-*   **What it is:** A tool for Professors to assess student knowledge.
-*   **Functionality:**
-    *   **Quiz Creation:** Professors can create quizzes with multiple-choice questions, true/false, or even "code snippet" questions where a student has to write a small piece of code.
-    *   **Automated Grading:** Quizzes are automatically graded, providing instant feedback to students.
-    *   **Quest Prerequisite:** A quiz can be set as a final step to complete a Quest.
+#### 3.1.1. Main Quest Tree (The Curriculum)
+*   **Concept:** This is the school's entire curriculum, visualized as a vast **skill tree**, similar to those found in video games. It provides students with a clear and motivating path of progression.
+*   **Structure:**
+    *   **Branching Paths:** The tree starts with foundational quests (e.g., "Git Basics," "Intro to Python"). Upon completion, new branches unlock, allowing students to specialize in areas like "Web Development," "Data Science," "Cybersecurity," or "Mobile Development."
+    *   **Increasing Difficulty:** As a student progresses down a branch, the quests become more complex and challenging.
+    *   **Prerequisites:** Quests can have one or more prerequisite quests, ensuring a logical learning order. A student cannot start the "React Frameworks" quest without first completing "JavaScript Fundamentals."
+*   **Management:** Professors and Admins collaborate to build, update, and balance the Main Quest Tree to reflect the school's curriculum.
 
-### 3.4. Submission and Grading
-*   **What it is:** The formal process for completing a Quest.
-*   **Functionality:**
-    *   A student marks their project as "Ready for Review."
-    *   The corresponding Professor is notified.
-    *   The Professor can access a read-only view of the student's entire project (tasks, code, docs) to evaluate it.
-    *   A dedicated "Grading" interface allows the Professor to assign a grade (e.g., A, B, C or a point score) and leave detailed feedback.
+#### 3.1.2. Dynamic Side Quests (Assignments)
+*   **Concept:** A flexible tool for professors to create smaller, ad-hoc assignments for specific needs.
+*   **Creation:** A professor can rapidly design a "mini quest tree" (even a single quest) with a specific objective, description, and deadline.
+*   **Assignment:** These quests can be assigned to an individual student, a group of students, or an entire project team.
+*   **Purpose:** Ideal for weekly homework, targeted exercises (e.g., "Refactor this function"), or special challenges that fall outside the main curriculum.
 
-### 3.5. AI Mentor ("Codex")
-*   **What it is:** An integrated AI assistant to help students.
+### 3.2. Project Workspace (The Workshop)
+
+This is the student's personal or collaborative space where the actual work gets done. It retains all the powerful features of FlowUp.
+
+*   **The Link:** **When a student accepts any Quest (Main or Side), a new Project is automatically created in their workspace.** This Project is intrinsically linked to that specific Quest attempt.
 *   **Functionality:**
-    *   **Contextual Help:** Codex can be invoked from the CodeSpace to explain a piece of code, suggest debugging strategies, or refactor a function.
-    *   **Concept Explanation:** Students can ask Codex general programming questions.
-    *   **Safety:** Codex will be configured to guide students toward a solution rather than giving it away directly.
+    *   **Kanban Board:** Students break down their Quest requirements into actionable tasks (`To Do`, `In Progress`, `Done`).
+    *   **CodeSpace:** Full GitHub integration. Students can link their project to a new or existing GitHub repository to manage their code. This is where they write the code to solve the Quest's challenges.
+    *   **Documents:** An integrated space to write project-specific documentation (e.g., technical design, user manual, research notes).
+
+### 3.3. Evaluation & Learning Tools
+
+*   **Quiz Engine:**
+    *   Professors can create quizzes with multiple-choice, true/false, or even "code snippet" questions.
+    *   Quizzes can be attached to a Quest as a mandatory step for completion, testing theoretical knowledge.
+    *   Grading is automated for instant student feedback.
+*   **Submission and Grading:**
+    *   A student marks their Quest as "Ready for Review" from within the associated Project.
+    *   The professor is notified and gains access to a read-only snapshot of the student's entire project (tasks, code, docs).
+    *   A dedicated interface allows the professor to assign a grade and leave detailed feedback on the **Quest**, which is then reflected in the student's progress on the skill tree.
+
+### 3.4. AI Mentor ("Codex")
+*   **Concept:** An integrated AI assistant, renamed "Codex," designed to guide, not to give answers.
+*   **Functionality:**
+    *   **Contextual Help:** From the CodeSpace, a student can ask Codex to "explain this algorithm," "suggest ways to debug this error," or "refactor this function for better readability."
+    *   **Learning Tool:** Codex can explain programming concepts or documentation related to the current Quest's technologies.
+    *   **Safety:** Codex is configured to be a Socratic mentor, guiding students toward solutions with questions and hints rather than providing the final code.
 
 ---
 
 ## 4. Additional Feature Ideas (Brainstorm)
 
-*   **Leaderboards:** A global or per-class leaderboard showing student progress based on completed Quests and grades, to encourage friendly competition.
-*   **Skill Tree:** A visual representation of a student's acquired skills. Completing certain Quests (e.g., "Python Basics," "API Development") unlocks nodes on their personal skill tree.
-*   **Peer Review System:** Allow students to review each other's code or projects before final submission, fostering collaboration.
-*   **Live Help Queue:** A system where students can "raise their hand" digitally to request help from an available Professor.
-*   **School-Wide Announcements:** A section for Admins to post important information for all platform users.
+*   **Visual Skill Tree Interface:** A graphical, interactive UI where students can see the entire Main Quest Tree, their completed quests, available paths, and locked future quests.
+*   **XP & Leaderboards:** Gamify the experience by awarding Experience Points (XP) for completing Quests and Quizzes. Display leaderboards (global or per class) to foster friendly competition.
+*   **Peer Review System:** Before a final Quest submission, students can be prompted to review the Project of one or more peers, providing constructive feedback based on a professor's rubric.
+*   **Live Help Queue:** A system where a student working on a Quest can "raise their hand" digitally, entering a queue for an available professor or teaching assistant to provide help.
+*   **School-Wide Announcements:** A central place for Admins to post important information visible to all users.
+*   **Badge & Achievement System:** Award unique badges for completing difficult quests, mastering a technology branch, or demonstrating exceptional collaboration.

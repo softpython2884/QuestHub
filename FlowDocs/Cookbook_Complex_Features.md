@@ -1,6 +1,6 @@
 # Technical Cookbook for Complex Features
 
-This document provides technical recipes and architectural explanations for implementing the more complex features of a FlowUp-like application. Use this as a guide to accelerate development during your 24-hour challenge.
+This document provides technical recipes and architectural explanations for implementing the more complex features of a **CodeQuest Academy** application. Use this as a guide to accelerate development during your 24-hour challenge.
 
 ---
 
@@ -13,7 +13,7 @@ This document provides technical recipes and architectural explanations for impl
 
 **Key Implementation Steps:**
 
-1.  **Create the Login/Signup Forms:** These forms will call the Server Actions from `authService.ts`.
+1.  **Create the Login/Signup Forms:** These forms will call the Server Actions from `authService.ts`. The signup form should be disabled unless a valid invitation token is present in the URL, as registration is invite-only.
 
 2.  **Implement `authService.ts`:**
     ```typescript
@@ -33,11 +33,12 @@ This document provides technical recipes and architectural explanations for impl
       });
     }
 
-    export async function login(email, password) {
-      // 1. Get user from DB by email
-      // 2. Compare password with bcrypt.compare()
-      // 3. If valid, call createSessionForUser()
-      // 4. Return user object
+    export async function signup(name, email, password, invitationToken) {
+      // 1. Validate invitationToken against the database.
+      // 2. If valid, create user with the role from the invitation.
+      // 3. Mark token as used.
+      // 4. Create session with createSessionForUser().
+      // 5. Return user object.
     }
     ```
 
@@ -64,32 +65,61 @@ This document provides technical recipes and architectural explanations for impl
 
 ---
 
-## 2. Project & Task Management System
+## 2. The Quest System Data Model
+
+This is the most complex new feature. It requires careful data modeling to represent the skill tree and student progress.
 
 **Architecture:**
--   **Database Schema:**
-    -   `projects`: Stores project details.
-    -   `tasks`: Stores task details with a `projectUuid` foreign key.
-    -   `project_members`: Links `users` to `projects` with a role.
-    -   `project_tags` & `task_tags`: For the tag system.
--   **Server Actions:** A single `actions.ts` file within the project directory (e.g., `src/app/(app)/projects/[id]/actions.ts`) contains all functions to create, update, and delete tasks, members, etc. These actions always verify user permissions before interacting with the database.
+-   **`quests` table**: Stores the definition of each quest (title, description, etc.).
+-   **`quest_prerequisites` table**: A many-to-many junction table that defines the skill tree. It links a quest to the quests that must be completed before it becomes available (e.g., `quest_uuid` requires `prerequisite_quest_uuid`).
+-   **`student_quests` table**: Tracks a student's progress on a specific quest. It links a `user`, a `quest`, and crucially, the `project` that was created for that quest attempt. It also stores status (`accepted`, `submitted`, `graded`) and the final grade.
 
-**Key Implementation - Updating Task Status (Kanban Drag-and-Drop):**
-1.  **Frontend:** Use a library like `dnd-kit` to manage drag-and-drop. On drop, get the task ID and the new status column.
-2.  **Server Action Call:** Call a server action, `updateTaskStatusAction(taskUuid, newStatus)`.
-3.  **Optimistic UI:** Immediately move the task card in the UI to the new column without waiting for the server response. If the server call fails, revert the change and show a toast notification.
-4.  **Backend Logic:**
-    ```typescript
-    // In projects/[id]/actions.ts
-    export async function updateTaskStatusAction(taskUuid, newStatus) {
-      const session = await auth();
-      // 1. Verify user is logged in.
-      // 2. Get the task from the DB to find its projectUuid.
-      // 3. Check if the user is a member of that project (any role can change status).
-      // 4. Update the task status in the database.
-      // 5. Call revalidatePath('/projects/[id]') to refresh data for all users.
-    }
-    ```
+**Key Database Schemas:**
+```sql
+CREATE TABLE quests (
+    uuid TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    is_main_quest BOOLEAN DEFAULT TRUE, -- Differentiates between curriculum and dynamic side quests
+    created_by_professor_uuid TEXT,
+    FOREIGN KEY (created_by_professor_uuid) REFERENCES users(uuid)
+);
+
+CREATE TABLE quest_prerequisites (
+    quest_uuid TEXT NOT NULL,
+    prerequisite_quest_uuid TEXT NOT NULL,
+    PRIMARY KEY (quest_uuid, prerequisite_quest_uuid),
+    FOREIGN KEY (quest_uuid) REFERENCES quests(uuid),
+    FOREIGN KEY (prerequisite_quest_uuid) REFERENCES quests(uuid)
+);
+
+CREATE TABLE student_quests (
+    uuid TEXT PRIMARY KEY,
+    student_uuid TEXT NOT NULL,
+    quest_uuid TEXT NOT NULL,
+    project_uuid TEXT NOT NULL UNIQUE, -- Each attempt gets a new, unique project
+    status TEXT NOT NULL, -- e.g., 'accepted', 'in_progress', 'submitted', 'graded'
+    grade INTEGER,
+    feedback TEXT,
+    started_at TEXT NOT NULL,
+    submitted_at TEXT,
+    FOREIGN KEY (student_uuid) REFERENCES users(uuid),
+    FOREIGN KEY (quest_uuid) REFERENCES quests(uuid),
+    FOREIGN KEY (project_uuid) REFERENCES projects(uuid)
+);
+```
+
+**Key Server Logic - "Accept Quest" Action:**
+```typescript
+export async function acceptQuestAction(studentUuid, questUuid) {
+  // 1. Verify the student has completed all prerequisite quests by checking `student_quests`.
+  // 2. If prerequisites are met, create a new Project for the student.
+  //    const newProject = await createProject(quest.title, quest.description, studentUuid);
+  // 3. Create a `student_quests` record linking the student, quest, and the new project's UUID.
+  //    await dbCreateStudentQuest(studentUuid, questUuid, newProject.uuid);
+  // 4. Return the new Project so the student can be redirected to their new workspace.
+}
+```
 
 ---
 
@@ -156,7 +186,7 @@ useEffect(() => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('beforeinstallrosinstallprompt', handleBeforeInstallPrompt);
     };
 }, []);
 
