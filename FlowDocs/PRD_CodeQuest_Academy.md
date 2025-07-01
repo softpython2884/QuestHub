@@ -65,13 +65,44 @@ This is the student's personal or collaborative space where the actual work gets
     *   **Learning Tool:** Codex can explain programming concepts or documentation related to the current Quest's technologies.
     *   **Safety:** Codex is configured to be a Socratic mentor, guiding students toward solutions with questions and hints rather than providing the final code.
 
+### 3.5. Gamification & Profile
+*   **Levels and XP:** Users gain Experience Points (XP) for completing quests, quizzes, and even for collaborating on projects. Reaching XP thresholds increases their Level.
+*   **User Profile:** The profile page becomes a student's portfolio, displaying:
+    *   Their current **Level** and XP progress bar.
+    *   A list of **Badges** and **Achievements** earned.
+    *   A visualization of their completed Quests on the skill tree.
+    *   Links to their public projects.
+
 ---
 
-## 4. Additional Feature Ideas (Brainstorm)
+## 4. Platform Features (Transposed from FlowUp)
+
+All existing FlowUp features are re-contextualized for the educational environment.
+
+*   **Professor/Admin Dashboard:** A central hub for managing the academy.
+    *   **Student Management:** View student progress, grades, and activity.
+    *   **Quest Editor:** A visual tool to build and modify the Main Quest Tree (define prerequisites, branches, etc.).
+    *   **Dynamic Quest Creator:** A simple form for creating ad-hoc Side Quests.
+    *   **Quiz Builder:** An interface to create quizzes and link them to Quests.
+    *   **Grading Queue:** A list of all submitted Quests awaiting review.
+*   **School-Wide Announcements:** The existing "Global Announcements" feature, used by Admins to communicate with the entire school.
+*   **Shared Knowledge Base:** The "Global Docs" feature becomes a collaborative wiki where students and professors can share tutorials and technical guides.
+*   **Platform Suggestion Box:** The existing "Suggestions" feature for students to propose improvements to the platform.
+*   **Team & Chat:** Students can form teams within projects and use the integrated chat for real-time collaboration. DMs are also available.
+*   **Secure Vault:** Each user gets a private, secure project to store sensitive information like personal API keys.
+*   **Discover Page:** This page is transformed into a "Quest Board" where students can see available Main Quests and track school-wide progress.
+*   **FlowUp API Integration:**
+    *   Upon registration, each user is prompted to enter their **FlowUp User UUID** and an **fpat token** from their personal FlowUp account.
+    *   CodeQuest Academy will use this token via the FlowApps API to programmatically create **real private projects** in the student's own FlowUp workspace for each Quest they accept. This provides a powerful, real-world project management experience.
+*   **OAuth & Developer Tools:** The platform will retain its own OAuth provider and FlowApps system, allowing for future integrations (e.g., a mobile app for the school).
+
+---
+
+## 5. Additional Feature Ideas (Brainstorm)
 
 *   **Visual Skill Tree Interface:** A graphical, interactive UI where students can see the entire Main Quest Tree, their completed quests, available paths, and locked future quests.
 *   **XP & Leaderboards:** Gamify the experience by awarding Experience Points (XP) for completing Quests and Quizzes. Display leaderboards (global or per class) to foster friendly competition.
 *   **Peer Review System:** Before a final Quest submission, students can be prompted to review the Project of one or more peers, providing constructive feedback based on a professor's rubric.
 *   **Live Help Queue:** A system where a student working on a Quest can "raise their hand" digitally, entering a queue for an available professor or teaching assistant to provide help.
-*   **School-Wide Announcements:** A central place for Admins to post important information visible to all users.
 *   **Badge & Achievement System:** Award unique badges for completing difficult quests, mastering a technology branch, or demonstrating exceptional collaboration.
+*   **Group Projects:** Allow Quests to be assigned to teams, creating a shared project workspace for all team members.

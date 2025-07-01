@@ -70,9 +70,12 @@ This document provides technical recipes and architectural explanations for impl
 This is the most complex new feature. It requires careful data modeling to represent the skill tree and student progress.
 
 **Architecture:**
--   **`quests` table**: Stores the definition of each quest (title, description, etc.).
+-   **`quests` table**: Stores the definition of each quest (title, description, xp_reward, etc.).
 -   **`quest_prerequisites` table**: A many-to-many junction table that defines the skill tree. It links a quest to the quests that must be completed before it becomes available (e.g., `quest_uuid` requires `prerequisite_quest_uuid`).
--   **`student_quests` table**: Tracks a student's progress on a specific quest. It links a `user`, a `quest`, and crucially, the `project` that was created for that quest attempt. It also stores status (`accepted`, `submitted`, `graded`) and the final grade.
+-   **`student_quests` table**: Tracks a student's progress on a specific quest. It links a `user`, a `quest`, and crucially, the `project_uuid` that was created for that quest attempt. It also stores status (`accepted`, `submitted`, `graded`) and the final grade.
+-   **`quizzes` table**: Stores quiz definitions.
+-   **`quiz_questions` table**: Stores questions for a specific quiz.
+-   **`student_quiz_attempts` table**: Tracks student answers and scores for quizzes.
 
 **Key Database Schemas:**
 ```sql
@@ -80,6 +83,7 @@ CREATE TABLE quests (
     uuid TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
+    xp_reward INTEGER DEFAULT 50,
     is_main_quest BOOLEAN DEFAULT TRUE, -- Differentiates between curriculum and dynamic side quests
     created_by_professor_uuid TEXT,
     FOREIGN KEY (created_by_professor_uuid) REFERENCES users(uuid)
@@ -107,6 +111,17 @@ CREATE TABLE student_quests (
     FOREIGN KEY (quest_uuid) REFERENCES quests(uuid),
     FOREIGN KEY (project_uuid) REFERENCES projects(uuid)
 );
+
+CREATE TABLE quizzes (
+    uuid TEXT PRIMARY KEY,
+    quest_uuid TEXT UNIQUE, -- A quiz can be linked to one quest
+    title TEXT NOT NULL,
+    created_by_professor_uuid TEXT,
+    FOREIGN KEY (quest_uuid) REFERENCES quests(uuid),
+    FOREIGN KEY (created_by_professor_uuid) REFERENCES users(uuid)
+);
+
+-- etc. for questions and attempts...
 ```
 
 **Key Server Logic - "Accept Quest" Action:**
@@ -114,7 +129,8 @@ CREATE TABLE student_quests (
 export async function acceptQuestAction(studentUuid, questUuid) {
   // 1. Verify the student has completed all prerequisite quests by checking `student_quests`.
   // 2. If prerequisites are met, create a new Project for the student.
-  //    const newProject = await createProject(quest.title, quest.description, studentUuid);
+  //    (This can call the FlowUp API via the student's fpat token).
+  //    const newProject = await createProjectOnFlowUp(quest.title, quest.description, student.flowup_token);
   // 3. Create a `student_quests` record linking the student, quest, and the new project's UUID.
   //    await dbCreateStudentQuest(studentUuid, questUuid, newProject.uuid);
   // 4. Return the new Project so the student can be redirected to their new workspace.
@@ -186,7 +202,7 @@ useEffect(() => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
-      window.removeEventListener('beforeinstallrosinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
 }, []);
 
