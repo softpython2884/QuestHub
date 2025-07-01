@@ -146,3 +146,5 @@ This section contains a wealth of ideas to make the platform even more engaging 
 *   **Plagiarism Detection:** An admin tool that compares code submissions for major quests to detect similarities and flag potential academic dishonesty.
 *   **Event System:** A school-wide calendar for hackathons, guest speaker events, and workshops, all managed within the platform.
 *   **Job Board:** A dedicated section where partner companies can post internship or job offers targeted at students with specific skills (verified by their completed quests).
+
+    

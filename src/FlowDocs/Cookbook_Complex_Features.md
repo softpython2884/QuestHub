@@ -215,3 +215,5 @@ const handleInstallClick = () => {
 // ... in your JSX ...
 // {isInstallable && <Button onClick={handleInstallClick}>Install App</Button>}
 ```
+
+    
