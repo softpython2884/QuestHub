@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { projects } from './data';
+import { TrueFocus } from '@/components/animations';
 
 const ProjectCard = ({ project, index }: { project: (typeof projects)[0], index: number }) => (
     <Link href={`/nights-projects/${project.slug}`} className="block group">
@@ -43,9 +43,15 @@ export default function NightsProjectsPage() {
              </Button>
         </div>
       <header className="text-center py-16 md:py-24">
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white to-neutral-400">
-          NightsDevs Projects
-        </h1>
+        <TrueFocus 
+            sentence="NightsDevs Projects"
+            borderColor="hsl(var(--primary))"
+            glowColor="hsl(var(--primary))"
+            blurAmount={2}
+            manualMode={false}
+            animationDuration={0.3}
+            pauseBetweenAnimations={0.5}
+        />
         <p className="max-w-3xl mx-auto mt-4 text-lg text-muted-foreground">
           Une collection de mes projets les plus ambitieux, développés en solo.
           Chaque projet est une exploration de nouvelles technologies et de concepts innovants.
