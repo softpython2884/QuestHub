@@ -4,25 +4,35 @@ export const projects = [
     slug: "flowup",
     name: "FlowUp",
     shortDescription: "La plateforme tout-en-un pour les équipes de développement modernes, combinant gestion de projet, code, et assistance par IA.",
-    longDescription: `FlowUp est une solution intégrée conçue pour les développeurs qui cherchent à optimiser leur flux de travail. Elle centralise la gestion de projet via des tableaux Kanban, la collaboration sur le code grâce à une intégration profonde avec GitHub, un système de documentation Markdown, et une messagerie d'équipe. Le tout est augmenté par "Flowy", un assistant IA capable de générer du code, de créer des tâches, et bien plus, directement depuis l'interface.`,
+    longDescription: `FlowUp est une solution intégrée conçue pour les développeurs qui cherchent à optimiser leur flux de travail. Elle centralise la gestion de projet via des tableaux Kanban, la collaboration sur le code grâce à une intégration profonde avec GitHub, un système de documentation Markdown, et une messagerie d'équipe. Le tout est augmenté par "Flowy", un assistant IA capable de générer du code, de créer des tâches, et bien plus, directement depuis l'interface. C'est l'outil ultime pour transformer une idée en un produit fini, sans friction.`,
     image: "https://placehold.co/800x600.png",
     imageHint: "abstract tech code",
     tags: ["Productivité", "Développement", "IA", "SaaS"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
+    websiteUrl: "/dashboard",
+    discordUrl: null,
     videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ", // Placeholder
-    cloneUrl: "/projects/d1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6", // Placeholder
+    cloneUrl: "/projects/d1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6", // Placeholder,
+    galleryImages: [
+        { src: "https://placehold.co/600x400.png", alt: "Dashboard View", hint: "dashboard analytics" },
+        { src: "https://placehold.co/600x400.png", alt: "Kanban Board", hint: "kanban board" },
+        { src: "https://placehold.co/600x400.png", alt: "AI Chat Assistant", hint: "ai chat" },
+    ]
   },
   {
     slug: "macro",
     name: "Macro",
     shortDescription: "Un sub-system tout-en-un, cumulant un OS de bureau, un media center et un hub de console de jeu.",
-    longDescription: `Macro est un projet ambitieux visant à unifier l'expérience utilisateur. Il s'agit d'un système d'exploitation léger et performant qui intègre trois piliers : un environnement de bureau classique pour la productivité, un media center pour accéder gratuitement à des films et séries, et un hub de jeu puissant. Ce hub centralise vos bibliothèques de jeux, propose une boutique où les jeux sont offerts, et intègre des fonctionnalités sociales pour une expérience de jeu complète et sans coût.`,
+    longDescription: `Macro est un projet ambitieux visant à unifier l'expérience utilisateur. Il s'agit d'un système d'exploitation léger et performant qui intègre trois piliers : un environnement de bureau classique pour la productivité, un media center pour accéder gratuitement à des films et séries, et un hub de jeu puissant. Ce hub centralise vos bibliothèques de jeux, propose une boutique où les jeux sont offerts gratuitement, et intègre des fonctionnalités sociales pour une expérience de jeu complète et sans coût.`,
     image: "https://placehold.co/800x600.png",
     imageHint: "gaming console controller",
     tags: ["OS", "Gaming", "Media Center", "Open Source"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
+    websiteUrl: null,
+    discordUrl: null,
     videoUrl: null,
     cloneUrl: "#",
+    galleryImages: []
   },
   {
     slug: "simubourse",
@@ -33,8 +43,11 @@ export const projects = [
     imageHint: "stock market chart",
     tags: ["Jeu de Simulation", "Économie", "Web App", "PWA"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
+    websiteUrl: null,
+    discordUrl: null,
     videoUrl: null,
     cloneUrl: "#",
+    galleryImages: []
   },
   {
     slug: "space",
@@ -45,20 +58,29 @@ export const projects = [
     imageHint: "space battle spaceship",
     tags: ["Jeu de Stratégie", ".io", "Multijoueur", "Spatial"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
-    videoUrl: null,
+    websiteUrl: null,
+    discordUrl: null,
+    videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ", // Placeholder
     cloneUrl: "#",
+    galleryImages: [
+        { src: "https://placehold.co/600x400.png", alt: "Base building", hint: "space station" },
+        { src: "https://placehold.co/600x400.png", alt: "Fleet combat", hint: "spaceship battle" },
+    ]
   },
   {
     slug: "panda",
     name: "Panda",
     shortDescription: "Un écosystème complexe pour les développeurs et administrateurs système.",
-    longDescription: `Panda est une suite d'outils conçus pour simplifier la vie des développeurs. L'écosystème permet d'obtenir des noms de domaine gratuits, de créer facilement des tunnels sécurisés pour exposer des services locaux sur internet, de configurer des proxies inverses, ou encore de déployer des machines virtuelles (VM) à la volée. C'est une véritable boîte à outils pour l'infrastructure et le déploiement.`,
+    longDescription: `Panda est une suite d'outils conçus pour simplifier la vie des développeurs. L'écosystème permet d'obtenir des noms de domaine gratuits, de créer facilement des tunnels sécurisés pour exposer des services locaux sur internet, de configurer des proxies inverses, ou encore de déployer des machines virtuelles (VM) à la volée. C'est une véritable boîte à outils pour l'infrastructure et le déploiement, visant à automatiser les tâches répétitives.`,
     image: "https://placehold.co/800x600.png",
     imageHint: "server network datacenter",
     tags: ["Infrastructure", "DevOps", "Réseau", "Outils"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
+    websiteUrl: null,
+    discordUrl: null,
     videoUrl: null,
     cloneUrl: "#",
+    galleryImages: []
   },
   {
     slug: "nation-quest",
@@ -69,7 +91,14 @@ export const projects = [
     imageHint: "fantasy world castle",
     tags: ["Minecraft", "MMORPG", "Modding", "Communautaire"],
     githubUrl: "https://github.com/SoftWare-Enzo-P",
-    videoUrl: null,
+    websiteUrl: null,
+    discordUrl: "#", // Placeholder
+    videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ", // Placeholder
     cloneUrl: "#",
+    galleryImages: [
+        { src: "https://placehold.co/600x400.png", alt: "In-game city", hint: "minecraft city" },
+        { src: "https://placehold.co/600x400.png", alt: "Custom weapon", hint: "fantasy sword" },
+        { src: "https://placehold.co/600x400.png", alt: "World map", hint: "fantasy map" },
+    ]
   },
 ];
