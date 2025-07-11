@@ -12,110 +12,12 @@ import { fetchDiscordUserDetailsAction } from "../projects/[id]/actions";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
-import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction, getStorageBackendSettingAction, updateStorageBackendSettingAction, runDatabaseMigrationsAction, getFlowAppConsentsAction, handleFlowAppConsentAction, revokeFlowAppConsentAction } from "./actions";
+import { getRegistrationModeAction, updateRegistrationModeAction, generateInviteLinkAction, getStorageBackendSettingAction, updateStorageBackendSettingAction, runDatabaseMigrationsAction } from "./actions";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { UserRole, FlowAppConsent, FlowAppScope } from "@/types";
-import { ALL_SCOPES } from "@/types";
+import type { UserRole } from "@/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as UIAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-
-
-function ConsentManager() {
-    const [consents, setConsents] = useState<FlowAppConsent[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, startTransition] = useTransition();
-    const { toast } = useToast();
-
-    const loadConsents = async () => {
-        setIsLoading(true);
-        const result = await getFlowAppConsentsAction();
-        if ('error' in result) {
-            toast({ variant: 'destructive', title: 'Error', description: result.error });
-            setConsents([]);
-        } else {
-            setConsents(result);
-        }
-        setIsLoading(false);
-    };
-
-    useEffect(() => {
-        loadConsents();
-    }, []);
-
-    const handleDecision = (flowAppUuid: string, decision: 'granted' | 'denied') => {
-        startTransition(async () => {
-            const result = await handleFlowAppConsentAction(flowAppUuid, decision);
-            if (result.success) {
-                toast({ title: 'Success', description: `Permission ${decision}.` });
-                loadConsents();
-            } else {
-                toast({ variant: 'destructive', title: 'Error', description: result.error });
-            }
-        });
-    };
-    
-    const handleRevoke = (flowAppUuid: string) => {
-         startTransition(async () => {
-            const result = await revokeFlowAppConsentAction(flowAppUuid);
-            if (result.success) {
-                toast({ title: 'Success', description: `Access revoked.` });
-                loadConsents();
-            } else {
-                toast({ variant: 'destructive', title: 'Error', description: result.error });
-            }
-        });
-    }
-
-    if (isLoading) {
-        return <Skeleton className="h-24 w-full" />;
-    }
-    
-    const allConsents = consents.filter(c => c.status !== 'pending');
-
-    if (allConsents.length === 0) {
-        return (
-            <p className="text-sm text-muted-foreground p-4 text-center">No applications have been authorized or denied yet.</p>
-        )
-    }
-    
-    const getInitials = (name?: string) => name ? name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase() : '??';
-
-    return (
-      <div className="space-y-4">
-         {allConsents.length > 0 && (
-            <div className="space-y-2">
-                 <h5 className="font-medium">Managed Applications</h5>
-                 {allConsents.map(consent => (
-                     <Card key={consent.flowAppUuid} className="p-3">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                            <div className="flex items-center gap-3">
-                                <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(consent.flowAppName)}</AvatarFallback></Avatar>
-                                <div>
-                                    <p className="font-semibold">{consent.flowAppName}</p>
-                                    <p className="text-xs text-muted-foreground">Owned by {consent.flowAppOwnerName}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 self-end sm:self-center">
-                               {consent.status === 'granted' ? 
-                                <Badge variant="default" className="bg-green-600 hover:bg-green-700"><CheckCircle className="mr-1 h-3 w-3" />Allowed</Badge> : 
-                                <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" />Denied</Badge>}
-                                <Button size="sm" variant="outline" onClick={() => handleRevoke(consent.flowAppUuid)} disabled={isSubmitting}>Revoke</Button>
-                            </div>
-                        </div>
-                    </Card>
-                 ))}
-            </div>
-        )}
-      </div>
-    )
-}
-
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -304,16 +206,6 @@ export default function SettingsPage() {
             </CardContent>
         </Card>
       </div>
-
-       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Bot className="mr-2 h-5 w-5 text-primary"/> FlowApp Permissions</CardTitle>
-          <CardDescription>Manage which external applications are allowed to access your FlowUp account data.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ConsentManager />
-        </CardContent>
-      </Card>
 
        {user?.role === 'admin' && (
         <Card className="border-primary/50">

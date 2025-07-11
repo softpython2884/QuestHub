@@ -166,7 +166,7 @@ export async function handleFlowAppConsentAction(flowAppUuid: string, decision: 
     }
     try {
         await setFlowAppConsent(userUuid, flowAppUuid, decision);
-        revalidatePath('/settings');
+        revalidatePath('/settings/my-uuid');
         return { success: true };
     } catch (e: any) {
         return { error: e.message || 'Failed to update consent.' };
@@ -180,7 +180,7 @@ export async function revokeFlowAppConsentAction(flowAppUuid: string) {
     }
     try {
         await revokeFlowAppConsent(userUuid, flowAppUuid);
-        revalidatePath('/settings');
+        revalidatePath('/settings/my-uuid');
         return { success: true };
     } catch (e: any) {
         return { error: e.message || 'Failed to revoke consent.' };
