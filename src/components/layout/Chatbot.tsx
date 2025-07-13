@@ -55,13 +55,12 @@ export function Chatbot() {
     if (!input.trim() || isLoading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const newHistory = [...messages, userMessage];
-      
       const context = {
         pathname: window.location.pathname,
         projectUuid: pageContext.project?.uuid,
@@ -70,7 +69,7 @@ export function Chatbot() {
         fileContent: pageContext.file?.content,
       };
       
-      const result = await workspaceAssistant({ history: newHistory, context });
+      const result = await workspaceAssistant({ history: newMessages, context });
       
       const aiMessage: ChatMessage = { role: 'model', content: result.response };
       setMessages((prev) => [...prev, aiMessage]);
