@@ -25,28 +25,14 @@ export async function getFlowAppsAction() {
 }
 
 export async function getFlowAppAction(uuid: string): Promise<FlowApp | { error: string }> {
-    const userUuid = await getCurrentUserUuid();
-    
-    // For the public authorization page, we don't need to check ownership, just that the app exists.
-    // The authorization logic itself will handle the currently logged-in user.
-    if (!userUuid) {
-        const app = await getFlowAppByUuid(uuid);
-        if (!app) return { error: 'Application not found.' };
-        return app;
-    }
-
     const app = await getFlowAppByUuid(uuid);
-     if (!app) {
-        return { error: 'App not found.' };
-    }
 
-    // If the user is the owner, they can see it. Otherwise, it's fine for the auth page.
-    if (app.ownerUuid === userUuid) {
-        return app;
+    if (!app) {
+        return { error: 'Application not found.' };
     }
     
-    // If not the owner, still return the app details for the consent screen.
-    // The consent screen logic will handle the "who is authorizing" part.
+    // For public auth page, we just need the app details.
+    // The page itself will handle the currently logged-in user check.
     return app;
 }
 

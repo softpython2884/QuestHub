@@ -2280,12 +2280,11 @@ export async function getFlowAppsForUser(userUuid: string): Promise<FlowApp[]> {
     }));
 }
 
-export async function getFlowAppByUuid(uuid: string, ownerUuid: string): Promise<FlowApp | null> {
+export async function getFlowAppByUuid(uuid: string): Promise<FlowApp | null> {
     const connection = await getDbConnection();
     const app = await connection.get<any>(
-        'SELECT * FROM flow_apps WHERE uuid = ? AND ownerUuid = ?',
-        uuid,
-        ownerUuid
+        'SELECT * FROM flow_apps WHERE uuid = ?',
+        uuid
     );
     if (!app) return null;
     return {
@@ -2334,7 +2333,7 @@ export async function updateFlowApp(data: {
         return null; // App not found or owner mismatch
     }
 
-    const updatedApp = await getFlowAppByUuid(data.uuid, data.ownerUuid);
+    const updatedApp = await getFlowAppByUuid(data.uuid);
     if (!updatedApp) return null;
 
     return updatedApp;
