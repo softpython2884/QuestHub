@@ -8,6 +8,9 @@ import {
     createProject,
     updateProjectGithubRepo,
     updateProjectVisibility,
+    deleteProject,
+    getProjectMemberRole,
+    getProjectByUuid,
 } from "@/lib/db";
 import { auth } from "@/lib/authEdge";
 import { Octokit } from "octokit";
@@ -153,4 +156,57 @@ export async function importFlowUpProjectsAction(): Promise<{
     console.error("Error during bulk import:", error);
     return { success: false, successCount: 0, errorCount: 0, error: error.message || "An unexpected error occurred during bulk import." };
   }
+}
+
+export async function batchUpdateProjectsAction(
+  projectUuids: string[],
+  action: 'makePrivate' | 'makePublic' | 'delete'
+): Promise<{ successCount: number; errorCount: number; errors: string[] }> {
+  const session = await auth();
+  if (!session?.user?.uuid) {
+    throw new Error("Authentication required.");
+  }
+  const userUuid = session.user.uuid;
+
+  let successCount = 0;
+  let errorCount = 0;
+  const errors: string[] = [];
+
+  for (const uuid of projectUuids) {
+    try {
+      const project = await getProjectByUuid(uuid);
+      if (!project) {
+        errors.push(`Project with ID ${uuid} not found.`);
+        errorCount++;
+        continue;
+      }
+      
+      const role = await getProjectMemberRole(uuid, userUuid);
+      if (role !== 'owner') {
+        errors.push(`You do not have permission to modify "${project.name}".`);
+        errorCount++;
+        continue;
+      }
+
+      if (action === 'makePrivate') {
+        await updateProjectVisibility(uuid, true);
+        successCount++;
+      } else if (action === 'makePublic') {
+        await updateProjectVisibility(uuid, false);
+        successCount++;
+      } else if (action === 'delete') {
+        await deleteProject(uuid);
+        successCount++;
+      }
+    } catch (e: any) {
+      errors.push(`Failed to update project ${uuid}: ${e.message}`);
+      errorCount++;
+    }
+  }
+
+  if (successCount > 0) {
+    revalidatePath('/projects');
+  }
+
+  return { successCount, errorCount, errors };
 }

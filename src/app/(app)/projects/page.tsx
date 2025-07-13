@@ -1,8 +1,9 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, Search, Filter, FolderKanban, Flame, MoreHorizontal, Copy, Link as LinkIcon, ChevronDown, Github, Loader2 } from "lucide-react";
+import { PlusCircle, Search, Filter, FolderKanban, Flame, MoreHorizontal, Copy, Link as LinkIcon, ChevronDown, Github, Loader2, X, Trash2, EyeOff, Eye } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useCallback, useActionState, useTransition } from "react";
@@ -10,7 +11,7 @@ import type { Project, DuplicateProjectFormState } from "@/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
-import { fetchProjectsAction, getLinkableGithubReposAction, createProjectFromRepoAction, importFlowUpProjectsAction } from "./actions";
+import { fetchProjectsAction, getLinkableGithubReposAction, createProjectFromRepoAction, importFlowUpProjectsAction, batchUpdateProjectsAction } from "./actions";
 import type { LinkableGithubRepo } from "./actions";
 import { duplicateProjectAction } from "./[id]/actions";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,9 @@ export default function ProjectsPage() {
   const [linkableRepos, setLinkableRepos] = useState<LinkableGithubRepo[]>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [repoToImport, setRepoToImport] = useState<LinkableGithubRepo | null>(null);
+  
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [isBatchProcessing, startBatchTransition] = useTransition();
 
   const loadProjects = useCallback(async () => {
     if (user && !authLoading) {
@@ -103,7 +107,6 @@ export default function ProjectsPage() {
     });
   };
 
-
   useEffect(() => {
     if (!isDuplicating && duplicateFormState) {
         if (duplicateFormState.message && !duplicateFormState.error) {
@@ -116,6 +119,36 @@ export default function ProjectsPage() {
         }
     }
   }, [duplicateFormState, isDuplicating, toast, loadProjects]);
+
+  const handleSelectProject = (projectId: string, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedProjects(prev => [...prev, projectId]);
+    } else {
+      setSelectedProjects(prev => prev.filter(id => id !== projectId));
+    }
+  };
+
+  const handleSelectAll = (isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedProjects(filteredProjects.map(p => p.uuid));
+    } else {
+      setSelectedProjects([]);
+    }
+  };
+  
+  const handleBatchAction = (action: 'makePrivate' | 'makePublic' | 'delete') => {
+      startBatchTransition(async () => {
+          const result = await batchUpdateProjectsAction(selectedProjects, action);
+          if (result.successCount > 0) {
+              toast({ title: 'Batch Action Complete', description: `${result.successCount} projects updated successfully.` });
+          }
+          if (result.errorCount > 0) {
+              toast({ variant: 'destructive', title: 'Batch Action Failed', description: `${result.errorCount} projects failed to update. ${result.errors.join(' ')}` });
+          }
+          setSelectedProjects([]);
+          await loadProjects();
+      });
+  };
 
   if (authLoading && isLoadingProjects) { 
     return (
@@ -154,6 +187,8 @@ export default function ProjectsPage() {
     project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (project.description && project.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  
+  const allSelected = filteredProjects.length > 0 && selectedProjects.length === filteredProjects.length;
 
   return (
     <div className="space-y-6">
@@ -194,6 +229,19 @@ export default function ProjectsPage() {
               </Button>
             </div>
           </div>
+          {selectedProjects.length > 0 && (
+              <div className="mt-4 p-2 border rounded-lg bg-muted/50 flex flex-col sm:flex-row items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                      <Checkbox id="select-all" checked={allSelected} onCheckedChange={(checked) => handleSelectAll(Boolean(checked))} />
+                      <Label htmlFor="select-all" className="text-sm font-medium">{selectedProjects.length} selected</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleBatchAction('makePublic')} disabled={isBatchProcessing}><Eye className="mr-2 h-4 w-4" /> Make Public</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleBatchAction('makePrivate')} disabled={isBatchProcessing}><EyeOff className="mr-2 h-4 w-4" /> Make Private</Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleBatchAction('delete')} disabled={isBatchProcessing}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
+                  </div>
+              </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoadingProjects ? (
@@ -231,11 +279,19 @@ export default function ProjectsPage() {
                 <Dialog key={project.uuid} open={projectToDuplicate?.uuid === project.uuid} onOpenChange={(open) => !open && setProjectToDuplicate(null)}>
                   <Card 
                     className={cn(
-                      "hover:shadow-lg transition-shadow flex flex-col",
-                      project.isUrgent && "border-destructive ring-1 ring-destructive"
+                      "hover:shadow-lg transition-shadow flex flex-col relative",
+                      project.isUrgent && "border-destructive ring-1 ring-destructive",
+                      selectedProjects.includes(project.uuid) && "ring-2 ring-primary border-primary"
                     )}
                   >
-                    <CardHeader className="flex-grow">
+                    <div className="absolute top-2 left-2 z-10">
+                        <Checkbox
+                            id={`select-${project.uuid}`}
+                            checked={selectedProjects.includes(project.uuid)}
+                            onCheckedChange={(checked) => handleSelectProject(project.uuid, Boolean(checked))}
+                        />
+                    </div>
+                    <CardHeader className="flex-grow pt-8">
                       <div className="flex justify-between items-start">
                         <CardTitle className="hover:text-primary">
                           <Link href={`/projects/${project.uuid}`}>{project.name}</Link>
@@ -248,7 +304,7 @@ export default function ProjectsPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-xs text-muted-foreground space-y-0.5">
-                        <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : 'Other'}</span></p>
+                        <p>Owner: <span className="font-medium text-foreground">{project.ownerUuid === user?.uuid ? 'You' : project.ownerName || 'Other'}</span></p>
                         <p>Updated: <span className="font-medium text-foreground">{new Date(project.updatedAt).toLocaleDateString()}</span></p>
                         <p>Status: <span className={cn("font-medium", project.isPrivate ? "text-foreground" : "text-green-600")}>{project.isPrivate ? 'Private' : 'Public'}</span></p>
                       </div>
