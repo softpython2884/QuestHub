@@ -1827,7 +1827,7 @@ export async function createGlobalDocument(data: {
 
 export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
   const connection = await getDbConnection();
-  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject' | 'isPinned'> & {isPinned: 0 | 1}>>(
+  const documents = await connection.all<Array<Omit<GlobalDocument, 'authorName' | 'authorAvatar' | 'tags' | 'linkedProject' | 'isPinned' | 'albums'> & {isPinned: 0 | 1}>>(
       'SELECT * FROM global_documents ORDER BY isPinned DESC, updatedAt DESC'
   );
   
@@ -1843,6 +1843,7 @@ export async function getGlobalDocuments(): Promise<GlobalDocument[]> {
       tags,
       linkedProject,
       isPinned: !!doc.isPinned,
+      albums: [], // Placeholder
     });
   }
   return results;
@@ -1857,6 +1858,7 @@ export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocum
   const author = await getUserByUuid(doc.authorUuid);
   const tags = await getTagsForGlobalDocument(uuid);
   const linkedProject = await getLinkedProjectForGlobalDocument(uuid);
+  const albums = await getAlbumsForDocument(uuid);
   
   return {
     ...doc,
@@ -1865,6 +1867,7 @@ export async function getGlobalDocumentByUuid(uuid: string): Promise<GlobalDocum
     tags,
     linkedProject,
     isPinned: !!doc.isPinned,
+    albums,
   };
 }
 
@@ -2846,5 +2849,42 @@ export async function getProjectByRepoName(repoName: string): Promise<Project | 
     const projectRow = await connection.get<Project>('SELECT * FROM projects WHERE githubRepoName = ?', repoName);
     if (!projectRow) return null;
     return { ...projectRow };
+}
+
+// Album Functions
+export async function createDocAlbum(title: string, description: string | undefined, authorUuid: string): Promise<DocAlbum> {
+  const connection = await getDbConnection();
+  const uuid = uuidv4();
+  const now = new Date().toISOString();
+  await connection.run(
+    'INSERT INTO doc_albums (uuid, title, description, authorUuid, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    uuid, title, description, authorUuid, now, now
+  );
+  return { uuid, title, description, authorUuid, createdAt: now, updatedAt: now };
+}
+
+export async function getDocAlbums(): Promise<DocAlbum[]> {
+    const connection = await getDbConnection();
+    const albums = await connection.all<any[]>(`
+        SELECT 
+            da.uuid, da.title, da.description, da.authorUuid, u.name as authorName, u.avatar as authorAvatar, da.createdAt, da.updatedAt,
+            (SELECT COUNT(*) FROM doc_album_items WHERE albumUuid = da.uuid) as documentCount
+        FROM doc_albums da
+        JOIN users u ON da.authorUuid = u.uuid
+        ORDER BY da.title ASC
+    `);
+    return albums.map(a => ({
+        ...a,
+        documentCount: a.documentCount || 0,
+    }));
+}
+
+export async function getAlbumsForDocument(documentUuid: string): Promise<Pick<DocAlbum, 'uuid' | 'title'>[]> {
+    const connection = await getDbConnection();
+    return connection.all<Pick<DocAlbum, 'uuid' | 'title'>[]>(`
+        SELECT da.uuid, da.title FROM doc_albums da
+        JOIN doc_album_items dai ON da.uuid = dai.albumUuid
+        WHERE dai.documentUuid = ?
+    `, documentUuid);
 }
     

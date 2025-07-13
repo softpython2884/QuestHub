@@ -14,6 +14,8 @@ import {
   clearProjectLinkForGlobalDocument,
   linkProjectToGlobalDocument,
   toggleGlobalDocumentPinStatus,
+  getDocAlbums,
+  createDocAlbum,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
@@ -21,7 +23,9 @@ import type { Project } from '@/types';
 
 
 export async function getGlobalDocumentsAction() {
-  return getGlobalDocuments();
+  const docs = await getGlobalDocuments();
+  const albums = await getDocAlbums();
+  return { docs, albums };
 }
 
 export async function getGlobalDocumentAction(uuid: string) {
@@ -142,3 +146,16 @@ export async function toggleGlobalDocumentPinAction(uuid: string, currentPinStat
   }
 }
 
+export async function createAlbumAction(title: string, description: string | undefined) {
+    const session = await auth();
+    if (!session?.user) {
+        return { error: 'Authentication required.' };
+    }
+    try {
+        const newAlbum = await createDocAlbum(title, description, session.user.uuid);
+        revalidatePath('/documentation');
+        return { album: newAlbum };
+    } catch(e: any) {
+        return { error: e.message || "Failed to create album." };
+    }
+}
