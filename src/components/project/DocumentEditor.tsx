@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Project, GlobalDocument } from '@/types';
 
-
 const documentEditorFormSchema = z.object({
   title: z.string().min(1, 'Title is required.').max(255),
   content: z.string().optional(),
@@ -45,8 +44,75 @@ interface DocumentEditorProps {
 interface MarkdownTool {
   label: string;
   icon: React.ElementType;
-  action: () => void;
+  action: (textarea: HTMLTextAreaElement) => void;
 }
+
+// Notion-like Block component
+const ContentBlock = ({
+  blockContent,
+  onUpdate,
+  onFocus,
+}: {
+  blockContent: string;
+  onUpdate: (newContent: string) => void;
+  onFocus: () => void;
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [localContent, setLocalContent] = useState(blockContent);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setLocalContent(blockContent);
+  }, [blockContent]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [isEditing, localContent]);
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    if (localContent !== blockContent) {
+      onUpdate(localContent);
+    }
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleBlur();
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <Textarea
+        ref={textareaRef}
+        value={localContent}
+        onChange={(e) => setLocalContent(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onFocus={onFocus}
+        className="w-full p-0 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent resize-none font-mono text-sm"
+        placeholder="Type '/' for commands..."
+      />
+    );
+  }
+
+  return (
+    <div
+      className="prose dark:prose-invert max-w-none min-h-[24px] cursor-text"
+      onClick={() => setIsEditing(true)}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {localContent || '​'}
+      </ReactMarkdown>
+    </div>
+  );
+};
 
 export function DocumentEditor({
   initialData,
@@ -61,14 +127,12 @@ export function DocumentEditor({
 }: DocumentEditorProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mainEditorRef = useRef<HTMLDivElement>(null);
+  const [activeTextarea, setActiveTextarea] = useState<HTMLTextAreaElement | null>(null);
 
   const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
-
-  // WYSIWYG-like state
-  const [isEditingContent, setIsEditingContent] = useState(false);
 
   const form = useForm<DocumentEditorFormValues>({
     resolver: zodResolver(documentEditorFormSchema),
@@ -81,7 +145,7 @@ export function DocumentEditor({
   });
 
   const contentValue = form.watch('content');
-  const contentField = form.register('content');
+  const contentBlocks = (contentValue || '').split('\n\n');
 
   useEffect(() => {
     form.reset({
@@ -92,14 +156,20 @@ export function DocumentEditor({
     });
   }, [initialData, form]);
 
+  const updateContentBlock = (index: number, newContent: string) => {
+    const newBlocks = [...contentBlocks];
+    newBlocks[index] = newContent;
+    form.setValue('content', newBlocks.join('\n\n'), { shouldDirty: true });
+  };
+
+
   const applyMarkdownSyntax = (
     syntaxStart: string,
     syntaxEnd: string = '',
-    _isBlock: boolean = false,
     prefixEachLine: boolean = false
   ) => {
-    if (!textareaRef.current) return;
-    const { selectionStart, selectionEnd, value } = textareaRef.current;
+    if (!activeTextarea) return;
+    const { selectionStart, selectionEnd, value } = activeTextarea;
     const selectedText = value.substring(selectionStart, selectionEnd);
     let newText = '';
 
@@ -113,42 +183,43 @@ export function DocumentEditor({
     }
 
     const newValue = value.substring(0, selectionStart) + newText + value.substring(selectionEnd);
-    form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
+    
+    // This is tricky. We need to find which block this textarea belongs to.
+    // For now, let's assume one active textarea. The parent component will handle state update.
+    const event = new Event('input', { bubbles: true });
+    activeTextarea.value = newValue;
+    activeTextarea.dispatchEvent(event);
+
 
     setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
+      if (activeTextarea) {
+        activeTextarea.focus();
         if (selectedText) {
-          if (prefixEachLine) {
-             textareaRef.current.selectionStart = selectionStart;
-             textareaRef.current.selectionEnd = selectionEnd + (syntaxStart.length * selectedText.split('\n').length) ;
-          } else {
-            textareaRef.current.selectionStart = selectionStart + syntaxStart.length;
-            textareaRef.current.selectionEnd = selectionEnd + syntaxStart.length;
-          }
+           activeTextarea.selectionStart = selectionStart + syntaxStart.length;
+           activeTextarea.selectionEnd = selectionEnd + syntaxStart.length;
         } else {
-          textareaRef.current.selectionStart = selectionStart + syntaxStart.length;
-          textareaRef.current.selectionEnd = selectionStart + syntaxStart.length;
+           activeTextarea.selectionStart = selectionStart + syntaxStart.length;
+           activeTextarea.selectionEnd = selectionStart + syntaxStart.length;
         }
       }
     }, 0);
   };
-
+  
   const markdownTools: MarkdownTool[] = [
-    { label: 'H1', icon: Heading1, action: () => applyMarkdownSyntax('# ', '', false, true) },
-    { label: 'H2', icon: Heading2, action: () => applyMarkdownSyntax('## ', '', false, true) },
-    { label: 'H3', icon: Heading3, action: () => applyMarkdownSyntax('### ', '', false, true) },
-    { label: 'Bold', icon: Bold, action: () => applyMarkdownSyntax('**', '**') },
-    { label: 'Italic', icon: Italic, action: () => applyMarkdownSyntax('*', '*') },
-    { label: 'Strikethrough', icon: Strikethrough, action: () => applyMarkdownSyntax('~~', '~~') },
-    { label: 'Unordered List', icon: List, action: () => applyMarkdownSyntax('- ', '', false, true) },
-    { label: 'Ordered List', icon: ListOrdered, action: () => applyMarkdownSyntax('1. ', '', false, true) },
-    { label: 'Link', icon: LinkIcon, action: () => applyMarkdownSyntax('[', '](url)') },
-    { label: 'Image', icon: ImageIcon, action: () => applyMarkdownSyntax('![alt text](', 'image_url)') },
-    { label: 'Code Block', icon: SquareCode, action: () => applyMarkdownSyntax('\n```\n', '\n```\n', true) },
-    { label: 'Inline Code', icon: Code2, action: () => applyMarkdownSyntax('`', '`') },
-    { label: 'Quote', icon: Quote, action: () => applyMarkdownSyntax('> ', '', false, true) },
-    { label: 'Horizontal Line', icon: Minus, action: () => applyMarkdownSyntax('\n---\n', '', true) },
+    { label: 'H1', icon: Heading1, action: (ta) => applyMarkdownSyntax('# ', '', true) },
+    { label: 'H2', icon: Heading2, action: (ta) => applyMarkdownSyntax('## ', '', true) },
+    { label: 'H3', icon: Heading3, action: (ta) => applyMarkdownSyntax('### ', '', true) },
+    { label: 'Bold', icon: Bold, action: (ta) => applyMarkdownSyntax('**', '**') },
+    { label: 'Italic', icon: Italic, action: (ta) => applyMarkdownSyntax('*', '*') },
+    { label: 'Strikethrough', icon: Strikethrough, action: (ta) => applyMarkdownSyntax('~~', '~~') },
+    { label: 'Unordered List', icon: List, action: (ta) => applyMarkdownSyntax('- ', '', true) },
+    { label: 'Ordered List', icon: ListOrdered, action: (ta) => applyMarkdownSyntax('1. ', '', true) },
+    { label: 'Link', icon: LinkIcon, action: (ta) => applyMarkdownSyntax('[', '](url)') },
+    { label: 'Image', icon: ImageIcon, action: (ta) => applyMarkdownSyntax('![alt text](', 'image_url)') },
+    { label: 'Code Block', icon: SquareCode, action: (ta) => applyMarkdownSyntax('\n```\n', '\n```\n') },
+    { label: 'Inline Code', icon: Code2, action: (ta) => applyMarkdownSyntax('`', '`') },
+    { label: 'Quote', icon: Quote, action: (ta) => applyMarkdownSyntax('> ', '', true) },
+    { label: 'Horizontal Line', icon: Minus, action: (ta) => applyMarkdownSyntax('\n---\n', '') },
   ];
 
   const onSubmit = async (data: DocumentEditorFormValues) => {
@@ -198,7 +269,6 @@ export function DocumentEditor({
     }
   };
 
-
   return (
     <>
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -228,16 +298,14 @@ export function DocumentEditor({
                         <Label htmlFor="ai-prompt">Your Prompt</Label>
                         <Textarea
                             id="ai-prompt"
-                            placeholder="e.g., 'Create a getting started guide for a new SaaS product focusing on user onboarding and key features like X, Y, and Z.'"
+                            placeholder="e.g., 'Create a getting started guide for a new SaaS product...'"
                             value={aiPrompt}
                             onChange={(e) => setAiPrompt(e.target.value)}
                             rows={5}
                         />
                     </div>
                     <DialogFooter>
-                        <DialogClose asChild>
-                            <Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button>
-                        </DialogClose>
+                        <DialogClose asChild><Button type="button" variant="ghost" disabled={isAiGenerating}>Cancel</Button></DialogClose>
                         <Button type="button" onClick={handleAiGenerate} disabled={isAiGenerating || !aiPrompt.trim()}>
                             {isAiGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Generate Content
@@ -278,7 +346,7 @@ export function DocumentEditor({
                         name="linkedProjectUuid"
                         control={form.control}
                         render={({ field }) => (
-                            <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value || 'none'}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select a project to link..." />
                                 </SelectTrigger>
@@ -305,40 +373,35 @@ export function DocumentEditor({
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={tool.action}
+                    onClick={() => activeTextarea && tool.action(activeTextarea)}
                     title={tool.label}
                     className="h-8 w-8"
+                    disabled={!activeTextarea}
                 >
                     <tool.icon className="h-4 w-4" />
                 </Button>
                 ))}
             </div>
             <div 
-              className={cn("border rounded-b-md p-4 min-h-[450px] bg-background focus-within:ring-2 focus-within:ring-ring")}
-              onClick={() => {
-                  setIsEditingContent(true);
-                  setTimeout(() => textareaRef.current?.focus(), 0);
+              ref={mainEditorRef}
+              className="border rounded-b-md p-4 min-h-[450px] bg-background focus-within:ring-2 focus-within:ring-ring space-y-2"
+              onFocus={(e) => {
+                  if (e.target.tagName === 'TEXTAREA') {
+                      setActiveTextarea(e.target as HTMLTextAreaElement);
+                  }
               }}
             >
-              {isEditingContent ? (
-                <Textarea
-                    id="content"
-                    {...contentField}
-                    ref={(e) => {
-                        contentField.ref(e);
-                        textareaRef.current = e;
-                    }}
-                    className="w-full h-full min-h-[450px] p-0 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent resize-none font-mono text-sm"
-                    placeholder="Write your content here..."
-                    onBlur={() => setIsEditingContent(false)}
-                />
-              ) : (
-                <div className="prose dark:prose-invert max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {contentValue || '*Click to start writing*'}
-                  </ReactMarkdown>
-                </div>
-              )}
+              {contentBlocks.map((block, index) => (
+                  <ContentBlock
+                      key={index}
+                      blockContent={block}
+                      onUpdate={(newBlockContent) => updateContentBlock(index, newBlockContent)}
+                      onFocus={() => {
+                          const textarea = mainEditorRef.current?.querySelectorAll('textarea')[index];
+                          if(textarea) setActiveTextarea(textarea);
+                      }}
+                  />
+              ))}
             </div>
           </div>
 
@@ -357,3 +420,4 @@ export function DocumentEditor({
     </>
   );
 }
+
