@@ -1,4 +1,6 @@
 
+'use client';
+
 import { Suspense } from 'react';
 import { AuthorizeView } from './_components/AuthorizeView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -6,31 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getOAuthAppByClientId } from '@/lib/db';
-import { auth } from '@/lib/authEdge';
 import type { OAuthApp } from '@/types';
-
-export const dynamic = 'force-dynamic';
-
-interface AuthorizePageProps {
-  searchParams: {
-    client_id?: string;
-    redirect_uri?: string;
-    response_type?: string;
-    state?: string;
-    scope?: string;
-  };
-}
-
-interface AuthorizePageData {
-  app: Pick<OAuthApp, 'name' | 'description' | 'website' | 'logoUrl'>;
-  user: { uuid: string; name: string; avatar?: string };
-  scopes: string[];
-  redirectUri: string;
-  clientId: string;
-  state: string;
-}
+// This entire page is part of a deprecated feature.
+// It is kept for potential future use but is not actively used.
 
 function AuthorizePageFallback() {
     return (
@@ -68,49 +48,16 @@ function ErrorCard({ title, description }: { title: string, description: string 
     );
 }
 
-
-async function AuthorizeContent({ searchParams }: AuthorizePageProps) {
-  const session = await auth();
-  if (!session?.user) {
-    const callbackUrl = new URLSearchParams(searchParams as Record<string, string>).toString();
-    return redirect(`/login?callbackUrl=/oauth/authorize?${callbackUrl}`);
-  }
-
-  const { client_id, redirect_uri, response_type, state, scope } = searchParams;
-  
-  if (!client_id || !redirect_uri || !response_type || !state) {
-    return <ErrorCard title="Authorization Error" description="The authorization request is incomplete. Please ensure `client_id`, `redirect_uri`, `response_type`, and `state` are provided." />;
-  }
-
-  if (response_type !== 'code') {
-     return <ErrorCard title="Authorization Error" description="Invalid 'response_type'. Only 'code' is supported." />;
-  }
-
-  const app = await getOAuthAppByClientId(client_id);
-  if (!app) {
-     return <ErrorCard title="Authorization Error" description="Invalid 'client_id'. No application found." />;
-  }
-
-  if (!app.redirectUris.includes(redirect_uri)) {
-     return <ErrorCard title="Authorization Error" description="Invalid 'redirect_uri'. The provided URL is not registered for this application." />;
-  }
-
-  const data: AuthorizePageData = {
-    app,
-    user: { uuid: session.user.uuid, name: session.user.name, avatar: session.user.avatar },
-    scopes: scope ? scope.split(' ') : [],
-    redirectUri: redirect_uri,
-    clientId: client_id,
-    state,
-  };
-
-  return <AuthorizeView data={data} />;
+// This component is now client-side to avoid server-side execution issues
+// in a feature that is not fully implemented or used.
+function AuthorizeContent() {
+  return <ErrorCard title="Feature Deprecated" description="The OAuth App authorization flow is currently not in use. Please use FlowApps for API integrations." />;
 }
 
-export default function OAuthAuthorizePage({ searchParams }: AuthorizePageProps) {
+export default function OAuthAuthorizePage() {
   return (
     <Suspense fallback={<AuthorizePageFallback />}>
-      <AuthorizeContent searchParams={searchParams} />
+      <AuthorizeContent />
     </Suspense>
   );
 }

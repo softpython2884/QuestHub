@@ -1,31 +1,17 @@
 
 'use client';
 
-import { useState, useEffect, useActionState } from 'react';
+// This component is a placeholder and not currently used in the application.
+// The OAuth App system has been deprecated in favor of the simpler FlowApps system.
+// This file can be safely removed if no longer needed.
+
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { updateOAuthAppAction } from '../../actions'; // This will need a new action to get a single app
-import { ArrowLeft, KeyRound, Loader2, Copy, Check, Info } from 'lucide-react';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { OAuthApp } from '@/types';
-// We'll need a new action to get a single app by ID. Let's assume it's called `getOAuthAppAction`
-// For now, this component will be a placeholder. The real implementation will be more complex.
+import { ArrowLeft, KeyRound } from 'lucide-react';
 
 export default function EditOAuthAppPage() {
-    const params = useParams();
-    const appUuid = params.uuid as string;
-    // In a real implementation, you would fetch the app data here.
-    
     return (
         <div className="space-y-6">
             <Button variant="outline" asChild>
@@ -50,10 +36,9 @@ export default function EditOAuthAppPage() {
                             <Skeleton className="h-10 w-24" />
                         </div>
                     </div>
-                     <p className="text-center text-muted-foreground mt-4">Editing is not yet implemented.</p>
+                     <p className="text-center text-muted-foreground mt-4">Editing is not yet implemented as this feature is deprecated.</p>
                 </CardContent>
             </Card>
         </div>
     );
 }
-
