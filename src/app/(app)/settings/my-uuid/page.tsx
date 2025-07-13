@@ -24,10 +24,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useSearchParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
+
 
 function MyUuidPageContent() {
     const { user, isLoading: isAuthLoading } = useAuth();
     const { toast } = useToast();
+    const searchParams = useSearchParams();
+    const highlightAppUuid = searchParams.get('highlight');
+
     const [copied, setCopied] = useState(false);
     
     const [allConsents, setAllConsents] = useState<FlowAppConsent[]>([]);
@@ -137,7 +143,7 @@ function MyUuidPageContent() {
                     ) : (
                         <div className="space-y-4">
                             {pendingConsents.map(consent => (
-                                <Card key={consent.flowAppUuid} className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-500/50">
+                                <Card key={consent.flowAppUuid} className={cn("p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-500/50", highlightAppUuid === consent.flowAppUuid && "ring-2 ring-primary shadow-lg")}>
                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                                         <div className="flex items-center gap-3">
                                             <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(consent.flowAppName)}</AvatarFallback></Avatar>
