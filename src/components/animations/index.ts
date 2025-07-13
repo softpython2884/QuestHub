@@ -1,7 +1,3 @@
-export { default as BlurText } from './BlurText';
-export { default as TextPressure } from './TextPressure';
-export { default as FuzzyText } from './FuzzyText';
-export { default as DecryptedText } from './DecryptedText';
 export { default as ScrollReveal } from './ScrollReveal';
 export { default as CountUp } from './CountUp';
 export { default as GradientText } from './GradientText';
