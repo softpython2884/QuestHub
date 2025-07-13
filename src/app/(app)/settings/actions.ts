@@ -137,6 +137,13 @@ export async function runDatabaseMigrationsAction(prevState: any, formData: Form
             await db.run("ALTER TABLE user_flow_app_consents ADD COLUMN status TEXT NOT NULL CHECK(status IN ('pending', 'granted', 'denied')) DEFAULT 'pending';");
             messages.push('Added status column to user_flow_app_consents table.');
         }
+        
+        // --- Migration: Add dueDate to tasks table ---
+        const taskCols = await db.all(`PRAGMA table_info(tasks);`);
+        if (!taskCols.some(col => col.name === 'dueDate')) {
+            await db.run('ALTER TABLE tasks ADD COLUMN dueDate TEXT;');
+            messages.push('Added dueDate column to tasks table.');
+        }
 
 
         if (messages.length === 0) {
