@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as UIDialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { generateDocumentContent } from '@/ai/flows/generate-document-content';
 import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles, Tag, Link as ProjectLinkIcon } from 'lucide-react';
@@ -66,6 +66,9 @@ export function DocumentEditor({
   const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
+
+  // WYSIWYG-like state
+  const [isEditingContent, setIsEditingContent] = useState(false);
 
   const form = useForm<DocumentEditorFormValues>({
     resolver: zodResolver(documentEditorFormSchema),
@@ -206,7 +209,7 @@ export function DocumentEditor({
                   <CardTitle className="text-2xl font-headline">
                   {initialData ? `Edit ${entityName}` : `Create New ${entityName}`}
                   </CardTitle>
-                  <CardDescription>Use Markdown to format your content. A live preview is available on the right.</CardDescription>
+                  <CardDescription>A Notion-style editor for a seamless writing experience.</CardDescription>
               </div>
               <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
                 <DialogTrigger asChild>
@@ -293,48 +296,50 @@ export function DocumentEditor({
             </div>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="content" className="text-lg">Markdown Content</Label>
-                <div className="flex flex-wrap gap-1 border p-2 rounded-md bg-muted/50">
-                  {markdownTools.map((tool) => (
-                    <Button
-                      key={tool.label}
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={tool.action}
-                      title={tool.label}
-                      className="h-8 w-8"
-                    >
-                      <tool.icon className="h-4 w-4" />
-                    </Button>
-                  ))}
-                </div>
+          <div className="space-y-2">
+            <Label className="text-lg">Content</Label>
+             <div className="flex flex-wrap gap-1 border p-2 rounded-t-md bg-muted/50 sticky top-[6.5rem] z-10">
+                {markdownTools.map((tool) => (
+                <Button
+                    key={tool.label}
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={tool.action}
+                    title={tool.label}
+                    className="h-8 w-8"
+                >
+                    <tool.icon className="h-4 w-4" />
+                </Button>
+                ))}
+            </div>
+            <div 
+              className={cn("border rounded-b-md p-4 min-h-[450px] bg-background focus-within:ring-2 focus-within:ring-ring")}
+              onClick={() => {
+                  setIsEditingContent(true);
+                  setTimeout(() => textareaRef.current?.focus(), 0);
+              }}
+            >
+              {isEditingContent ? (
                 <Textarea
-                  id="content"
-                  {...contentField}
-                   ref={(e) => {
-                    contentField.ref(e);
-                    textareaRef.current = e;
-                  }}
-                  rows={20}
-                  className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none")}
-                  placeholder="Write your Markdown here..."
+                    id="content"
+                    {...contentField}
+                    ref={(e) => {
+                        contentField.ref(e);
+                        textareaRef.current = e;
+                    }}
+                    className="w-full h-full min-h-[450px] p-0 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent resize-none font-mono text-sm"
+                    placeholder="Write your content here..."
+                    onBlur={() => setIsEditingContent(false)}
                 />
-                {form.formState.errors.content && (
-                  <p className="text-sm text-destructive mt-1">{form.formState.errors.content.message}</p>
-                )}
-              </div>
-
-              <div className="border rounded-md p-4 bg-muted/30 min-h-[450px] h-full overflow-y-auto">
-                <Label className="text-lg block mb-2">Live Preview</Label>
+              ) : (
                 <div className="prose dark:prose-invert max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {contentValue || '*Preview will appear here*'}
+                      {contentValue || '*Click to start writing*'}
                   </ReactMarkdown>
                 </div>
-              </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
