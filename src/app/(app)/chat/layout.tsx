@@ -6,6 +6,8 @@ import { ChatLayoutClient } from './_components/ChatLayoutClient';
 import { auth } from '@/lib/authEdge';
 import { redirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) {

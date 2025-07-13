@@ -1,12 +1,12 @@
 
 'use client';
 
+import { Suspense } from 'react';
 import { SignupForm } from '@/components/auth/SignupForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useSearchParams }from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
 import { getSignupPageData, type SignupPageData } from './actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle, Play } from 'lucide-react';
@@ -14,8 +14,7 @@ import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-
-export default function SignupPage() {
+function SignupPageContent() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -84,4 +83,12 @@ export default function SignupPage() {
       </CardContent>
     </Card>
   );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+      <SignupPageContent />
+    </Suspense>
+  )
 }
