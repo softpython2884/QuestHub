@@ -5,6 +5,7 @@ import { generateProjectIdeas, type GenerateProjectIdeasOutput } from '@/ai/flow
 import { generateProjectScaffold, type GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import { generateDocumentContent, type GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
 import { generateProjectKickstart, type GenerateProjectKickstartOutput } from '@/ai/flows/generate-project-kickstart';
+import { summarizeDocumentation, type SummarizeDocumentationOutput } from '@/ai/flows/summarize-project-documentation';
 import { createProjectFromAIPlan } from '@/app/(app)/projects/new/actions';
 import { z } from 'zod';
 import { createGithubFileAction } from '@/app/(app)/projects/[id]/actions';
@@ -59,6 +60,22 @@ export async function generateDocumentContentAction(
     return { error: e.message || 'Failed to generate document content.' };
   }
 }
+
+export async function summarizeTextAction(
+  text: string
+): Promise<{ data?: SummarizeDocumentationOutput; error?: string }> {
+  const validatedFields = z.string().min(20, 'Text must be at least 20 characters long.').safeParse(text);
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().formErrors.join(', ') };
+  }
+  try {
+    const output = await summarizeDocumentation({ content: validatedFields.data });
+    return { data: output };
+  } catch (e: any) {
+    return { error: e.message || 'Failed to generate summary.' };
+  }
+}
+
 
 export async function addScaffoldToProjectAction(
   projectUuid: string,

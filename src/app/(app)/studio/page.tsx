@@ -15,13 +15,15 @@ import {
   generateDocumentContentAction,
   addScaffoldToProjectAction,
   createProjectFromAIAction,
+  summarizeTextAction,
 } from './actions';
 import { fetchProjectsAction } from '../projects/actions';
 import type { Project } from '@/types';
 import type { GenerateProjectIdeasOutput } from '@/ai/flows/generate-project-ideas';
 import type { GenerateProjectScaffoldOutput } from '@/ai/flows/generate-project-scaffold';
 import type { GenerateDocumentContentOutput } from '@/ai/flows/generate-document-content';
-import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2, Rocket } from 'lucide-react';
+import type { SummarizeDocumentationOutput } from '@/ai/flows/summarize-project-documentation';
+import { BrainCircuit, Bot, FileCode, FileText, Lightbulb, Loader2, Sparkles, FolderGit2, Rocket, FileSignature } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,7 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
-type AIGeneratorTool = 'ideas' | 'scaffold' | 'docs' | 'kickstart';
+type AIGeneratorTool = 'ideas' | 'scaffold' | 'docs' | 'kickstart' | 'summarize';
 
 export default function StudioPage() {
     const { toast } = useToast();
@@ -44,6 +46,8 @@ export default function StudioPage() {
     const [ideaResult, setIdeaResult] = useState<GenerateProjectIdeasOutput | null>(null);
     const [scaffoldResult, setScaffoldResult] = useState<GenerateProjectScaffoldOutput | null>(null);
     const [docResult, setDocResult] = useState<GenerateDocumentContentOutput | null>(null);
+    const [summaryResult, setSummaryResult] = useState<SummarizeDocumentationOutput | null>(null);
+
 
     // State for adding scaffold to project
     const [isAddToProjectDialogOpen, setIsAddToProjectDialogOpen] = useState(false);
@@ -80,7 +84,11 @@ export default function StudioPage() {
                 } else if (tool === 'docs') {
                     result = await generateDocumentContentAction(prompt);
                     if (result.data) setDocResult(result.data);
-                } else if (tool === 'kickstart') {
+                } else if (tool === 'summarize') {
+                    result = await summarizeTextAction(prompt);
+                    if (result.data) setSummaryResult(result.data);
+                }
+                else if (tool === 'kickstart') {
                     result = await createProjectFromAIAction(prompt);
                     if (result.data) {
                         toast({ title: 'Project Created!', description: `Successfully created "${result.data.name}". Redirecting...` });
@@ -135,6 +143,7 @@ export default function StudioPage() {
         setIdeaResult(null);
         setScaffoldResult(null);
         setDocResult(null);
+        setSummaryResult(null);
         setActiveDialog(tool);
     };
 
@@ -194,6 +203,16 @@ export default function StudioPage() {
                 </div>
             );
         }
+        if (activeDialog === 'summarize' && summaryResult) {
+            return (
+                <div className="mt-4 space-y-4">
+                    <h4 className="font-semibold">Generated Summary</h4>
+                    <div className="prose dark:prose-invert max-w-none p-4 border rounded-md bg-muted/50">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaryResult.summary}</ReactMarkdown>
+                    </div>
+                </div>
+            );
+        }
         return null;
     };
 
@@ -203,24 +222,35 @@ export default function StudioPage() {
             icon: Rocket,
             title: 'Project Kick-starter',
             description: "Describe your project idea, and the AI will generate a name, description, README, and create the project for you instantly.",
+            promptPlaceholder: "e.g., 'A web app to track personal book reading habits, built with React and a simple Node.js backend.'"
         },
         {
             tool: 'ideas' as AIGeneratorTool,
             icon: Lightbulb,
             title: 'Project Idea Generator',
             description: "Stuck in a rut? Describe a concept or technology and get a list of project ideas and initial task lists to get you started.",
+            promptPlaceholder: "e.g., 'Generate project ideas for a weekend hackathon using Genkit and a vector database.'"
         },
         {
             tool: 'scaffold' as AIGeneratorTool,
             icon: FolderGit2,
             title: 'Project Scaffolder',
             description: "Describe a simple application, and the AI will generate a complete file structure with starter code for HTML, CSS, JS, Python, and more.",
+            promptPlaceholder: "e.g., 'A simple portfolio website with a homepage, about page, and contact form.'"
         },
          {
             tool: 'docs' as AIGeneratorTool,
             icon: FileText,
             title: 'Document Generator',
             description: "Automate your documentation. Provide a prompt about a feature or process, and the AI will generate comprehensive Markdown documentation.",
+            promptPlaceholder: "e.g., 'An installation guide for a Node.js CLI tool published on npm.'"
+        },
+        {
+            tool: 'summarize' as AIGeneratorTool,
+            icon: FileSignature,
+            title: 'Meeting Summarizer',
+            description: "Paste in your meeting notes or any long text, and the AI will generate a concise summary with key points and action items.",
+            promptPlaceholder: "Paste your raw meeting notes or text here..."
         },
          {
             tool: 'fileEditor' as const, // Not a generator tool
@@ -278,7 +308,7 @@ export default function StudioPage() {
                         <Label htmlFor="ai-prompt">Your Prompt</Label>
                         <Textarea
                             id="ai-prompt"
-                            placeholder="e.g., 'A simple to-do list app using React and Tailwind CSS' or 'Generate project ideas for a weekend hackathon using Genkit'"
+                            placeholder={studioTools.find(t => t.tool === activeDialog)?.promptPlaceholder || "Enter your prompt here..."}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             rows={4}
