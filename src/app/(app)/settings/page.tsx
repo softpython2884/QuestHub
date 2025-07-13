@@ -119,6 +119,19 @@ export default function SettingsPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
+  
+  const handleBotInvite = () => {
+      const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
+      if (clientId) {
+        // Permissions: Send Messages, Read Message History (for potential future command interactions), Embed Links
+        const permissions = '3072'; 
+        const url = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`;
+        window.open(url, '_blank');
+      } else {
+        toast({ variant: "destructive", title: "Configuration Error", description: "Discord Client ID is not set up." });
+      }
+  }
+
 
   return (
     <div className="space-y-8">
@@ -151,6 +164,14 @@ export default function SettingsPage() {
                 </span>
               </label>
               <Switch id="discord-dm-notifications" disabled={!discordConnected || isLoadingDiscord} />
+            </div>
+             <div className="border-t pt-4">
+                 <p className="text-sm font-medium">Discord Bot</p>
+                 <p className="text-xs text-muted-foreground mb-2">To receive project notifications via DM, an admin must invite the FlowUp Bot to your Discord server.</p>
+                 <Button variant="outline" size="sm" className="w-full" onClick={handleBotInvite} disabled={user?.role !== 'admin'}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    {user?.role === 'admin' ? 'Invite Bot to Server' : 'Ask Admin to Invite Bot'}
+                 </Button>
             </div>
             <p className="text-xs text-muted-foreground pt-2">Project-specific notifications can be configured within each project's settings.</p>
             {!discordConnected && !isLoadingDiscord && 

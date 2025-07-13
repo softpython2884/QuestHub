@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -88,7 +87,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePageContext } from '@/contexts/PageContext';
 import { Calendar } from '@/components/ui/calendar';
-import { format } from 'date-fns';
+import { format, isBefore, differenceInDays } from 'date-fns';
 
 
 export const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Done', 'Archived'];
@@ -1105,8 +1104,20 @@ function ProjectDetailPageContent() {
     return initials;
   };
 
-  const getTaskBorderColor = (status: TaskStatus): string => {
-    switch (status) {
+  const getTaskBorderColor = (task: Task): string => {
+    if (task.status !== 'Done' && task.dueDate) {
+      const today = new Date();
+      const dueDate = new Date(task.dueDate);
+      const daysDiff = differenceInDays(dueDate, today);
+
+      if (isBefore(dueDate, today) && daysDiff < 0) {
+        return 'border-destructive'; // Overdue
+      }
+      if (daysDiff <= 2) {
+        return 'border-orange-500'; // Due soon
+      }
+    }
+    switch (task.status) {
       case 'To Do': return 'border-gray-400 dark:border-gray-500';
       case 'In Progress': return 'border-blue-500';
       case 'Done': return 'border-green-500';
@@ -1719,7 +1730,7 @@ function ProjectDetailPageContent() {
                       <h3 className="text-lg font-semibold mb-2 capitalize border-b pb-1">{status} ({statusTasks.length})</h3>
                       <div className="space-y-3">
                         {statusTasks.map(task => (
-                          <Card key={task.uuid} className={cn("p-3 border-l-4", getTaskBorderColor(task.status as TaskStatus), task.isPinned && "bg-primary/5")}>
+                          <Card key={task.uuid} className={cn("p-3 border-l-4", getTaskBorderColor(task), task.isPinned && "bg-primary/5")}>
                             <div className="flex justify-between items-start gap-2">
                               <div className="flex-grow min-w-0">
                                 <div className="flex items-center gap-2">
@@ -2530,10 +2541,13 @@ Another sub-task"
                     <CardTitle className="flex items-center"><GitBranch className="mr-2 h-5 w-5"/>Activity Logs</CardTitle>
                     <CardDescription>View recent commits and activity from the linked GitHub repository.</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={handleSetupWebhook} disabled={!project.githubRepoUrl || !!project.githubWebhookId || isSetupWebhookPending || !canManageCodeSpace}>
-                    {isSetupWebhookPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    {project.githubWebhookId ? <><CheckCircle className="h-4 w-4 mr-2 text-green-500" />Webhook Active</> : <><Github className="mr-2 h-4 w-4" />Setup Webhook</>}
-                    </Button>
+                    <form action={setupGithubWebhookFormAction}>
+                      <input type="hidden" name="projectUuid" value={project.uuid} />
+                      <Button variant="outline" size="sm" type="submit" disabled={!project.githubRepoUrl || !!project.githubWebhookId || isSetupWebhookPending || !canManageCodeSpace}>
+                        {isSetupWebhookPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        {project.githubWebhookId ? <><CheckCircle className="h-4 w-4 mr-2 text-green-500" />Webhook Active</> : <><Github className="mr-2 h-4 w-4" />Setup Webhook</>}
+                      </Button>
+                    </form>
                 </CardHeader>
                 <CardContent className="text-center py-8 text-muted-foreground border-dashed border-2 rounded-md m-6">
                     <Terminal className="mx-auto h-12 w-12 opacity-50 mb-3" />
