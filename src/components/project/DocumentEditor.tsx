@@ -31,7 +31,7 @@ const documentEditorFormSchema = z.object({
 type DocumentEditorFormValues = z.infer<typeof documentEditorFormSchema>;
 
 interface DocumentEditorProps {
-  initialData?: GlobalDocument;
+  initialData?: GlobalDocument | null;
   onSave: (data: { uuid?: string; title: string; content: string; tagsString?: string; linkedProjectUuid?: string | null }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
   onSaveSuccess: (documentUuid: string) => void;
   onCancel: () => void;
@@ -179,13 +179,13 @@ export function DocumentEditor({
     setIsAiGenerating(true);
     try {
         const result = await generateDocumentContent({ prompt: aiPrompt });
-        if (result.markdownContent) {
-            form.setValue('content', result.markdownContent, { shouldValidate: true, shouldDirty: true });
+        if (result.data?.markdownContent) {
+            form.setValue('content', result.data.markdownContent, { shouldValidate: true, shouldDirty: true });
             toast({ title: 'Success', description: 'AI generated content populated.' });
             setIsAiDialogOpen(false);
             setAiPrompt('');
         } else {
-            toast({ variant: 'destructive', title: 'AI Error', description: 'AI failed to generate content.' });
+            toast({ variant: 'destructive', title: 'AI Error', description: result.error || 'AI failed to generate content.' });
         }
     } catch (error: any) {
         console.error("Error generating document with AI:", error);
@@ -292,47 +292,49 @@ export function DocumentEditor({
                 </div>
             </div>
           )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="content" className="text-lg">Markdown Content</Label>
+                <div className="flex flex-wrap gap-1 border p-2 rounded-md bg-muted/50">
+                  {markdownTools.map((tool) => (
+                    <Button
+                      key={tool.label}
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={tool.action}
+                      title={tool.label}
+                      className="h-8 w-8"
+                    >
+                      <tool.icon className="h-4 w-4" />
+                    </Button>
+                  ))}
+                </div>
+                <Textarea
+                  id="content"
+                  {...contentField}
+                   ref={(e) => {
+                    contentField.ref(e);
+                    textareaRef.current = e;
+                  }}
+                  rows={20}
+                  className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none")}
+                  placeholder="Write your Markdown here..."
+                />
+                {form.formState.errors.content && (
+                  <p className="text-sm text-destructive mt-1">{form.formState.errors.content.message}</p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="content" className="text-lg">Markdown Content</Label>
-            <div className="flex flex-wrap gap-1 border p-2 rounded-md bg-muted/50">
-              {markdownTools.map((tool) => (
-                <Button
-                  key={tool.label}
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={tool.action}
-                  title={tool.label}
-                  className="h-8 w-8"
-                >
-                  <tool.icon className="h-4 w-4" />
-                </Button>
-              ))}
-            </div>
-            <Textarea
-              id="content"
-              {...contentField}
-               ref={(e) => {
-                contentField.ref(e);
-                textareaRef.current = e;
-              }}
-              rows={20}
-              className={cn("mt-1 font-mono text-sm min-h-[450px] h-full resize-none")}
-              placeholder="Write your Markdown here..."
-            />
-            {form.formState.errors.content && (
-              <p className="text-sm text-destructive mt-1">{form.formState.errors.content.message}</p>
-            )}
-          </div>
-
-          <div className="border rounded-md p-4 bg-muted/30 min-h-[450px] h-full overflow-y-auto">
-            <Label className="text-lg block mb-2">Live Preview</Label>
-            <div className="prose dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {contentValue || '*Preview will appear here*'}
-              </ReactMarkdown>
-            </div>
+              <div className="border rounded-md p-4 bg-muted/30 min-h-[450px] h-full overflow-y-auto">
+                <Label className="text-lg block mb-2">Live Preview</Label>
+                <div className="prose dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {contentValue || '*Preview will appear here*'}
+                  </ReactMarkdown>
+                </div>
+              </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

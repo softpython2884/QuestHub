@@ -141,3 +141,4 @@ export async function toggleGlobalDocumentPinAction(uuid: string, currentPinStat
     return { error: error.message || 'An unknown error occurred.' };
   }
 }
+
