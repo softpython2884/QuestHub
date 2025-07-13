@@ -5,11 +5,11 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'FlowUp',
     short_name: 'FlowUp',
-    description: 'Your all-in-one project management and collaboration platform.',
+    description: 'Votre plateforme de développement tout-en-un. Gérez vos projets, votre code, et collaborez avec une assistance IA.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#F5F5F5',
-    theme_color: '#64B5F6',
+    background_color: '#151618',
+    theme_color: '#2563EB',
     icons: [
       {
         src: '/favicon.png',

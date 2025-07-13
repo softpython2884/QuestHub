@@ -6,8 +6,9 @@ import { Toaster } from '@/components/ui/toaster';
 import { InteractiveBackground } from '@/components/layout/InteractiveBackground';
 
 export const metadata: Metadata = {
-  title: 'FlowUp',
-  description: 'Your all-in-one project management and collaboration platform.',
+  title: 'FlowUp - Votre plateforme de développement tout-en-un',
+  description: 'Gérez vos projets, votre code, et collaborez avec une assistance IA. De la planification à la production, FlowUp optimise votre flux de travail.',
+  manifest: '/manifest.webmanifest'
 };
 
 export default function RootLayout({

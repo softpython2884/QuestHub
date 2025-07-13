@@ -16,13 +16,15 @@ import {
   toggleGlobalDocumentPinStatus,
   getDocAlbums,
   createDocAlbum,
+  associateDocumentWithAlbum,
+  removeDocumentFromAlbum,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
-import type { Project } from '@/types';
+import type { Project, GlobalDocument, DocAlbum } from '@/types';
 
 
-export async function getGlobalDocumentsAction() {
+export async function getKnowledgeBaseData(): Promise<{ docs: GlobalDocument[], albums: DocAlbum[] }> {
   const docs = await getGlobalDocuments();
   const albums = await getDocAlbums();
   return { docs, albums };
@@ -38,6 +40,7 @@ export async function saveGlobalDocumentAction(
   content: string,
   tagsString?: string | null,
   linkedProjectUuid?: string | null,
+  albumUuid?: string | null,
 ) {
   const session = await auth();
   if (!session?.user) {
@@ -46,7 +49,6 @@ export async function saveGlobalDocumentAction(
 
   try {
     let docIdToUpdate: string;
-    let isNewDoc = false;
 
     if (uuid) {
       const existingDoc = await getGlobalDocumentByUuid(uuid);
@@ -63,7 +65,6 @@ export async function saveGlobalDocumentAction(
         content,
       });
       docIdToUpdate = newDoc.uuid;
-      isNewDoc = true;
     }
 
     // Handle tags
@@ -81,14 +82,20 @@ export async function saveGlobalDocumentAction(
     if (linkedProjectUuid && linkedProjectUuid !== 'none') {
         await linkProjectToGlobalDocument(docIdToUpdate, linkedProjectUuid);
     }
+    
+    // Handle album association
+    if (albumUuid && albumUuid !== 'no-album') {
+        await associateDocumentWithAlbum(docIdToUpdate, albumUuid);
+    } else {
+        await removeDocumentFromAlbum(docIdToUpdate);
+    }
+
 
     const finalDocument = await getGlobalDocumentByUuid(docIdToUpdate);
 
     revalidatePath('/documentation');
-    revalidatePath(`/documentation/${docIdToUpdate}`);
-    
-    if (isNewDoc && finalDocument) {
-        return { document: finalDocument };
+    if (finalDocument) {
+        revalidatePath(`/documentation/${finalDocument.uuid}`);
     }
     
     return { document: finalDocument };

@@ -24,9 +24,9 @@ const navItems = [
   { href: '/studio', label: 'AI Studio', icon: Sparkles },
   { href: '/discover', label: 'Discover', icon: Compass },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/documentation', label: 'Knowledge Base', icon: BookText, adminOnly: false },
+  { href: '/suggestions', label: 'Roadmap', icon: Lightbulb, adminOnly: false },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
-  { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
-  { href: '/suggestions', label: 'Suggestions', icon: Lightbulb, adminOnly: false },
   { href: '/secure-vault', label: 'Secure Vault', icon: ShieldCheck, adminOnly: false },
 ];
 

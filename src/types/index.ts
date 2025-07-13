@@ -1,5 +1,6 @@
 
 
+
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
@@ -115,7 +116,7 @@ export interface GlobalTag {
 export interface DocAlbum {
   uuid: string;
   title: string;
-  description?: string;
+  description?: string | null;
   authorUuid: string;
   authorName?: string;
   authorAvatar?: string;

@@ -18,20 +18,21 @@ import { generateDocumentContent } from '@/ai/flows/generate-document-content';
 import { Loader2, Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Link as LinkIcon, ImageIcon, Code2, Quote, Minus, Strikethrough, SquareCode, Sparkles, Tag, Link as ProjectLinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Project, GlobalDocument } from '@/types';
+import type { Project, GlobalDocument, DocAlbum } from '@/types';
 
 const documentEditorFormSchema = z.object({
   title: z.string().min(1, 'Title is required.').max(255),
   content: z.string().optional(),
   tagsString: z.string().optional(),
   linkedProjectUuid: z.string().optional(),
+  albumUuid: z.string().optional(),
 });
 
 type DocumentEditorFormValues = z.infer<typeof documentEditorFormSchema>;
 
 interface DocumentEditorProps {
   initialData?: GlobalDocument | null;
-  onSave: (data: { uuid?: string; title: string; content: string; tagsString?: string; linkedProjectUuid?: string | null }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
+  onSave: (data: { uuid?: string; title: string; content: string; tagsString?: string; linkedProjectUuid?: string | null; albumUuid?: string | null }) => Promise<{ error?: string; savedEntity?: { uuid: string; title: string } }>;
   onSaveSuccess: (documentUuid: string) => void;
   onCancel: () => void;
   entityName: string;
@@ -39,6 +40,7 @@ interface DocumentEditorProps {
   createButtonText: string;
   showMetadataControls?: boolean;
   linkableProjects?: Pick<Project, 'uuid' | 'name'>[];
+  albums?: DocAlbum[];
 }
 
 interface MarkdownTool {
@@ -124,6 +126,7 @@ export function DocumentEditor({
   createButtonText,
   showMetadataControls = false,
   linkableProjects = [],
+  albums = [],
 }: DocumentEditorProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,6 +144,7 @@ export function DocumentEditor({
       content: initialData?.content || '',
       tagsString: initialData?.tags?.map(t => t.name).join(', ') || '',
       linkedProjectUuid: initialData?.linkedProject?.uuid || 'none',
+      albumUuid: initialData?.albums?.[0]?.uuid || 'no-album',
     },
   });
 
@@ -153,6 +157,7 @@ export function DocumentEditor({
       content: initialData?.content || '',
       tagsString: initialData?.tags?.map(t => t.name).join(', ') || '',
       linkedProjectUuid: initialData?.linkedProject?.uuid || 'none',
+      albumUuid: initialData?.albums?.[0]?.uuid || 'no-album',
     });
   }, [initialData, form]);
 
@@ -231,6 +236,7 @@ export function DocumentEditor({
       content: data.content || '',
       tagsString: data.tagsString,
       linkedProjectUuid: data.linkedProjectUuid === 'none' ? null : data.linkedProjectUuid,
+      albumUuid: data.albumUuid === 'no-album' ? null : data.albumUuid,
     });
 
     setIsSubmitting(false);
@@ -330,7 +336,7 @@ export function DocumentEditor({
           </div>
 
           {showMetadataControls && (
-             <div className="grid md:grid-cols-2 gap-6">
+             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div>
                     <Label htmlFor="tagsString" className="text-base flex items-center mb-1"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Tags</Label>
                     <Input
@@ -339,7 +345,28 @@ export function DocumentEditor({
                         placeholder="e.g., react, tutorial, api"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Comma-separated list of tags.</p>
-                </div>
+                  </div>
+                   <div>
+                    <Label htmlFor="albumUuid" className="text-base flex items-center mb-1"><BookCopy className="mr-2 h-4 w-4 text-muted-foreground"/>Album</Label>
+                     <Controller
+                        name="albumUuid"
+                        control={form.control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value || 'no-album'}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select an album..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="no-album">No Album (Unassigned)</SelectItem>
+                                    {albums && albums.map(a => (
+                                        <SelectItem key={a.uuid} value={a.uuid}>{a.title}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                     <p className="text-xs text-muted-foreground mt-1">Organize this document into an album.</p>
+                  </div>
                  <div>
                     <Label htmlFor="linkedProjectUuid" className="text-base flex items-center mb-1"><ProjectLinkIcon className="mr-2 h-4 w-4 text-muted-foreground"/>Link Project (Optional)</Label>
                      <Controller
@@ -420,4 +447,3 @@ export function DocumentEditor({
     </>
   );
 }
-

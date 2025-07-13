@@ -5,9 +5,9 @@ import { DocumentEditor } from '@/components/project/DocumentEditor';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { getGlobalDocumentAction, saveGlobalDocumentAction, getLinkableProjectsForUserAction } from '../../actions'; 
+import { getGlobalDocumentAction, saveGlobalDocumentAction, getLinkableProjectsForUserAction, getKnowledgeBaseData } from '../../actions'; 
 import { useEffect, useState } from 'react';
-import type { GlobalDocument, Project } from '@/types';
+import type { GlobalDocument, Project, DocAlbum } from '@/types';
 import { Loader2, ArrowLeft, ShieldAlert, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -22,18 +22,21 @@ export default function EditGlobalDocumentPage() {
   const [isLoadingDocument, setIsLoadingDocument] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
   const [linkableProjects, setLinkableProjects] = useState<Pick<Project, 'uuid' | 'name'>[]>([]);
+  const [albums, setAlbums] = useState<DocAlbum[]>([]);
 
   useEffect(() => {
     async function loadInitialData() {
       if (!user || !documentUuid) return;
       setIsLoadingDocument(true);
       try {
-        const [fetchedDoc, projects] = await Promise.all([
+        const [fetchedDoc, projects, knowledgeBaseData] = await Promise.all([
           getGlobalDocumentAction(documentUuid),
-          getLinkableProjectsForUserAction()
+          getLinkableProjectsForUserAction(),
+          getKnowledgeBaseData()
         ]);
         
         setLinkableProjects(projects);
+        setAlbums(knowledgeBaseData.albums);
 
         if (fetchedDoc) {
           if (user.uuid === fetchedDoc.authorUuid || user.role === 'admin') {
@@ -64,8 +67,8 @@ export default function EditGlobalDocumentPage() {
     router.push(`/documentation/${documentUuid}`);
   };
 
-  const handleSave = async (data: { uuid?: string, title: string, content: string, tagsString?: string, linkedProjectUuid?: string | null }) => {
-    const result = await saveGlobalDocumentAction(data.uuid || null, data.title, data.content, data.tagsString, data.linkedProjectUuid);
+  const handleSave = async (data: { uuid?: string, title: string, content: string, tagsString?: string, linkedProjectUuid?: string | null, albumUuid?: string | null }) => {
+    const result = await saveGlobalDocumentAction(data.uuid || null, data.title, data.content, data.tagsString, data.linkedProjectUuid, data.albumUuid);
     if (result.error) {
       return { error: result.error };
     }
@@ -117,6 +120,7 @@ export default function EditGlobalDocumentPage() {
         createButtonText="Create Document"
         showMetadataControls={true}
         linkableProjects={linkableProjects}
+        albums={albums}
       />
     </div>
   );
