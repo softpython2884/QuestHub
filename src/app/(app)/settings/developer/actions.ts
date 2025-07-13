@@ -26,15 +26,30 @@ export async function getFlowAppsAction() {
 
 export async function getFlowAppAction(uuid: string): Promise<FlowApp | { error: string }> {
     const userUuid = await getCurrentUserUuid();
+    
+    // For the public authorization page, we don't need to check ownership, just that the app exists.
+    // The authorization logic itself will handle the currently logged-in user.
     if (!userUuid) {
-        return { error: 'Authentication required.' };
+        const app = await getFlowAppByUuid(uuid);
+        if (!app) return { error: 'Application not found.' };
+        return app;
     }
-    const app = await getFlowAppByUuid(uuid, userUuid);
-    if (!app) {
-        return { error: 'App not found or you do not have permission to view it.' };
+
+    const app = await getFlowAppByUuid(uuid);
+     if (!app) {
+        return { error: 'App not found.' };
     }
+
+    // If the user is the owner, they can see it. Otherwise, it's fine for the auth page.
+    if (app.ownerUuid === userUuid) {
+        return app;
+    }
+    
+    // If not the owner, still return the app details for the consent screen.
+    // The consent screen logic will handle the "who is authorizing" part.
     return app;
 }
+
 
 const CreateFlowAppSchema = z.object({
   name: z.string().min(3, "App name must be at least 3 characters.").max(50),

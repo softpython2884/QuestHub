@@ -136,7 +136,7 @@ async function handleAction(app: FlowApp, action: string, payload: any) {
                 await setFlowAppConsent(userUuid, app.uuid, 'pending');
             }
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-            const authorizationUrl = `${appUrl}/settings/my-uuid?highlight=${app.uuid}`;
+            const authorizationUrl = `${appUrl}/flowapps/authorize/${app.uuid}`;
             return NextResponse.json({ 
                 status: 'consent_pending', 
                 message: `User must grant permission for the app '${app.name}'. Please direct the user to the authorization URL.`,

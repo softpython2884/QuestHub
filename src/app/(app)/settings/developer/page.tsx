@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription as UIAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Skeleton } from '@/components/ui/skeleton';
 import { getFlowAppsAction, deleteFlowAppAction } from './actions';
-import { ArrowLeft, Code2, PlusCircle, Trash2, Bot, MoreVertical, Edit } from 'lucide-react';
+import { ArrowLeft, Code2, PlusCircle, Trash2, Bot, MoreVertical, Edit, Link2, Copy, Check } from 'lucide-react';
 import type { FlowApp } from '@/types';
 import { Loader2 } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
 export default function DeveloperSettingsPage() {
@@ -24,9 +24,9 @@ export default function DeveloperSettingsPage() {
   const [flowAppToDelete, setFlowAppToDelete] = useState<FlowApp | null>(null);
   const [isDeletingFlowApp, setIsDeletingFlowApp] = useState(false);
   
+  const [copiedLink, setCopiedLink] = useState('');
 
-  useEffect(() => {
-    async function loadApps() {
+  const loadApps = async () => {
       setIsLoadingFlowApps(true);
       try {
         const userFlowApps = await getFlowAppsAction();
@@ -37,6 +37,8 @@ export default function DeveloperSettingsPage() {
         setIsLoadingFlowApps(false);
       }
     }
+
+  useEffect(() => {
     loadApps();
   }, [toast]);
   
@@ -54,6 +56,14 @@ export default function DeveloperSettingsPage() {
     }
     setIsDeletingFlowApp(false);
   };
+
+  const handleCopyAuthUrl = (appUuid: string) => {
+    const url = `${window.location.origin}/flowapps/authorize/${appUuid}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(appUuid);
+    toast({ title: 'URL Copied!', description: 'Authorization URL copied to clipboard.'});
+    setTimeout(() => setCopiedLink(''), 2000);
+  }
 
   return (
     <div className="space-y-8">
@@ -126,11 +136,16 @@ export default function DeveloperSettingsPage() {
                             <span>Edit</span>
                           </Link>
                         </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleCopyAuthUrl(app.uuid)}>
+                            {copiedLink === app.uuid ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Link2 className="mr-2 h-4 w-4"/>}
+                           <span>Copy Auth URL</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator/>
                          <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setFlowAppToDelete(app as FlowApp); }}>
-                                    <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                                    <span className="text-destructive">Delete</span>
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setFlowAppToDelete(app as FlowApp); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive-foreground">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Delete</span>
                                 </DropdownMenuItem>
                             </AlertDialogTrigger>
                             {flowAppToDelete?.uuid === app.uuid && (
