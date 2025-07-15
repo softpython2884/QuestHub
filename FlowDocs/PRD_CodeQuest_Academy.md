@@ -100,9 +100,63 @@ All existing FlowUp features are re-contextualized for the educational environme
 
 ## 5. Additional Feature Ideas (Brainstorm)
 
-*   **Visual Skill Tree Interface:** A graphical, interactive UI where students can see the entire Main Quest Tree, their completed quests, available paths, and locked future quests.
-*   **XP & Leaderboards:** Gamify the experience by awarding Experience Points (XP) for completing Quests and Quizzes. Display leaderboards (global or per class) to foster friendly competition.
-*   **Peer Review System:** Before a final Quest submission, students can be prompted to review the Project of one or more peers, providing constructive feedback based on a professor's rubric.
-*   **Live Help Queue:** A system where a student working on a Quest can "raise their hand" digitally, entering a queue for an available professor or teaching assistant to provide help.
-*   **Badge & Achievement System:** Award unique badges for completing difficult quests, mastering a technology branch, or demonstrating exceptional collaboration.
-*   **Group Projects:** Allow Quests to be assigned to teams, creating a shared project workspace for all team members.
+This section contains a wealth of ideas to make the platform even more engaging and powerful.
+
+### 5.1. Advanced Gamification
+*   **Badge & Achievement System:**
+    *   **Specific Badges:** "Bug Squasher" (for closing X bug-tagged tasks), "React Master" (for completing the React quest branch), "Collaborator" (for contributing to X team projects), "Tutor" (for helping peers).
+    *   **Hidden Achievements:** Secret challenges for students to discover (e.g., "Night Owl" for committing code at 3 AM).
+*   **Leaderboards:**
+    *   **XP Leaderboard:** Global, per-class, or weekly rankings.
+    *   **Quest Leaderboard:** "Hall of Fame" for the fastest completion time on a specific difficult quest.
+*   **Guilds / Houses:**
+    *   At the start of the year, students can be sorted into "houses" (e.g., House of Python, House of JavaScript).
+    *   A running point total fosters a sense of community and friendly competition.
+*   **"CodeCoins" & Virtual Shop:**
+    *   Students earn a virtual currency for completing quests and helping others.
+    *   A "shop" allows them to spend CodeCoins on cosmetic items: profile themes, custom avatar borders, special badges.
+*   **Daily Streaks & XP History:**
+    *   **Streaks:** Encourage consistent engagement by tracking daily logins or commits to quest projects.
+    *   **XP Log:** A section in the profile showing a history of XP gains (e.g., "+50 XP: Completed 'Intro to APIs' Quest", "+5 XP: Provided Peer Review").
+*   **Unlockable Content:** Certain difficult side quests, profile themes, or easter eggs could only be unlocked after reaching a specific level or completing a certain quest branch.
+
+### 5.2. Deeper Pedagogy & Collaboration
+*   **Visual Skill Tree Interface:** A graphical, interactive UI where students can see the entire Main Quest Tree, their completed quests, available paths, and locked future quests. They could even plan their desired path.
+*   **"Boss Fights":**
+    *   At the end of a major module (e.g., "Web Dev Fundamentals"), a large-scale, difficult quest is unlocked.
+    *   It's designed to be tackled by a team and combines multiple skills learned.
+    *   Success unlocks a unique, high-value badge and significant XP.
+*   **"Code Katas":** A dedicated section with small, repeatable coding exercises for students to practice specific algorithms or language features outside of the main quests.
+*   **Professor-Defined Project Templates:** For a given quest, a professor can link a template GitHub repository. When a student accepts the quest, their new project repository is created as a clone of this template.
+*   **Learning Path "Playlists":** Professors can create curated lists of quests, documents, and external links to form a specific "learning path" (e.g., "Mastering Authentication").
+*   **"Office Hours" Scheduling:** A simple calendar interface where professors can mark their availability and students can book a time slot for help.
+*   **Peer Review System:**
+    *   Before final submission, a student's project can be assigned to one or more peers for review.
+    *   Professors provide a rubric (e.g., "Code Clarity," "Functionality," "Documentation").
+    *   Students earn XP for providing high-quality, constructive feedback.
+*   **Live Help Queue:** A system where a student working on a Quest can "raise their hand" digitally, entering a queue. An available professor or teaching assistant can then jump in to provide help, possibly via the integrated chat or a live coding session.
+*   **Integrated Live Coding:** Using a library like Liveblocks, enable a "Live Share" feature within the CodeSpace, allowing students to code together in real-time on the same file.
+
+### 5.3. Profile & Portfolio Enhancement
+*   **Automated Portfolio Generator:** A feature that lets a student select their best-completed quest projects and automatically generates a clean, shareable portfolio webpage.
+*   **GitHub-Style Activity Graph:** A visual contribution graph on the user's profile showing activity (tasks completed, commits, quests finished) over the last year.
+*   **Endorsed Skills & Visual Graph:**
+    *   **Endorsements:** When a student completes the "Data Science" quest branch, their profile automatically gets an "Endorsed" skill tag for Data Science, Python, Pandas, etc., providing a verifiable record of their abilities.
+    *   **Skill Graph:** A spider/radar chart on the profile visualizing the student's proficiency across different skill categories (e.g., Frontend, Backend, DevOps).
+*   **Profile Customization:** Allow students to choose a "featured" project and up to three "featured" badges to display prominently at the top of their profile.
+
+### 5.4. Advanced AI ("Codex") Features
+*   **AI Code Reviewer:** Before submitting a project, a student can ask Codex for a preliminary code review. The AI would check for common errors, adherence to style guides, and potential bugs.
+*   **"Explain this error":** Integrated with the CodeSpace terminal, if a build or script fails, a student can highlight the error message and ask Codex to explain what it means in simple terms.
+*   **AI Quiz Generator:** A professor can provide a topic or a piece of documentation (e.g., "JavaScript Promises") and ask Codex to generate a 10-question multiple-choice quiz.
+*   **AI Feedback on Quizzes:** For "code snippet" questions, if a student's answer is wrong, Codex can provide hints or explain the underlying concept without giving the solution.
+*   **Personalized Path Recommender:** A student can tell Codex their career goals (e.g., "I want to be a mobile app developer"). The AI would then highlight a recommended path through the main skill tree to achieve that goal.
+
+### 5.5. Administrative & Platform Ideas
+*   **Advanced Professor Analytics:** A dedicated dashboard for professors to view class-wide analytics: average time to complete quests, common points of failure, student engagement metrics, etc.
+*   **Calendar Integration:** Integrate with Google Calendar or Outlook to automatically add quest deadlines to a student's personal calendar.
+*   **Plagiarism Detection:** An admin tool that compares code submissions for major quests to detect similarities and flag potential academic dishonesty.
+*   **Event System:** A school-wide calendar for hackathons, guest speaker events, and workshops, all managed within the platform.
+*   **External Tool Integration:** Allow quests to link to or require submissions from external tools like Figma (for design quests) or specific cloud platforms (GCP, AWS).
+*   **Alumni Network:** A special "Alumnus" role for graduated students, allowing them to maintain a profile, access a limited set of resources, and act as mentors for current students.
+*   **Job Board:** A dedicated section where partner companies can post internship or job offers targeted at students with specific skills (verified by their completed quests).

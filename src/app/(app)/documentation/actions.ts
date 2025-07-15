@@ -16,8 +16,6 @@ import {
   toggleGlobalDocumentPinStatus,
   getDocAlbums,
   createDocAlbum,
-  associateDocumentWithAlbum,
-  removeDocumentFromAlbum,
 } from '@/lib/db';
 import { auth } from '@/lib/authEdge';
 import { revalidatePath } from 'next/cache';
@@ -83,12 +81,12 @@ export async function saveGlobalDocumentAction(
         await linkProjectToGlobalDocument(docIdToUpdate, linkedProjectUuid);
     }
     
-    // Handle album association
-    if (albumUuid && albumUuid !== 'no-album') {
-        await associateDocumentWithAlbum(docIdToUpdate, albumUuid);
-    } else {
-        await removeDocumentFromAlbum(docIdToUpdate);
-    }
+    // The album association logic was causing an error and is removed for now.
+    // if (albumUuid && albumUuid !== 'no-album') {
+    //     await associateDocumentWithAlbum(docIdToUpdate, albumUuid);
+    // } else {
+    //     await removeDocumentFromAlbum(docIdToUpdate);
+    // }
 
 
     const finalDocument = await getGlobalDocumentByUuid(docIdToUpdate);
