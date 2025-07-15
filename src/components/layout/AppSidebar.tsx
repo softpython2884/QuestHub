@@ -23,7 +23,7 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/studio', label: 'AI Studio', icon: Sparkles },
   { href: '/discover', label: 'Discover', icon: Compass },
-  { href: '/team', label: 'Team', icon: Users },
+  { href: 'https://team.flowup.nationquest.fr', label: 'FlowUp Team', icon: Users, isExternal: true },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
@@ -66,14 +66,19 @@ export function AppSidebar() {
             return null;
         }
         const Icon = item.icon;
+        
+        const linkProps = item.isExternal
+            ? { href: item.href, target: '_blank', rel: 'noopener noreferrer' }
+            : { href: item.href };
+            
         return (
             <SidebarMenuItem key={item.href}>
             <SidebarMenuButton
                 asChild
-                isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                isActive={!item.isExternal && (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))}
                 tooltip={{ children: item.label, side: 'right', className: "font-body" }}
             >
-                <Link href={item.href}>
+                <Link {...linkProps}>
                 <Icon />
                 <span>{item.label}</span>
                 </Link>
