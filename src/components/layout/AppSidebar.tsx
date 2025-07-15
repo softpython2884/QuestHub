@@ -23,12 +23,13 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/studio', label: 'AI Studio', icon: Sparkles },
   { href: '/discover', label: 'Discover', icon: Compass },
-  { href: 'https://team.flowup.nationquest.fr', label: 'FlowUp Team', icon: Users, isExternal: true },
+  { href: '/team', label: 'Team', icon: Users, adminOnly: false },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/documentation', label: 'Docs', icon: BookText, adminOnly: false },
   { href: '/suggestions', label: 'Suggestions', icon: Lightbulb, adminOnly: false },
   { href: '/secure-vault', label: 'Secure Vault', icon: ShieldCheck, adminOnly: false },
+  { href: 'https://team.flowup.nationquest.fr', label: 'FlowUp Team', icon: Users, isExternal: true },
 ];
 
 const adminNavItems: any[] = [
