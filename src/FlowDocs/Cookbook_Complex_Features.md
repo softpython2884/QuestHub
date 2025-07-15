@@ -216,4 +216,40 @@ const handleInstallClick = () => {
 // {isInstallable && <Button onClick={handleInstallClick}>Install App</Button>}
 ```
 
-    
+---
+
+## 5. Internal Admin API
+
+**Objective:**
+To provide a secure, server-to-server API for a trusted external service (like FlowUp Teams) to perform administrative actions, bypassing standard user permissions.
+
+**Authentication:**
+-   **Endpoint:** `POST /api/v1/internal`
+-   **Method:** A secret key must be sent in the `X-Internal-Api-Key` header. This key is configured in the `.env` file as `INTERNAL_API_SECRET_KEY`.
+
+**Request Body Format:**
+```json
+{
+  "action": "actionName",
+  "payload": {
+    // ...action-specific parameters
+  }
+}
+```
+
+**Available Actions:**
+
+*   **`createUser`**: Creates a new user.
+    *   **Payload**: `{ "name": "...", "email": "...", "password": "...", "role": "member" }`
+*   **`updateUser`**: Modifies a user's details.
+    *   **Payload**: `{ "uuid": "...", "name": "...", "role": "admin" }`
+*   **`deleteUser`**: Deletes a user.
+    *   **Payload**: `{ "uuid": "..." }`
+*   **`createProject`**: Creates a new project for a user.
+    *   **Payload**: `{ "ownerUuid": "...", "name": "...", "description": "..." }`
+*   **`deleteProject`**: Deletes a project.
+    *   **Payload**: `{ "projectUuid": "..." }`
+*   **`addProjectMember`**: Adds a user to a project.
+    *   **Payload**: `{ "projectUuid": "...", "userUuid": "...", "role": "editor" }`
+*   **`removeProjectMember`**: Removes a user from a project.
+    *   **Payload**: `{ "projectUuid": "...", "userUuid": "..." }`

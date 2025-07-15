@@ -3,8 +3,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { 
     createUser as dbCreateUser,
     getUserByEmail as dbGetUserByEmail,
+    updateUserProfile as dbUpdateUserProfile,
+    deleteUser as dbDeleteUser,
+    createProject as dbCreateProject,
+    deleteProject as dbDeleteProject,
+    addProjectMember as dbAddProjectMember,
+    removeProjectMember as dbRemoveProjectMember,
+    getProjectByUuid,
 } from '@/lib/db';
-import type { UserRole } from '@/types';
+import type { UserRole, ProjectMemberRole } from '@/types';
 
 /**
  * Internal Admin API
@@ -33,10 +40,69 @@ async function handleAction(action: string, payload: any) {
 
             return NextResponse.json(safeUser, { status: 201 });
         }
+        
+        case 'updateUser': {
+            const { uuid, ...updateData } = payload;
+            if (!uuid) return NextResponse.json({ error: "User 'uuid' is required." }, { status: 400 });
+            
+            // This reuses the profile update function, can be expanded for more direct admin actions
+            const updatedUser = await dbUpdateUserProfile({ uuid, ...updateData });
+            if (!updatedUser) return NextResponse.json({ error: "User not found or update failed." }, { status: 404 });
+            
+            return NextResponse.json(updatedUser);
+        }
 
-        // --- Add other administrative actions here in the future ---
-        // case 'deleteUser': { ... }
-        // case 'listAllProjects': { ... }
+        case 'deleteUser': {
+            const { uuid } = payload;
+            if (!uuid) return NextResponse.json({ error: "User 'uuid' is required." }, { status: 400 });
+            const success = await dbDeleteUser(uuid);
+            if (!success) return NextResponse.json({ error: "User not found or deletion failed." }, { status: 404 });
+            return NextResponse.json({ success: true });
+        }
+
+        // --- Project Management Actions ---
+        case 'createProject': {
+            const { ownerUuid, name, description } = payload;
+            if (!ownerUuid || !name) {
+                 return NextResponse.json({ error: "Missing required fields: ownerUuid, name." }, { status: 400 });
+            }
+            const newProject = await dbCreateProject(name, description, ownerUuid);
+            return NextResponse.json(newProject, { status: 201 });
+        }
+        
+        case 'deleteProject': {
+            const { projectUuid } = payload;
+            if (!projectUuid) return NextResponse.json({ error: "'projectUuid' is required." }, { status: 400 });
+            const success = await dbDeleteProject(projectUuid);
+             if (!success) return NextResponse.json({ error: "Project not found or deletion failed." }, { status: 404 });
+            return NextResponse.json({ success: true });
+        }
+        
+        // --- Team Management Actions ---
+        case 'addProjectMember': {
+            const { projectUuid, userUuid, role } = payload;
+            if (!projectUuid || !userUuid || !role) {
+                return NextResponse.json({ error: "Missing required fields: projectUuid, userUuid, role." }, { status: 400 });
+            }
+            const newMember = await dbAddProjectMember(projectUuid, userUuid, role as ProjectMemberRole);
+            if (!newMember) return NextResponse.json({ error: "Failed to add member. User or project may not exist." }, { status: 400 });
+            return NextResponse.json(newMember, { status: 201 });
+        }
+        
+        case 'removeProjectMember': {
+            const { projectUuid, userUuid } = payload;
+             if (!projectUuid || !userUuid ) {
+                return NextResponse.json({ error: "Missing required fields: projectUuid, userUuid." }, { status: 400 });
+            }
+            const project = await getProjectByUuid(projectUuid);
+            if (project?.ownerUuid === userUuid) {
+                 return NextResponse.json({ error: "Cannot remove the project owner." }, { status: 400 });
+            }
+            
+            const result = await dbRemoveProjectMember(projectUuid, userUuid);
+            if (!result.success) return NextResponse.json({ error: "Failed to remove member. They may not be a member." }, { status: 404 });
+            return NextResponse.json({ success: true });
+        }
 
         default:
             return NextResponse.json({ error: `Action '${action}' not found.` }, { status: 404 });

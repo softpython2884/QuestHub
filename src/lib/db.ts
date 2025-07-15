@@ -754,53 +754,55 @@ export async function getUserByUuid(uuid: string): Promise<(User & { hashedPassw
   return { ...userRow, id: userRow.id.toString() };
 }
 
-export async function updateUserProfile(data: {
-  uuid: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  bio: string | null;
-  websiteUrl: string | null;
-  showGithubOnProfile: boolean;
-  showDiscordOnProfile: boolean;
-}): Promise<User | null> {
+export async function updateUserProfile(data: Partial<User> & { uuid: string }): Promise<User | null> {
   const connection = await getDbConnection();
 
-  const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', data.email, data.uuid);
-  if (existingUserWithEmail) {
-    throw new Error('Email is already in use by another account.');
+  if (data.email) {
+    const existingUserWithEmail = await connection.get('SELECT uuid FROM users WHERE email = ? AND uuid != ?', data.email, data.uuid);
+    if (existingUserWithEmail) {
+      throw new Error('Email is already in use by another account.');
+    }
   }
 
   let finalAvatar = data.avatar;
-  if (data.avatar === '') {
+  if (data.avatar === '' && data.name) {
     const defaultAvatarText = data.name.substring(0, 2).toUpperCase() || 'NA';
     finalAvatar = `https://placehold.co/100x100.png?text=${defaultAvatarText}`;
   }
+  
+  const currentUser = await getUserByUuid(data.uuid);
+  if (!currentUser) throw new Error("User not found to update.");
+
+  const fieldsToUpdate = {
+      name: data.name ?? currentUser.name,
+      email: data.email ?? currentUser.email,
+      avatar: finalAvatar ?? currentUser.avatar,
+      bio: data.bio ?? currentUser.bio,
+      websiteUrl: data.websiteUrl ?? currentUser.websiteUrl,
+      showGithubOnProfile: data.showGithubOnProfile ?? currentUser.showGithubOnProfile,
+      showDiscordOnProfile: data.showDiscordOnProfile ?? currentUser.showDiscordOnProfile,
+      role: data.role ?? currentUser.role,
+  };
 
   await connection.run(
     `UPDATE users SET 
-      name = ?, 
-      email = ?, 
-      avatar = ?, 
-      bio = ?, 
-      websiteUrl = ?, 
-      showGithubOnProfile = ?, 
-      showDiscordOnProfile = ?
+      name = ?, email = ?, avatar = ?, bio = ?, websiteUrl = ?, showGithubOnProfile = ?, showDiscordOnProfile = ?, role = ?
      WHERE uuid = ?`,
-    data.name,
-    data.email,
-    finalAvatar,
-    data.bio,
-    data.websiteUrl,
-    data.showGithubOnProfile ? 1 : 0,
-    data.showDiscordOnProfile ? 1 : 0,
-    data.uuid
+    fieldsToUpdate.name, fieldsToUpdate.email, fieldsToUpdate.avatar, fieldsToUpdate.bio, fieldsToUpdate.websiteUrl,
+    fieldsToUpdate.showGithubOnProfile ? 1 : 0, fieldsToUpdate.showDiscordOnProfile ? 1 : 0,
+    fieldsToUpdate.role, data.uuid
   );
 
   const updatedUser = await getUserByUuid(data.uuid);
   if (!updatedUser) return null;
   const { hashedPassword, ...userToReturn } = updatedUser;
   return userToReturn;
+}
+
+export async function deleteUser(uuid: string): Promise<boolean> {
+    const connection = await getDbConnection();
+    const result = await connection.run('DELETE FROM users WHERE uuid = ?', uuid);
+    return result.changes ? result.changes > 0 : false;
 }
 
 
@@ -2888,3 +2890,4 @@ export async function getAlbumsForDocument(documentUuid: string): Promise<Pick<D
     `, documentUuid);
 }
     
+
