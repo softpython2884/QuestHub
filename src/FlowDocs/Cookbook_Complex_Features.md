@@ -215,7 +215,6 @@ const handleInstallClick = () => {
 // ... in your JSX ...
 // {isInstallable && <Button onClick={handleInstallClick}>Install App</Button>}
 ```
-
 ---
 
 ## 5. Internal Admin API
@@ -253,3 +252,4 @@ To provide a secure, server-to-server API for a trusted external service (like F
     *   **Payload**: `{ "projectUuid": "...", "userUuid": "...", "role": "editor" }`
 *   **`removeProjectMember`**: Removes a user from a project.
     *   **Payload**: `{ "projectUuid": "...", "userUuid": "..." }`
+```
