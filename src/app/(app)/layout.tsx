@@ -1,7 +1,7 @@
 
 'use client';
 
-import { type ReactNode, Suspense } from 'react';
+import { type ReactNode, Suspense, useEffect } from 'react';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
@@ -10,8 +10,27 @@ import { Chatbot } from '@/components/layout/Chatbot';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { PageProvider } from '@/contexts/PageContext';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      // Small delay to not overwhelm the user on first load
+      setTimeout(() => {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            toast({
+              title: "Notifications Enabled",
+              description: "You will now receive reminders and updates from FlowUp.",
+            });
+          }
+        });
+      }, 15000); // 15 seconds delay
+    }
+  }, [toast]);
+
 
   return (
     <SidebarProvider defaultOpen={true}>
