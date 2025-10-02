@@ -834,6 +834,23 @@ export async function createReminder(data: {
   return { ...data, uuid, isTriggered: false, createdAt: now };
 }
 
+export async function getRemindersForUser(userUuid: string): Promise<Reminder[]> {
+    const connection = await getDbConnection();
+    return connection.all<Reminder[]>(
+        'SELECT * FROM reminders WHERE userUuid = ? ORDER BY remindAt ASC',
+        userUuid
+    );
+}
+
+export async function deleteReminder(uuid: string, userUuid: string): Promise<boolean> {
+    const connection = await getDbConnection();
+    const result = await connection.run(
+        'DELETE FROM reminders WHERE uuid = ? AND userUuid = ?',
+        uuid, userUuid
+    );
+    return result.changes ? result.changes > 0 : false;
+}
+
 export async function getDueReminders(): Promise<Reminder[]> {
     const connection = await getDbConnection();
     const now = new Date().toISOString();
@@ -2418,8 +2435,8 @@ export async function getFlowAppConsentsForUser(userUuid: string): Promise<FlowA
             ufac.flowAppUuid,
             fa.name as flowAppName,
             u.name as flowAppOwnerName,
-            fa.scopes,
             ufac.status,
+            fa.scopes,
             ufac.createdAt,
             ufac.updatedAt
         FROM user_flow_app_consents ufac
@@ -2937,5 +2954,6 @@ export async function getAlbumsForDocument(documentUuid: string): Promise<Pick<D
     `, documentUuid);
 }
     
+
 
 
