@@ -1,6 +1,7 @@
 
 
 
+
 export type UserRole = 'admin' | 'manager' | 'member' | 'Développeur' | 'Graphiste' | 'Tester' | 'Staff';
 
 export interface User {
@@ -14,6 +15,15 @@ export interface User {
   websiteUrl?: string | null;
   showGithubOnProfile?: boolean;
   showDiscordOnProfile?: boolean;
+}
+
+export interface Reminder {
+    uuid: string;
+    userUuid: string;
+    content: string;
+    remindAt: string;
+    isTriggered: boolean;
+    createdAt: string;
 }
 
 export interface UserGithubInstallation {

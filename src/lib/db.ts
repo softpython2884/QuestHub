@@ -1,9 +1,10 @@
 
+
 'use server';
 
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
-import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp, FlowAppConsent, FlowAppConsentStatus, FlowAppScope } from '@/types';
+import type { User, UserRole, Project, ProjectMember, ProjectMemberRole, Task, TaskStatus, Tag, ProjectDocument, GlobalDocument, GlobalTag, DocAlbum, ProjectAnnouncement, GlobalAnnouncement, UserGithubInstallation, UserGithubOAuthToken, UserDiscordOAuthToken, OAuthApp, Suggestion, SuggestionStatus, SuggestionVote, Conversation, Message, FlowApp, FlowAppConsent, FlowAppConsentStatus, FlowAppScope, Reminder } from '@/types';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
@@ -258,6 +259,16 @@ export async function getDbConnection() {
       websiteUrl TEXT,
       showDiscordOnProfile BOOLEAN DEFAULT FALSE,
       showGithubOnProfile BOOLEAN DEFAULT FALSE
+    );
+
+    CREATE TABLE IF NOT EXISTS reminders (
+        uuid TEXT PRIMARY KEY,
+        userUuid TEXT NOT NULL,
+        content TEXT NOT NULL,
+        remindAt TEXT NOT NULL,
+        isTriggered BOOLEAN NOT NULL DEFAULT FALSE,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (userUuid) REFERENCES users (uuid) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -802,6 +813,42 @@ export async function updateUserProfile(data: Partial<User> & { uuid: string }):
 export async function deleteUser(uuid: string): Promise<boolean> {
     const connection = await getDbConnection();
     const result = await connection.run('DELETE FROM users WHERE uuid = ?', uuid);
+    return result.changes ? result.changes > 0 : false;
+}
+
+// Reminder Functions
+export async function createReminder(data: {
+  userUuid: string;
+  content: string;
+  remindAt: string;
+}): Promise<Reminder> {
+  const connection = await getDbConnection();
+  const uuid = uuidv4();
+  const now = new Date().toISOString();
+
+  await connection.run(
+    'INSERT INTO reminders (uuid, userUuid, content, remindAt, isTriggered, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+    uuid, data.userUuid, data.content, data.remindAt, false, now
+  );
+
+  return { ...data, uuid, isTriggered: false, createdAt: now };
+}
+
+export async function getDueReminders(): Promise<Reminder[]> {
+    const connection = await getDbConnection();
+    const now = new Date().toISOString();
+    return connection.all<Reminder[]>(
+        'SELECT * FROM reminders WHERE remindAt <= ? AND isTriggered = FALSE',
+        now
+    );
+}
+
+export async function markReminderAsTriggered(uuid: string): Promise<boolean> {
+    const connection = await getDbConnection();
+    const result = await connection.run(
+        'UPDATE reminders SET isTriggered = TRUE WHERE uuid = ?',
+        uuid
+    );
     return result.changes ? result.changes > 0 : false;
 }
 
@@ -2890,4 +2937,5 @@ export async function getAlbumsForDocument(documentUuid: string): Promise<Pick<D
     `, documentUuid);
 }
     
+
 

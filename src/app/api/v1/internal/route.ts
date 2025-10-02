@@ -1,4 +1,5 @@
 
+
 import { type NextRequest, NextResponse } from 'next/server';
 import { 
     createUser as dbCreateUser,
@@ -10,6 +11,7 @@ import {
     addProjectMember as dbAddProjectMember,
     removeProjectMember as dbRemoveProjectMember,
     getProjectByUuid,
+    createReminder as dbCreateReminder,
 } from '@/lib/db';
 import type { UserRole, ProjectMemberRole } from '@/types';
 
@@ -58,6 +60,16 @@ async function handleAction(action: string, payload: any) {
             const success = await dbDeleteUser(uuid);
             if (!success) return NextResponse.json({ error: "User not found or deletion failed." }, { status: 404 });
             return NextResponse.json({ success: true });
+        }
+
+        // --- Reminder Actions ---
+        case 'createReminder': {
+            const { userUuid, content, remindAt } = payload;
+            if (!userUuid || !content || !remindAt) {
+                return NextResponse.json({ error: "Missing required fields: userUuid, content, remindAt." }, { status: 400 });
+            }
+            const newReminder = await dbCreateReminder({ userUuid, content, remindAt });
+            return NextResponse.json(newReminder, { status: 201 });
         }
 
         // --- Project Management Actions ---
